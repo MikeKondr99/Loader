@@ -22,7 +22,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => string.Equals(row.Text("name"), "moscow", StringComparison.OrdinalIgnoreCase));
 
 
@@ -47,7 +47,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("name") == "Berlin");
 
         await Assert.That(reader).HaveData(
@@ -66,7 +66,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("name") is null);
 
         await Assert.That(reader).HaveData(
@@ -86,7 +86,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("NAME") == "Moscow");
 
         await Assert.That(() => reader.Read())
@@ -118,7 +118,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row =>
             {
                 allValuesAreNull =
@@ -156,7 +156,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Number("amount") > 20m && row.Boolean("active") == true);
 
         await Assert.That(reader).HaveData(
@@ -180,7 +180,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("city") == "Moscow")
             .Where(row => row.Integer("id") > 1);
 
@@ -204,7 +204,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row =>
             {
                 calls++;
@@ -231,7 +231,7 @@ public sealed class WhereDomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Integer("id") == 2);
 
         await Assert.That(await reader.ReadAsync()).IsTrue();

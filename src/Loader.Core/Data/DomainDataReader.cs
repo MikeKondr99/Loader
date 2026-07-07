@@ -5,7 +5,7 @@ namespace Loader.Core.Data;
 /// <summary>
 /// DbDataReader-обертка доменного уровня: читает поток построчно, нормализует значения и хранит snapshot текущей строки.
 /// </summary>
-public sealed class DomainDataReader : DbDataReaderDecorator
+public class DomainDataReader : DbDataReaderDecorator
 {
     private readonly DataSchema _schema;
     private object[] _rowBuffer = [];
@@ -128,3 +128,4 @@ public sealed class DomainDataReader : DbDataReaderDecorator
         }
     }
 }
+

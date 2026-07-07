@@ -19,7 +19,7 @@ public sealed class DomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
         var originTypeName = rawReader.GetDataTypeName(0);
-        using var reader = rawReader.AsTyped();
+        using var reader = rawReader.Normalize();
 
         await Assert.That(reader.Read()).IsTrue();
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(string));
@@ -47,7 +47,7 @@ public sealed class DomainDataReaderTests
         table.Rows.Add("Moscow", 42, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), new TimeSpan(6, 7, 8));
 
         using var rawReader = table.CreateDataReader();
-        await using var reader = rawReader.AsDomain();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["text", "integer", "number", "boolean", "datetime", "time"],
@@ -66,7 +66,7 @@ public sealed class DomainDataReaderTests
         table.Rows.Add(DBNull.Value);
 
         using var rawReader = table.CreateDataReader();
-        using var reader = rawReader.AsTyped();
+        using var reader = rawReader.Normalize();
 
         await Assert.That(reader.Read()).IsTrue();
         await Assert.That(reader.IsDBNull(0)).IsTrue();
@@ -84,7 +84,7 @@ public sealed class DomainDataReaderTests
         table.Rows.Add(1, "Moscow");
 
         using var rawReader = table.CreateDataReader();
-        using var reader = rawReader.AsTyped();
+        using var reader = rawReader.Normalize();
         var values = new object[4];
 
         await Assert.That(reader.Read()).IsTrue();
@@ -106,7 +106,7 @@ public sealed class DomainDataReaderTests
         table.Rows.Add(1);
 
         using var rawReader = table.CreateDataReader();
-        using var reader = rawReader.AsTyped();
+        using var reader = rawReader.Normalize();
 
         await Assert.That(() => reader.GetValue(0))
             .ThrowsExactly<InvalidOperationException>()
@@ -122,7 +122,7 @@ public sealed class DomainDataReaderTests
         table.Rows.Add(1);
 
         using var rawReader = table.CreateDataReader();
-        using var reader = rawReader.AsTyped();
+        using var reader = rawReader.Normalize();
 
         await Assert.That(reader.Read()).IsTrue();
         await Assert.That(reader.Read()).IsFalse();
@@ -140,7 +140,7 @@ public sealed class DomainDataReaderTests
 
         using var rawReader = table.CreateDataReader();
 
-        await Assert.That(() => rawReader.AsTyped())
+        await Assert.That(() => rawReader.Normalize())
             .ThrowsExactly<NotSupportedException>()
             .WithMessage("CLR type 'System.Object' is not supported by Loader data type mapper.");
     }

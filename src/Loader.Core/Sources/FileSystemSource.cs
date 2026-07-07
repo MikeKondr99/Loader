@@ -8,6 +8,8 @@ namespace Loader.Core.Sources;
 /// </summary>
 public interface IFileSource : ISource
 {
+    // TODO: Файл это Stream а не уже Text Reader 
+    // Файл может быть бинарником
     TextReader OpenText(string fileName, Encoding? encoding = null);
 }
 

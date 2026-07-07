@@ -34,7 +34,7 @@ public sealed class PostgresProviderTests
     public async Task Sql_expression_maps_to_expected_value(string sqlExpression, DataType expectedType, object expected)
     {
         await using var rawReader = await OpenReaderAsync($"select {sqlExpression} as value");
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -57,7 +57,7 @@ public sealed class PostgresProviderTests
                 true::boolean as active
             where false
             """);
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id","dec", "name", "active"],
@@ -75,7 +75,7 @@ public sealed class PostgresProviderTests
                 1::integer as IdValue,
                 'Moscow'::text as "CityName"
             """);
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["idvalue", "CityName"],
@@ -106,7 +106,7 @@ public sealed class PostgresProviderTests
             ) as rows(id, name)
             order by id
             """);
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name"],
@@ -134,7 +134,7 @@ public sealed class PostgresProviderTests
             order by id
             """);
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("city") == "Moscow" && row.Integer("id") > 1);
 
         await Assert.That(reader).HaveData(
@@ -155,7 +155,7 @@ public sealed class PostgresProviderTests
                 '{"city":"Moscow"}'::jsonb as jsonb_value,
                 1::integer as integer_value
             """);
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader.GetDataTypeName(0)).IsEqualTo("jsonb");
         await Assert.That(reader.GetDataTypeName(1)).IsEqualTo("integer");
@@ -166,7 +166,7 @@ public sealed class PostgresProviderTests
     public async Task Null_value_returns_dbnull()
     {
         await using var rawReader = await OpenReaderAsync("select null::integer as value");
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -181,7 +181,7 @@ public sealed class PostgresProviderTests
     public async Task Select_without_alias_uses_postgres_generated_column_name()
     {
         await using var rawReader = await OpenReaderAsync("select 1");
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["?column?"],
@@ -205,7 +205,7 @@ public sealed class PostgresProviderTests
     public async Task Oversized_numeric_value_error_is_wrapped_in_reader_value_exception()
     {
         await using var rawReader = await OpenReaderAsync("select repeat('9', 100)::numeric as value");
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(() => reader.Read())
             .ThrowsExactly<DataReaderValueException>()
@@ -218,7 +218,7 @@ public sealed class PostgresProviderTests
     {
         await using var rawReader = await OpenReaderAsync("select 1 as value, 2 as value");
 
-        await Assert.That(() => rawReader.AsTyped())
+        await Assert.That(() => rawReader.Normalize())
             .ThrowsExactly<DuplicateDataFieldNameException>()
             .WithMessage("Column name 'value' is duplicated.");
     }
@@ -230,7 +230,7 @@ public sealed class PostgresProviderTests
         var meta = new DataMetaContainer();
         await using var rawReader = await OpenReaderAsync("select 12.34::numeric(10, 2) as amount");
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta);
 
         await Assert.That(reader).HaveData(

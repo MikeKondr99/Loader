@@ -29,7 +29,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name", "amount", "active", "created"],
@@ -58,7 +58,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 Delimiter = ';'
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name", "note"],
@@ -81,7 +81,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name"],
@@ -103,7 +103,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "city", "note"],
@@ -128,7 +128,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 Encoding = Encoding.Unicode
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "city", "note"],
@@ -153,7 +153,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 Encoding = Encoding.BigEndianUnicode
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "city", "note"],
@@ -175,7 +175,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name"],
@@ -198,7 +198,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name"],
@@ -221,7 +221,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "note"],
@@ -248,7 +248,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv"
             });
 
-        await Assert.That(() => rawReader.AsTyped())
+        await Assert.That(() => rawReader.Normalize())
             .ThrowsExactly<DuplicateDataFieldNameException>()
             .WithMessage("Column name 'id' is duplicated.");
     }
@@ -281,7 +281,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name", "amount"],
@@ -305,7 +305,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -327,7 +327,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -353,7 +353,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -376,7 +376,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["value"],
@@ -399,7 +399,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 HasHeader = false
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["A", "B"],
@@ -423,7 +423,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 HasHeader = false
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: [
@@ -453,7 +453,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 HasHeader = false
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["A", "B", "C"],
@@ -477,7 +477,7 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv",
                 HasHeader = false
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["A", "B"],
@@ -504,7 +504,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name", "amount"],
@@ -530,7 +530,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveData(
             columns: ["id", "name"],
@@ -556,7 +556,7 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.AsTyped();
+        await using var reader = rawReader.Normalize();
 
         await Assert.That(reader).HaveSchema(
             columns: ["value"],

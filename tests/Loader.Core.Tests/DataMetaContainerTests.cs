@@ -21,7 +21,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta);
 
         await Assert.That(meta.Success).IsFalse();
@@ -71,7 +71,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Where(row => row.Text("city") == "Moscow")
             .CollectMeta(meta);
 
@@ -103,7 +103,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .Limit(2)
             .CollectMeta(meta);
 
@@ -131,7 +131,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta);
 
         await Assert.That(reader).HaveData(
@@ -160,7 +160,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta);
 
         await Assert.That(await reader.ReadAsync()).IsTrue();
@@ -182,7 +182,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta);
 
         await Assert.That(reader.Read()).IsTrue();
@@ -200,7 +200,7 @@ public sealed class DataMetaContainerTests
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader
-            .AsTyped()
+            .Normalize()
             .CollectMeta(meta)
             .Where(row => row.Text("missing") == "value");
 
