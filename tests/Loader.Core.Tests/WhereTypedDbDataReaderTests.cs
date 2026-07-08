@@ -168,6 +168,95 @@ public sealed class WhereDomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("Row Integer для разных CLR integer типов возвращает long и не меняет значения reader")]
+    public async Task Row_integer_converts_integer_clr_types_to_long()
+    {
+        using var table = CreateTable(
+            ("byte_value", typeof(byte)),
+            ("sbyte_value", typeof(sbyte)),
+            ("short_value", typeof(short)),
+            ("ushort_value", typeof(ushort)),
+            ("int_value", typeof(int)),
+            ("uint_value", typeof(uint)),
+            ("long_value", typeof(long)),
+            ("ulong_value", typeof(ulong)));
+        table.Rows.Add((byte)1, (sbyte)2, (short)3, (ushort)4, 5, 6U, 7L, 8UL);
+        long?[] actualValues = [];
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .Where(row =>
+            {
+                actualValues =
+                [
+                    row.Integer("byte_value"),
+                    row.Integer("sbyte_value"),
+                    row.Integer("short_value"),
+                    row.Integer("ushort_value"),
+                    row.Integer("int_value"),
+                    row.Integer("uint_value"),
+                    row.Integer("long_value"),
+                    row.Integer("ulong_value")
+                ];
+
+                return true;
+            });
+
+        await Assert.That(reader).HaveData(
+            columns: ["byte_value", "sbyte_value", "short_value", "ushort_value", "int_value", "uint_value", "long_value", "ulong_value"],
+            types: [DataType.Integer, DataType.Integer, DataType.Integer, DataType.Integer, DataType.Integer, DataType.Integer, DataType.Integer, DataType.Integer],
+            rows: [
+                ((byte)1, (sbyte)2, (short)3, (ushort)4, 5, 6U, 7L, 8UL)
+            ]);
+        await Assert.That(actualValues[0]).IsEqualTo(1L);
+        await Assert.That(actualValues[1]).IsEqualTo(2L);
+        await Assert.That(actualValues[2]).IsEqualTo(3L);
+        await Assert.That(actualValues[3]).IsEqualTo(4L);
+        await Assert.That(actualValues[4]).IsEqualTo(5L);
+        await Assert.That(actualValues[5]).IsEqualTo(6L);
+        await Assert.That(actualValues[6]).IsEqualTo(7L);
+        await Assert.That(actualValues[7]).IsEqualTo(8L);
+    }
+
+    [Test]
+    [DisplayName("Row Number для разных CLR number типов возвращает decimal и не меняет значения reader")]
+    public async Task Row_number_converts_number_clr_types_to_decimal()
+    {
+        using var table = CreateTable(
+            ("float_value", typeof(float)),
+            ("double_value", typeof(double)),
+            ("decimal_value", typeof(decimal)));
+        table.Rows.Add(1.25f, 2.50d, 3.75m);
+        decimal?[] actualValues = [];
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .Where(row =>
+            {
+                actualValues =
+                [
+                    row.Number("float_value"),
+                    row.Number("double_value"),
+                    row.Number("decimal_value")
+                ];
+
+                return true;
+            });
+
+        await Assert.That(reader).HaveData(
+            columns: ["float_value", "double_value", "decimal_value"],
+            types: [DataType.Number, DataType.Number, DataType.Number],
+            rows: [
+                (1.25f, 2.50d, 3.75m)
+            ]);
+        await Assert.That(actualValues[0]).IsEqualTo(1.25m);
+        await Assert.That(actualValues[1]).IsEqualTo(2.50m);
+        await Assert.That(actualValues[2]).IsEqualTo(3.75m);
+    }
+
+    [Test]
     [DisplayName("Where в цепочке применяет predicates последовательно")]
     public async Task Chains_multiple_where_readers()
     {
