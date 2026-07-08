@@ -21,7 +21,7 @@ public class DomainDataReader : DbDataReaderDecorator
 
     public override int FieldCount => _schema.Fields.Count;
 
-    public override Type GetFieldType(int ordinal) => DataTypeMapper.ToClrType(_schema.GetField(ordinal).DataType);
+    public override Type GetFieldType(int ordinal) => _schema.GetField(ordinal).ClrType;
 
     public override string GetName(int ordinal) => _schema.GetField(ordinal).Name;
 
@@ -108,7 +108,7 @@ public class DomainDataReader : DbDataReaderDecorator
                 return DBNull.Value;
             }
 
-            return DataValueConverter.FromDataType(field.DataType).Convert(value);
+            return field.Convert is null ? value : field.Convert(value);
         }
         catch (DataReaderValueException)
         {
@@ -128,4 +128,3 @@ public class DomainDataReader : DbDataReaderDecorator
         }
     }
 }
-

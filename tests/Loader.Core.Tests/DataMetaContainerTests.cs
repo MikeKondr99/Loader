@@ -29,9 +29,9 @@ public sealed class DataMetaContainerTests
             columns: ["id", "amount", "city"],
             types: [DataType.Integer, DataType.Number, DataType.Text],
             rows: [
-                (1L, 10.50m, "Moscow"),
-                (2L, DBNull.Value, "London"),
-                (2L, 20.25m, "Moscow")
+                (1, 10.50m, "Moscow"),
+                (2, DBNull.Value, "London"),
+                (2, 20.25m, "Moscow")
             ]);
 
         await Assert.That(meta.Success).IsTrue();
@@ -79,8 +79,8 @@ public sealed class DataMetaContainerTests
             columns: ["id", "amount", "city"],
             types: [DataType.Integer, DataType.Number, DataType.Text],
             rows: [
-                (1L, 10m, "Moscow"),
-                (3L, 30m, "Moscow")
+                (1, 10m, "Moscow"),
+                (3, 30m, "Moscow")
             ]);
 
         await Assert.That(meta.Success).IsTrue();
@@ -111,8 +111,8 @@ public sealed class DataMetaContainerTests
             columns: ["id", "amount", "city"],
             types: [DataType.Integer, DataType.Number, DataType.Text],
             rows: [
-                (1L, 10m, "Moscow"),
-                (2L, 20m, "London")
+                (1, 10m, "Moscow"),
+                (2, 20m, "London")
             ]);
 
         await Assert.That(meta.Success).IsTrue();

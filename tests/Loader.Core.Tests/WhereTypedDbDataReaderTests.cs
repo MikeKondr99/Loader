@@ -30,8 +30,8 @@ public sealed class WhereDomainDataReaderTests
             columns: ["id", "name"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (1L, "Moscow"),
-                (3L, "MOSCOW")
+                (1, "Moscow"),
+                (3, "MOSCOW")
             ]);
     }
 
@@ -163,7 +163,7 @@ public sealed class WhereDomainDataReaderTests
             columns: ["id", "amount", "active"],
             types: [DataType.Integer, DataType.Number, DataType.Boolean],
             rows: [
-                (3L, 30.25m, true)
+                (3, 30.25m, true)
             ]);
     }
 
@@ -188,7 +188,7 @@ public sealed class WhereDomainDataReaderTests
             columns: ["id", "city"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (2L, "Moscow")
+                (2, "Moscow")
             ]);
     }
 
@@ -215,8 +215,8 @@ public sealed class WhereDomainDataReaderTests
             columns: ["id"],
             types: [DataType.Integer],
             rows: [
-                ValueTuple.Create(2L),
-                ValueTuple.Create(3L)
+                ValueTuple.Create(2),
+                ValueTuple.Create(3)
             ]);
         await Assert.That(calls).IsEqualTo(3);
     }
@@ -235,7 +235,7 @@ public sealed class WhereDomainDataReaderTests
             .Where(row => row.Integer("id") == 2);
 
         await Assert.That(await reader.ReadAsync()).IsTrue();
-        await Assert.That(reader.GetValue(0)).IsEqualTo(2L);
+        await Assert.That(reader.GetValue(0)).IsEqualTo(2);
         await Assert.That(await reader.ReadAsync()).IsFalse();
     }
 

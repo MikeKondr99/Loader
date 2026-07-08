@@ -53,7 +53,7 @@ public sealed class DomainDataReaderTests
             columns: ["text", "integer", "number", "boolean", "datetime", "time"],
             types: [DataType.Text, DataType.Integer, DataType.Number, DataType.Boolean, DataType.DateTime, DataType.Time],
             rows: [
-                ("Moscow", 42L, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), new TimeOnly(6, 7, 8))
+                ("Moscow", 42, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), new TimeOnly(6, 7, 8))
             ]);
     }
 
@@ -91,7 +91,7 @@ public sealed class DomainDataReaderTests
         var copied = reader.GetValues(values);
 
         await Assert.That(copied).IsEqualTo(2);
-        await Assert.That(values[0]).IsEqualTo(1L);
+        await Assert.That(values[0]).IsEqualTo(1);
         await Assert.That(values[1]).IsEqualTo("Moscow");
         await Assert.That(values[2]).IsNull();
         await Assert.That(values[3]).IsNull();

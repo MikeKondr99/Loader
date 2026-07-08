@@ -50,7 +50,7 @@ internal static class ReaderAssert
             await Assert.That(reader.GetName(i)).IsEqualTo(columns[i]);
             await Assert.That(reader.DataSchema.Fields[i].Name).IsEqualTo(columns[i]);
             await Assert.That(reader.DataSchema.Fields[i].DataType).IsEqualTo(types[i]);
-            await Assert.That(reader.GetFieldType(i)).IsEqualTo(DataTypeMapper.ToClrType(types[i]));
+            await Assert.That(reader.GetFieldType(i)).IsEqualTo(reader.DataSchema.Fields[i].ClrType);
         }
     }
 

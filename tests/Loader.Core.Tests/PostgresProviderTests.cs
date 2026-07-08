@@ -81,7 +81,7 @@ public sealed class PostgresProviderTests
             columns: ["idvalue", "CityName"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (1L, "Moscow")
+                (1, "Moscow")
             ]);
         await Assert.That(() => reader.GetOrdinal("IdValue"))
             .ThrowsExactly<IndexOutOfRangeException>()
@@ -112,9 +112,9 @@ public sealed class PostgresProviderTests
             columns: ["id", "name"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (1L, "first"),
-                (2L, "second"),
-                (3L, "third")
+                (1, "first"),
+                (2, "second"),
+                (3, "third")
             ]);
     }
 
@@ -141,7 +141,7 @@ public sealed class PostgresProviderTests
             columns: ["id", "city"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (3L, "Moscow")
+                (3, "Moscow")
             ]);
     }
 
@@ -187,7 +187,7 @@ public sealed class PostgresProviderTests
             columns: ["?column?"],
             types: [DataType.Integer],
             rows: [
-                ValueTuple.Create(1L)
+                ValueTuple.Create(1)
             ]);
     }
 
@@ -260,15 +260,15 @@ public sealed class PostgresProviderTests
         yield return ("B'1'::bit(1)", DataType.Boolean, true);
         yield return ("B'1010'::bit(4)", DataType.Text, "1010");
         yield return ("B'101'::bit varying(8)", DataType.Text, "101");
-        yield return ("1::smallint", DataType.Integer, 1L);
-        yield return ("2::integer", DataType.Integer, 2L);
+        yield return ("1::smallint", DataType.Integer, (short)1);
+        yield return ("2::integer", DataType.Integer, 2);
         yield return ("3::bigint", DataType.Integer, 3L);
-        yield return ("4::oid", DataType.Integer, 4L);
-        yield return ("'5'::xid", DataType.Integer, 5L);
-        yield return ("'6'::cid", DataType.Integer, 6L);
+        yield return ("4::oid", DataType.Integer, 4u);
+        yield return ("'5'::xid", DataType.Integer, 5u);
+        yield return ("'6'::cid", DataType.Integer, 6u);
         yield return ("'1 2 3'::oidvector", DataType.Text, "{1,2,3}");
-        yield return ("1.5::real", DataType.Number, 1.5m);
-        yield return ("2.25::double precision", DataType.Number, 2.25m);
+        yield return ("1.5::real", DataType.Number, 1.5f);
+        yield return ("2.25::double precision", DataType.Number, 2.25d);
         yield return ("12.34::money", DataType.Number, 12.34m);
         yield return ("12345.6789::numeric", DataType.Number, 12345.6789m);
         yield return ("9::numeric(1)", DataType.Number, 9m);

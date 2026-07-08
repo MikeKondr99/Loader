@@ -49,11 +49,17 @@ public sealed record DataSchema
         // 1. Берем имена и CLR-типы из reader.
         var fields = Enumerable
             .Range(0, reader.FieldCount)
-            .Select(i => new DataField
+            .Select(i =>
             {
-                Ordinal = i,
-                Name = reader.GetName(i),
-                DataType = DataTypeMapper.FromClrType(reader.GetFieldType(i))
+                var mapping = DataValueMapper.MapType(reader.GetFieldType(i));
+                return new DataField
+                {
+                    Ordinal = i,
+                    Name = reader.GetName(i),
+                    DataType = mapping.DataType,
+                    ClrType = mapping.ClrType,
+                    Convert = mapping.Convert
+                };
             })
             .ToArray();
 

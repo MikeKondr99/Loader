@@ -7,11 +7,11 @@ public static class DataTypeMapper
 {
     public static DataType FromClrType(Type type)
     {
-        return DataValueConverter.FromClrType(type).DataType;
+        return DataValueMapper.MapType(type).DataType;
     }
 
     public static Type ToClrType(DataType dataType)
     {
-        return DataValueConverter.FromDataType(dataType).CanonicalClrType;
+        return DataValueMapper.DefaultClrType(dataType);
     }
 }

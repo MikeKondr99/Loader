@@ -29,7 +29,7 @@ public sealed class LimitDomainDataReaderTests
             columns: ["id", "city"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (1L, "Moscow")
+                (1, "Moscow")
             ]);
     }
     
@@ -50,8 +50,8 @@ public sealed class LimitDomainDataReaderTests
             columns: ["id", "city"],
             types: [DataType.Integer, DataType.Text],
             rows: [
-                (1L, "Moscow"),
-                (2L, "London")
+                (1, "Moscow"),
+                (2, "London")
             ]);
     }
 
@@ -82,7 +82,7 @@ public sealed class LimitDomainDataReaderTests
             .Limit(1);
 
         await Assert.That(await reader.ReadAsync()).IsTrue();
-        await Assert.That(reader.GetValue(0)).IsEqualTo(1L);
+        await Assert.That(reader.GetValue(0)).IsEqualTo(1);
         await Assert.That(await reader.ReadAsync()).IsFalse();
     }
 
