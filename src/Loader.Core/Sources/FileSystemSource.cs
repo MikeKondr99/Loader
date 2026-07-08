@@ -1,16 +1,13 @@
-using System.Text;
 using Loader.Core.Abstractions;
 
 namespace Loader.Core.Sources;
 
 /// <summary>
-/// Source, который умеет открыть текстовый файл по имени.
+/// Source, который умеет открыть файл по имени как бинарный поток.
 /// </summary>
 public interface IFileSource : ISource
 {
-    // TODO: Файл это Stream а не уже Text Reader 
-    // Файл может быть бинарником
-    TextReader OpenText(string fileName, Encoding? encoding = null);
+    Stream OpenRead(string fileName);
 }
 
 /// <summary>
@@ -41,17 +38,10 @@ public sealed class FileSystemSource : IPhysicalFileSource
 
     public string RootPath { get; }
 
-    public TextReader OpenText(string fileName, Encoding? encoding = null)
+    public Stream OpenRead(string fileName)
     {
         var fullPath = ResolveFilePath(fileName);
-
-        if (encoding is null)
-        {
-            return File.OpenText(fullPath);
-        }
-
-        var stream = File.OpenRead(fullPath);
-        return new StreamReader(stream, encoding, detectEncodingFromByteOrderMarks: true);
+        return File.OpenRead(fullPath);
     }
 
     public string ResolveFilePath(string fileName)

@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Text;
 using Loader.Core.Abstractions;
 using Loader.Core.Sources;
 using Sylvan.Data.Csv;
@@ -33,8 +34,12 @@ public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
             HasHeaders = config.HasHeader
         };
 
-        // 2. Открываем файл через source, чтобы provider не знал деталей файловой системы.
-        var textReader = source.OpenText(config.FileName, config.Encoding);
+        // 2. Открываем бинарный поток через source, чтобы provider не знал деталей файловой системы.
+        var stream = source.OpenRead(config.FileName);
+        var textReader = new StreamReader(
+            stream,
+            config.Encoding ?? Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true);
 
         // 3. Создаем потоковый reader и нормализуем provider-level поведение.
         DbDataReader reader;

@@ -14,12 +14,9 @@ internal sealed class InlineCsv : IFileSource
         _sourceEncoding = sourceEncoding ?? Encoding.UTF8;
     }
 
-    public TextReader OpenText(string fileName, Encoding? encoding = null)
+    public Stream OpenRead(string fileName)
     {
         var bytes = _sourceEncoding.GetBytes(_content);
-        var stream = new MemoryStream(bytes);
-        var readerEncoding = encoding ?? Encoding.UTF8;
-
-        return new StreamReader(stream, readerEncoding, detectEncodingFromByteOrderMarks: true);
+        return new MemoryStream(bytes);
     }
 }
