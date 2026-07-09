@@ -55,6 +55,7 @@ classDiagram
     IProvider <|-- ExcelProvider
     IProvider <|-- PostgresProvider
     IProvider <|-- ClickHouseProvider
+    IProvider <|-- SqlServerProvider
 ```
 
 ## Текущие провайдеры
@@ -77,10 +78,15 @@ flowchart LR
     SqlConfig --> ChProvider
     ChProvider --> ChReader[DbDataReader]
 
+    DbSource --> SqlServerProvider[SqlServerProvider]
+    SqlConfig --> SqlServerProvider
+    SqlServerProvider --> SqlServerReader[DbDataReader]
+
     CsvReader --> Typed[TypedDbDataReader]
     ExcelReader --> Typed
     PgReader --> Typed
     ChReader --> Typed
+    SqlServerReader --> Typed
 ```
 
 ## Планируемый Stream API

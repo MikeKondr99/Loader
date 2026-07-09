@@ -4,7 +4,7 @@
 
 - [x] Postgres
 - [x] ClickHouse
-- [ ] Microsoft SQL Server
+- [x] Microsoft SQL Server
 - [ ] Oracle
 - [ ] Apache Hive
 - [ ] ODBC
@@ -22,4 +22,3 @@
 - [x] Файловая система
 - [x] Connection string
 - [ ] Remote HTTP
-
