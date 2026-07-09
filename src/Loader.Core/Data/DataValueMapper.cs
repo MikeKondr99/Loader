@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
+using ClickHouse.Client.Numerics;
 using NpgsqlTypes;
 
 namespace Loader.Core.Data;
@@ -29,6 +30,9 @@ public static class DataValueMapper
         [typeof(float)] = Same(DataType.Number, typeof(float)),
         [typeof(double)] = Same(DataType.Number, typeof(double)),
         [typeof(decimal)] = Same(DataType.Number, typeof(decimal)),
+
+        // ClickHouse Decimal(18, 2) 12.34 -> 12.34m
+        [typeof(ClickHouseDecimal)] = ConvertTo(DataType.Number, typeof(decimal), static value => ((ClickHouseDecimal)value).ToDecimal(CultureInfo.InvariantCulture)),
 
         [typeof(DateTime)] = Same(DataType.DateTime, typeof(DateTime)),
         [typeof(DateOnly)] = Same(DataType.Date, typeof(DateOnly)),

@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Net;
 using System.Net.NetworkInformation;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Data;
 using NpgsqlTypes;
 using TUnit.Assertions;
@@ -74,6 +75,7 @@ public sealed class DataValueMapperTests
         yield return (1.5f, 1.5f);
         yield return (2.5d, 2.5d);
         yield return (3.5m, 3.5m);
+        yield return ((ClickHouseDecimal)12.34m, 12.34m);
         yield return (new DateTime(2026, 1, 2, 3, 4, 5), new DateTime(2026, 1, 2, 3, 4, 5));
         yield return (new DateOnly(2026, 1, 2), new DateOnly(2026, 1, 2));
         yield return (new TimeOnly(3, 4, 5), new TimeOnly(3, 4, 5));
@@ -119,6 +121,7 @@ public sealed class DataValueMapperTests
         yield return (typeof(float), typeof(float));
         yield return (typeof(double), typeof(double));
         yield return (typeof(decimal), typeof(decimal));
+        yield return (typeof(ClickHouseDecimal), typeof(decimal));
         yield return (typeof(DateTime), typeof(DateTime));
         yield return (typeof(DateOnly), typeof(DateOnly));
         yield return (typeof(TimeOnly), typeof(TimeOnly));
