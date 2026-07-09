@@ -5,6 +5,7 @@ using System.Net.NetworkInformation;
 using System.Numerics;
 using ClickHouse.Client.Numerics;
 using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Types;
 
 namespace Loader.Core.Data;
 
@@ -108,7 +109,30 @@ public static class DataValueMapper
         [typeof(NpgsqlLogSequenceNumber)] = ConvertTo(DataType.Text, typeof(string), static value => value.ToString()!),
 
         // NpgsqlTid -> "(block,offset)" provider string
-        [typeof(NpgsqlTid)] = ConvertTo(DataType.Text, typeof(string), static value => value.ToString()!)
+        [typeof(NpgsqlTid)] = ConvertTo(DataType.Text, typeof(string), static value => value.ToString()!),
+
+        // Oracle NUMBER -> decimal
+        [typeof(OracleDecimal)] = ConvertTo(DataType.Number, typeof(decimal), ConvertOracleValue),
+
+        // Oracle DATE/TIMESTAMP -> DateTime
+        [typeof(OracleDate)] = ConvertTo(DataType.DateTime, typeof(DateTime), ConvertOracleValue),
+        [typeof(OracleTimeStamp)] = ConvertTo(DataType.DateTime, typeof(DateTime), ConvertOracleValue),
+
+        // Oracle character values -> string
+        [typeof(OracleString)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleValueToString),
+        [typeof(OracleClob)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleValueToString),
+        [typeof(OracleXmlType)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleValueToString),
+
+        // Oracle binary values -> "\xdeadbeef" where a byte[] Value is available
+        [typeof(OracleBinary)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleBinaryValue),
+        [typeof(OracleBlob)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleBinaryValue),
+        [typeof(OracleBFile)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleBinaryValue),
+
+        // Oracle timezone and interval values are provider-specific; keep stable text representation.
+        [typeof(OracleTimeStampTZ)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleProviderString),
+        [typeof(OracleTimeStampLTZ)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleProviderString),
+        [typeof(OracleIntervalDS)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleProviderString),
+        [typeof(OracleIntervalYM)] = ConvertTo(DataType.Text, typeof(string), ConvertOracleProviderString)
     };
 
     public static bool CanMap(object? input)
@@ -319,5 +343,40 @@ public static class DataValueMapper
             TimeSpan timeSpan => timeSpan.ToString("c", CultureInfo.InvariantCulture),
             _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty
         };
+    }
+
+    private static object ConvertOracleValue(object value)
+    {
+        ThrowIfOracleNull(value);
+        return value.GetType().GetProperty("Value")?.GetValue(value)
+               ?? throw new InvalidOperationException($"Oracle value '{value.GetType().FullName}' does not expose Value.");
+    }
+
+    private static string ConvertOracleValueToString(object value)
+    {
+        var oracleValue = ConvertOracleValue(value);
+        return Convert.ToString(oracleValue, CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    private static string ConvertOracleBinaryValue(object value)
+    {
+        var oracleValue = ConvertOracleValue(value);
+        return oracleValue is byte[] bytes
+            ? "\\x" + Convert.ToHexString(bytes).ToLowerInvariant()
+            : Convert.ToString(oracleValue, CultureInfo.InvariantCulture) ?? string.Empty;
+    }
+
+    private static string ConvertOracleProviderString(object value)
+    {
+        ThrowIfOracleNull(value);
+        return value.ToString() ?? string.Empty;
+    }
+
+    private static void ThrowIfOracleNull(object value)
+    {
+        if (value.GetType().GetProperty("IsNull")?.GetValue(value) is true)
+        {
+            throw new InvalidOperationException("Oracle value is null.");
+        }
     }
 }
