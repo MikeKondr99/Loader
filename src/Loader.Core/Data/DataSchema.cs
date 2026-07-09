@@ -58,7 +58,8 @@ public sealed record DataSchema
                     Name = reader.GetName(i),
                     DataType = mapping.DataType,
                     ClrType = mapping.ClrType,
-                    Convert = mapping.Convert
+                    Convert = mapping.Convert,
+                    ReadValue = mapping.ReadValue
                 };
             })
             .ToArray();

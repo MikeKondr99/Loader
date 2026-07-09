@@ -14,4 +14,6 @@ public sealed record DataField
     public required Type ClrType { get; init; }
 
     public required Func<object, object>? Convert { get; init; }
+
+    public required bool ReadValue { get; init; }
 }

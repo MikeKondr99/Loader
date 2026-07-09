@@ -11,5 +11,7 @@ public sealed class DataValueMapping
 
     public required Func<object, object>? Convert { get; init; }
 
+    public required bool ReadValue { get; init; }
+
     public bool RequiresConversion => Convert is not null;
 }

@@ -256,7 +256,7 @@ public sealed class PostgresProviderTests
         yield return ("'{}'::json", DataType.Text, "{}");
         yield return ("'{}'::jsonb", DataType.Text, "{}");
         yield return ("'<root />'::xml", DataType.Text, "<root />");
-        yield return ("E'\\\\xDEADBEEF'::bytea", DataType.Text, "\\xdeadbeef");
+        yield return ("E'\\\\xDEADBEEF'::bytea", DataType.Text, DBNull.Value);
         yield return ("B'1'::bit(1)", DataType.Boolean, true);
         yield return ("B'1010'::bit(4)", DataType.Text, "1010");
         yield return ("B'101'::bit varying(8)", DataType.Text, "101");

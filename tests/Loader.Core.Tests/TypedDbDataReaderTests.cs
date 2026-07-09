@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Loader.Core.Data;
 using Loader.Core.Tests.Infrastructure;
 using TUnit.Assertions;
@@ -166,6 +167,24 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("DomainDataReader явно неподдержанный CLR-тип не читает из inner reader и возвращает DBNull")]
+    public async Task Explicit_unsupported_clr_type_is_not_read_and_returns_dbnull()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("payload", typeof(byte[]));
+        table.Rows.Add(new byte[] { 0xde, 0xad });
+
+        using var rawReader = new ThrowOnValueReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(DBNull.Value);
+        await Assert.That(reader.IsDBNull(0)).IsTrue();
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(DBNull));
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("DomainDataReader для неизвестного CLR-типа кидает ошибку маппинга")]
     public async Task Throws_for_unknown_clr_type()
     {
@@ -175,7 +194,29 @@ public sealed class DomainDataReaderTests
         using var rawReader = table.CreateDataReader();
 
         await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<NotSupportedException>()
-            .WithMessage("CLR type 'System.Object' is not supported by Loader data type mapper.");
+            .ThrowsExactly<UnknownClrTypeException>()
+            .WithMessage("CLR type 'System.Object' is unknown to Loader data type mapper.");
+    }
+
+    private sealed class ThrowOnValueReader : DbDataReaderDecorator
+    {
+        public ThrowOnValueReader(DbDataReader inner)
+            : base(inner)
+        {
+        }
+
+        public int ValueReadAttempts { get; private set; }
+
+        public override bool IsDBNull(int ordinal)
+        {
+            ValueReadAttempts++;
+            throw new InvalidOperationException("Unsupported value must not be checked.");
+        }
+
+        public override object GetValue(int ordinal)
+        {
+            ValueReadAttempts++;
+            throw new InvalidOperationException("Unsupported value must not be read.");
+        }
     }
 }

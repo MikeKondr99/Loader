@@ -52,12 +52,24 @@ public sealed class DataValueMapperTests
     }
 
     [Test]
-    [DisplayName("DataValueMapper неизвестный CLR-тип кидает NotSupportedException")]
+    [DisplayName("DataValueMapper неизвестный CLR-тип кидает UnknownClrTypeException")]
     public async Task Unknown_clr_type_throws()
     {
         await Assert.That(() => DataValueMapper.MapType(typeof(object)))
-            .ThrowsExactly<NotSupportedException>()
-            .WithMessage("CLR type 'System.Object' is not supported by Loader data type mapper.");
+            .ThrowsExactly<UnknownClrTypeException>()
+            .WithMessage("CLR type 'System.Object' is unknown to Loader data type mapper.");
+    }
+
+    [Test]
+    [DisplayName("DataValueMapper явно неподдержанный CLR-тип знает, но помечает как нечитаемый")]
+    public async Task Explicit_unsupported_clr_type_is_known_but_not_readable()
+    {
+        var mapping = DataValueMapper.MapType(typeof(byte[]));
+
+        await Assert.That(DataValueMapper.CanMap(typeof(byte[]))).IsTrue();
+        await Assert.That(mapping.ReadValue).IsFalse();
+        await Assert.That(mapping.ClrType).IsEqualTo(typeof(DBNull));
+        await Assert.That(DataValueMapper.ConvertValue(mapping, new byte[] { 0xde })).IsEqualTo(DBNull.Value);
     }
 
     public static IEnumerable<(object Input, object Expected)> ValueCases()
@@ -83,7 +95,6 @@ public sealed class DataValueMapperTests
         yield return ('x', "x");
         yield return (Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         yield return (new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero), "2026-01-02T03:04:05.0000000+00:00");
-        yield return (new byte[] { 0xde, 0xad, 0xbe, 0xef }, "\\xdeadbeef");
         yield return (new BitArray([true, false, true]), "101");
         yield return (IPAddress.Parse("192.168.1.1"), "192.168.1.1");
         yield return (IPNetwork.Parse("192.168.0.0/24"), "192.168.0.0/24");
@@ -129,7 +140,7 @@ public sealed class DataValueMapperTests
         yield return (typeof(char), typeof(string));
         yield return (typeof(Guid), typeof(string));
         yield return (typeof(DateTimeOffset), typeof(string));
-        yield return (typeof(byte[]), typeof(string));
+        yield return (typeof(byte[]), typeof(DBNull));
         yield return (typeof(Array), typeof(string));
         yield return (typeof(BitArray), typeof(string));
         yield return (typeof(IPAddress), typeof(string));

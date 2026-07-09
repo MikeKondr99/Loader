@@ -49,8 +49,8 @@ public static class DataValueMapper
         // 2026-01-02T03:04:05.0000000+00:00
         [typeof(DateTimeOffset)] = ConvertTo(DataType.Text, typeof(string), static value => ((DateTimeOffset)value).ToString("O", CultureInfo.InvariantCulture)),
 
-        // bytea-like value -> "\xdeadbeef"
-        [typeof(byte[])] = ConvertTo(DataType.Text, typeof(string), static value => "\\x" + Convert.ToHexString((byte[])value).ToLowerInvariant()),
+        // bytea-like value is known, but intentionally not read until binary policy is defined.
+        [typeof(byte[])] = Unsupported(DataType.Text),
 
         // fallback System.Array value -> "{1,2,3}"
         [typeof(Array)] = ConvertTo(DataType.Text, typeof(string), static value => ConvertArray((Array)value)),
@@ -149,12 +149,17 @@ public static class DataValueMapper
             // int4range(1,3) -> "[1,3)"
             _ when IsRangeType(type) => ConvertTo(DataType.Text, typeof(string), ConvertRangeValue),
 
-            _ => throw new NotSupportedException($"CLR type '{type.FullName}' is not supported by Loader data type mapper.")
+            _ => throw new UnknownClrTypeException(type)
         };
     }
 
     public static object ConvertValue(DataValueMapping mapping, object value)
     {
+        if (!mapping.ReadValue)
+        {
+            return DBNull.Value;
+        }
+
         return mapping.Convert is null ? value : mapping.Convert(value);
     }
 
@@ -179,7 +184,8 @@ public static class DataValueMapper
         {
             DataType = dataType,
             ClrType = clrType,
-            Convert = null
+            Convert = null,
+            ReadValue = true
         };
     }
 
@@ -189,7 +195,19 @@ public static class DataValueMapper
         {
             DataType = dataType,
             ClrType = clrType,
-            Convert = convert
+            Convert = convert,
+            ReadValue = true
+        };
+    }
+
+    private static DataValueMapping Unsupported(DataType dataType)
+    {
+        return new DataValueMapping
+        {
+            DataType = dataType,
+            ClrType = typeof(DBNull),
+            Convert = null,
+            ReadValue = false
         };
     }
 

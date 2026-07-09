@@ -84,6 +84,11 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
 
         try
         {
+            if (!field.ReadValue)
+            {
+                return DBNull.Value;
+            }
+
             if (Inner.IsDBNull(ordinal))
             {
                 return DBNull.Value;
