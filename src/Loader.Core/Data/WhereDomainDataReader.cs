@@ -6,7 +6,7 @@ namespace Loader.Core.Data;
 /// <summary>
 /// DbDataReader-декоратор, который пропускает строки доменного reader-а до первой строки, прошедшей predicate.
 /// </summary>
-internal sealed class WhereDomainDataReader : DbDataReaderDecorator
+internal sealed class WhereDomainDataReader : DomainDataReaderDecorator
 {
     private readonly Func<Row, bool> _predicate;
     private readonly Row _row;
@@ -26,11 +26,13 @@ internal sealed class WhereDomainDataReader : DbDataReaderDecorator
             // 2. Predicate читает текущий buffered row без повторного доступа к provider.
             if (_predicate(_row))
             {
+                HasReadableRow = true;
                 return true;
             }
         }
 
         // 3. Если подходящих строк больше нет, завершаем stream.
+        HasReadableRow = false;
         return false;
     }
 
@@ -42,11 +44,13 @@ internal sealed class WhereDomainDataReader : DbDataReaderDecorator
             // 2. Predicate читает текущий buffered row без повторного доступа к provider.
             if (_predicate(_row))
             {
+                HasReadableRow = true;
                 return true;
             }
         }
 
         // 3. Если подходящих строк больше нет, завершаем stream.
+        HasReadableRow = false;
         return false;
     }
 

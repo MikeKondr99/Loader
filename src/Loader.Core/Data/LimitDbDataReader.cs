@@ -6,12 +6,12 @@ namespace Loader.Core.Data;
 /// <summary>
 /// DbDataReader-декоратор, который останавливает чтение после заданного количества строк.
 /// </summary>
-internal sealed class LimitDbDataReader : DbDataReaderDecorator
+internal sealed class LimitDbDataReader : DomainDataReaderDecorator
 {
     private readonly int _limit;
     private int _readRows;
 
-    public LimitDbDataReader(DbDataReader inner, int limit)
+    public LimitDbDataReader(DomainDataReader inner, int limit)
         : base(inner)
     {
         if (limit < 0)
@@ -28,15 +28,18 @@ internal sealed class LimitDbDataReader : DbDataReaderDecorator
     {
         if (_readRows >= _limit)
         {
+            HasReadableRow = false;
             return false;
         }
 
         if (!Inner.Read())
         {
+            HasReadableRow = false;
             return false;
         }
 
         _readRows++;
+        HasReadableRow = true;
         return true;
     }
 
@@ -44,15 +47,18 @@ internal sealed class LimitDbDataReader : DbDataReaderDecorator
     {
         if (_readRows >= _limit)
         {
+            HasReadableRow = false;
             return false;
         }
 
         if (!await Inner.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
+            HasReadableRow = false;
             return false;
         }
 
         _readRows++;
+        HasReadableRow = true;
         return true;
     }
 

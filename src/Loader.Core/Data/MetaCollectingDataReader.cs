@@ -6,15 +6,13 @@ namespace Loader.Core.Data;
 /// <summary>
 /// Декоратор, который собирает метаинформацию по строкам доменного reader-а.
 /// </summary>
-internal sealed class MetaCollectingDataReader : DbDataReaderDecorator
+internal sealed class MetaCollectingDataReader : DomainDataReaderDecorator
 {
-    private readonly DomainDataReader _inner;
     private readonly DataMetaContainer _metaContainer;
 
     public MetaCollectingDataReader(DomainDataReader inner, DataMetaContainer metaContainer)
         : base(inner)
     {
-        _inner = inner;
         _metaContainer = metaContainer;
         _metaContainer.Start(inner.DataSchema, inner.GetColumnSchema());
     }
@@ -23,13 +21,15 @@ internal sealed class MetaCollectingDataReader : DbDataReaderDecorator
     {
         try
         {
-            if (!_inner.Read())
+            if (!Inner.Read())
             {
+                HasReadableRow = false;
                 _metaContainer.Complete();
                 return false;
             }
 
-            _metaContainer.CollectRow(_inner);
+            HasReadableRow = true;
+            _metaContainer.CollectRow(this);
             return true;
         }
         catch
@@ -43,13 +43,15 @@ internal sealed class MetaCollectingDataReader : DbDataReaderDecorator
     {
         try
         {
-            if (!await _inner.ReadAsync(cancellationToken).ConfigureAwait(false))
+            if (!await Inner.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
+                HasReadableRow = false;
                 _metaContainer.Complete();
                 return false;
             }
 
-            _metaContainer.CollectRow(_inner);
+            HasReadableRow = true;
+            _metaContainer.CollectRow(this);
             return true;
         }
         catch

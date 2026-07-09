@@ -86,6 +86,27 @@ public sealed class LimitDomainDataReaderTests
         await Assert.That(await reader.ReadAsync()).IsFalse();
     }
 
+    [Test]
+    [DisplayName("Limit после конца потока не отдает последнюю строку inner reader")]
+    public async Task Limit_get_value_after_limit_end_throws_position_error()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, "Moscow");
+        table.Rows.Add(2, "London");
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .Limit(1);
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(1);
+        await Assert.That(reader.Read()).IsFalse();
+        await Assert.That(() => reader.GetValue(0))
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("Reader is not positioned on a row.");
+    }
+
     private static DataTable CreateTable()
     {
         var table = new DataTable();

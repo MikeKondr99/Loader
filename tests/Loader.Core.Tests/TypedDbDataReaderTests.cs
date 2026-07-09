@@ -10,6 +10,40 @@ namespace Loader.Core.Tests;
 public sealed class DomainDataReaderTests
 {
     [Test]
+    [DisplayName("Normalize поверх DomainDataReader возвращает тот же reader без повторной нормализации")]
+    public async Task Normalize_over_domain_reader_returns_same_instance()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Rows.Add(1);
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        var normalizedAgain = reader.Normalize();
+
+        await Assert.That(ReferenceEquals(reader, normalizedAgain)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Normalize после Where возвращает тот же Domain reader без повторной нормализации")]
+    public async Task Normalize_after_where_returns_same_instance()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Rows.Add(1);
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .Where(row => row.Integer("id") == 1);
+
+        var normalizedAgain = reader.Normalize();
+
+        await Assert.That(ReferenceEquals(reader, normalizedAgain)).IsTrue();
+    }
+
+    [Test]
     [DisplayName("DomainDataReader сводит string к Text и сохраняет origin DataTypeName")]
     public async Task Converts_supported_text_values_to_string()
     {
