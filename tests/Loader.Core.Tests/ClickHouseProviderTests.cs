@@ -45,6 +45,22 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
+    [MethodDataSource(nameof(UnsupportedSqlValueCases))]
+    [DisplayName("ClickHouse явно неподдержанный тип выдает DBNull без чтения значения")]
+    public async Task Unsupported_sql_expression_maps_to_dbnull(string sqlExpression, DataType expectedType)
+    {
+        await using var rawReader = await OpenReaderAsync($"select {sqlExpression} as value");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [expectedType],
+            rows: [
+                ValueTuple.Create(DBNull.Value)
+            ]);
+    }
+
+    [Test]
     [DisplayName("ClickHouse пустой результат сохраняет имена и типы схемы")]
     public async Task Empty_result_preserves_schema()
     {
@@ -164,6 +180,56 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
+    [DisplayName("ClickHouse Nullable базового типа сохраняет базовый DataType и читает DBNull")]
+    public async Task Nullable_base_type_preserves_schema_type_and_reads_dbnull()
+    {
+        await using var rawReader = await OpenReaderAsync(
+            """
+            select
+                cast(null, 'Nullable(String)') as text_value,
+                cast(null, 'Nullable(Decimal64(2))') as amount_value
+            """);
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["text_value", "amount_value"],
+            types: [DataType.Text, DataType.Number],
+            rows: [
+                (DBNull.Value, DBNull.Value)
+            ]);
+    }
+
+    [Test]
+    [DisplayName("ClickHouse Nullable(Nothing) считается известным null-only типом и выдает DBNull")]
+    public async Task Nullable_nothing_is_known_null_only_type()
+    {
+        await using var rawReader = await OpenReaderAsync("select cast(null, 'Nullable(Nothing)') as value");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create(DBNull.Value)
+            ]);
+    }
+
+    [Test]
+    [DisplayName("ClickHouse LowCardinality(String) читается как Text")]
+    public async Task Low_cardinality_string_reads_as_text()
+    {
+        await using var rawReader = await OpenReaderAsync("select cast('abc', 'LowCardinality(String)') as text_value");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["text_value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create("abc")
+            ]);
+    }
+
+    [Test]
     [DisplayName("ClickHouse SELECT 1 без alias выдает имя колонки от ClickHouse")]
     public async Task Select_without_alias_uses_clickhouse_generated_column_name()
     {
@@ -221,6 +287,7 @@ public sealed class ClickHouseProviderTests
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("toString('example')", DataType.Text, "example");
+        yield return ("toFixedString('abc', 5)", DataType.Text, "abc\0\0");
         yield return ("toUUID('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')", DataType.Text, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         yield return ("toInt8(-1)", DataType.Integer, (sbyte)-1);
         yield return ("toUInt8(1)", DataType.Integer, (byte)1);
@@ -235,12 +302,29 @@ public sealed class ClickHouseProviderTests
         yield return ("toDecimal32(12.34, 2)", DataType.Number, 12.34m);
         yield return ("toDecimal64(12345.6789, 4)", DataType.Number, 12345.6789m);
         yield return ("toDecimal128(12345.6789, 4)", DataType.Number, 12345.6789m);
+        yield return ("toDecimal256(12345.6789, 4)", DataType.Number, 12345.6789m);
         yield return ("toDateTime('2026-01-02 03:04:05')", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5));
+        yield return ("toDateTime64('2026-01-02 03:04:05.123', 3)", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5, 123));
         yield return ("toDate('2026-01-02')", DataType.DateTime, new DateTime(2026, 1, 2));
+        yield return ("toDate32('2026-01-02')", DataType.DateTime, new DateTime(2026, 1, 2));
         yield return ("true", DataType.Boolean, true);
+        yield return ("CAST('hello', 'Enum8(\\'hello\\' = 1, \\'world\\' = 2)')", DataType.Text, "hello");
+        yield return ("CAST('hello', 'Enum16(\\'hello\\' = 1, \\'world\\' = 2)')", DataType.Text, "hello");
+        yield return ("CAST('abc', 'LowCardinality(String)')", DataType.Text, "abc");
         yield return ("toIPv4('192.168.1.1')", DataType.Text, "192.168.1.1");
         yield return ("toIPv6('2001:db8::1')", DataType.Text, "2001:db8::1");
         yield return ("['a', 'b']", DataType.Text, "{a,b}");
+    }
+
+    public static IEnumerable<(string SqlExpression, DataType ExpectedType)> UnsupportedSqlValueCases()
+    {
+        yield return ("toInt128(-5)", DataType.Integer);
+        yield return ("toUInt128(5)", DataType.Integer);
+        yield return ("toInt256(-6)", DataType.Integer);
+        yield return ("toUInt256(6)", DataType.Integer);
+        yield return ("[1, 2]", DataType.Text);
+        yield return ("tuple(1, 'a')", DataType.Text);
+        yield return ("map('a', 1, 'b', 2)", DataType.Text);
     }
 
     private static ValueTask<DbDataReader> OpenReaderAsync(string sql)

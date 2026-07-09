@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Numerics;
 using ClickHouse.Client.Numerics;
 using Loader.Core.Data;
 using NpgsqlTypes;
@@ -61,15 +62,16 @@ public sealed class DataValueMapperTests
     }
 
     [Test]
+    [MethodDataSource(nameof(ExplicitUnsupportedTypes))]
     [DisplayName("DataValueMapper явно неподдержанный CLR-тип знает, но помечает как нечитаемый")]
-    public async Task Explicit_unsupported_clr_type_is_known_but_not_readable()
+    public async Task Explicit_unsupported_clr_type_is_known_but_not_readable(Type sourceType, DataType expectedType)
     {
-        var mapping = DataValueMapper.MapType(typeof(byte[]));
+        var mapping = DataValueMapper.MapType(sourceType);
 
-        await Assert.That(DataValueMapper.CanMap(typeof(byte[]))).IsTrue();
+        await Assert.That(DataValueMapper.CanMap(sourceType)).IsTrue();
+        await Assert.That(mapping.DataType).IsEqualTo(expectedType);
         await Assert.That(mapping.ReadValue).IsFalse();
         await Assert.That(mapping.ClrType).IsEqualTo(typeof(DBNull));
-        await Assert.That(DataValueMapper.ConvertValue(mapping, new byte[] { 0xde })).IsEqualTo(DBNull.Value);
     }
 
     public static IEnumerable<(object Input, object Expected)> ValueCases()
@@ -133,10 +135,12 @@ public sealed class DataValueMapperTests
         yield return (typeof(double), typeof(double));
         yield return (typeof(decimal), typeof(decimal));
         yield return (typeof(ClickHouseDecimal), typeof(decimal));
+        yield return (typeof(BigInteger), typeof(DBNull));
         yield return (typeof(DateTime), typeof(DateTime));
         yield return (typeof(DateOnly), typeof(DateOnly));
         yield return (typeof(TimeOnly), typeof(TimeOnly));
         yield return (typeof(TimeSpan), typeof(TimeOnly));
+        yield return (typeof(DBNull), typeof(DBNull));
         yield return (typeof(char), typeof(string));
         yield return (typeof(Guid), typeof(string));
         yield return (typeof(DateTimeOffset), typeof(string));
@@ -148,6 +152,8 @@ public sealed class DataValueMapperTests
         yield return (typeof(PhysicalAddress), typeof(string));
         yield return (typeof(int[]), typeof(string));
         yield return (typeof(NpgsqlRange<int>), typeof(string));
+        yield return (typeof(Tuple<byte, string>), typeof(DBNull));
+        yield return (typeof(Dictionary<string, byte>), typeof(DBNull));
         yield return (typeof(NpgsqlInet), typeof(string));
         yield return (typeof(NpgsqlPoint), typeof(string));
         yield return (typeof(NpgsqlLine), typeof(string));
@@ -182,4 +188,12 @@ public sealed class DataValueMapperTests
         yield return typeof(TimeOnly);
     }
 
+    public static IEnumerable<(Type SourceType, DataType ExpectedType)> ExplicitUnsupportedTypes()
+    {
+        yield return (typeof(byte[]), DataType.Text);
+        yield return (typeof(DBNull), DataType.Text);
+        yield return (typeof(BigInteger), DataType.Integer);
+        yield return (typeof(Tuple<byte, string>), DataType.Text);
+        yield return (typeof(Dictionary<string, byte>), DataType.Text);
+    }
 }

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Numerics;
 using ClickHouse.Client.Numerics;
 using NpgsqlTypes;
 
@@ -34,11 +35,17 @@ public static class DataValueMapper
         // ClickHouse Decimal(18, 2) 12.34 -> 12.34m
         [typeof(ClickHouseDecimal)] = ConvertTo(DataType.Number, typeof(decimal), static value => ((ClickHouseDecimal)value).ToDecimal(CultureInfo.InvariantCulture)),
 
+        // ClickHouse Int128/Int256 values are known, but disabled until integer widening policy is defined.
+        [typeof(BigInteger)] = Unsupported(DataType.Integer),
+
         [typeof(DateTime)] = Same(DataType.DateTime, typeof(DateTime)),
         [typeof(DateOnly)] = Same(DataType.Date, typeof(DateOnly)),
         [typeof(TimeOnly)] = Same(DataType.Time, typeof(TimeOnly)),
 
         [typeof(TimeSpan)] = ConvertTo(DataType.Time, typeof(TimeOnly), static value => TimeOnly.FromTimeSpan((TimeSpan)value)),
+
+        // ClickHouse Nullable(Nothing) has no readable runtime value.
+        [typeof(DBNull)] = Unsupported(DataType.Text),
 
         // 'x' -> "x"
         [typeof(char)] = ConvertTo(DataType.Text, typeof(string), static value => value.ToString()!),
@@ -126,7 +133,7 @@ public static class DataValueMapper
     public static bool CanMapType(Type clrType)
     {
         var type = Nullable.GetUnderlyingType(clrType) ?? clrType;
-        return Exact.ContainsKey(type) || IsNpgsqlCidr(type) || IsArrayType(type) || IsRangeType(type);
+        return Exact.ContainsKey(type) || IsNpgsqlCidr(type) || IsArrayType(type) || IsRangeType(type) || IsTupleType(type) || IsDictionaryType(type);
     }
 
     public static DataValueMapping MapType(Type clrType)
@@ -148,6 +155,12 @@ public static class DataValueMapper
 
             // int4range(1,3) -> "[1,3)"
             _ when IsRangeType(type) => ConvertTo(DataType.Text, typeof(string), ConvertRangeValue),
+
+            // ClickHouse Tuple(1,'a') is known, but disabled until complex value policy is defined.
+            _ when IsTupleType(type) => Unsupported(DataType.Text),
+
+            // ClickHouse Map('a',1) is known, but disabled until complex value policy is defined.
+            _ when IsDictionaryType(type) => Unsupported(DataType.Text),
 
             _ => throw new UnknownClrTypeException(type)
         };
@@ -219,6 +232,16 @@ public static class DataValueMapper
     private static bool IsRangeType(Type type)
     {
         return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(NpgsqlRange<>);
+    }
+
+    private static bool IsTupleType(Type type)
+    {
+        return type.IsGenericType && type.FullName?.StartsWith("System.Tuple`", StringComparison.Ordinal) == true;
+    }
+
+    private static bool IsDictionaryType(Type type)
+    {
+        return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
     }
 
     private static bool IsNpgsqlCidr(Type type)
