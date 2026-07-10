@@ -5,7 +5,7 @@
 - [x] Postgres
 - [x] ClickHouse
 - [x] Microsoft SQL Server
-- [ ] Oracle
+- [x] Oracle
 - [ ] Apache Hive
 - [ ] ODBC
 

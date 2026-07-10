@@ -5,6 +5,7 @@ using System.Numerics;
 using ClickHouse.Client.Numerics;
 using Loader.Core.Data;
 using NpgsqlTypes;
+using Oracle.ManagedDataAccess.Types;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core;
@@ -166,6 +167,19 @@ public sealed class DataValueMapperTests
         yield return (typeof(NpgsqlTsVector), typeof(string));
         yield return (typeof(NpgsqlLogSequenceNumber), typeof(string));
         yield return (typeof(NpgsqlTid), typeof(string));
+        yield return (typeof(OracleDecimal), typeof(decimal));
+        yield return (typeof(OracleDate), typeof(DateTime));
+        yield return (typeof(OracleTimeStamp), typeof(DateTime));
+        yield return (typeof(OracleString), typeof(string));
+        yield return (typeof(OracleClob), typeof(string));
+        yield return (typeof(OracleXmlType), typeof(string));
+        yield return (typeof(OracleBinary), typeof(string));
+        yield return (typeof(OracleBlob), typeof(string));
+        yield return (typeof(OracleBFile), typeof(string));
+        yield return (typeof(OracleTimeStampTZ), typeof(string));
+        yield return (typeof(OracleTimeStampLTZ), typeof(string));
+        yield return (typeof(OracleIntervalDS), typeof(string));
+        yield return (typeof(OracleIntervalYM), typeof(string));
     }
 
     public static IEnumerable<Type> SimpleTypesThatDoNotRequireConversion()
