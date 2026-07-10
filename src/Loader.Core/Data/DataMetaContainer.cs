@@ -9,7 +9,18 @@ namespace Loader.Core.Data;
 public sealed class DataMetaContainer
 {
     private readonly List<DataColumnMeta> _columns = [];
+    private readonly DataMetaOptions _options;
     private bool _started;
+
+    public DataMetaContainer()
+        : this(DataMetaOptions.Default)
+    {
+    }
+
+    public DataMetaContainer(DataMetaOptions options)
+    {
+        _options = options;
+    }
 
     public bool Success { get; private set; }
 
@@ -33,7 +44,8 @@ public sealed class DataMetaContainer
                 field.Name,
                 field.DataType,
                 dbColumn?.NumericPrecision,
-                dbColumn?.NumericScale));
+                dbColumn?.NumericScale,
+                _options.MaxCardinality));
         }
     }
 

@@ -133,6 +133,48 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("Normalize по умолчанию буферизует всю текущую строку во время Read")]
+    public async Task Normalize_default_buffers_current_row_during_read()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Columns.Add("name", typeof(string));
+        table.Rows.Add(1, "Moscow");
+
+        using var rawReader = new CountingValueReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(2);
+
+        await Assert.That(reader.GetValue(0)).IsEqualTo(1);
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Moscow");
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(2);
+    }
+
+    [Test]
+    [DisplayName("Normalize с Buffer false читает значения лениво по запросу")]
+    public async Task Normalize_without_buffer_reads_values_lazily()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Columns.Add("name", typeof(string));
+        table.Rows.Add(1, "Moscow");
+
+        using var rawReader = new CountingValueReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize(new NormalizeOptions { Buffer = false });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(0);
+
+        await Assert.That(reader.GetValue(0)).IsEqualTo(1);
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(1);
+
+        await Assert.That(reader.GetValue(0)).IsEqualTo(1);
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(2);
+    }
+
+    [Test]
     [DisplayName("DomainDataReader GetValue до Read кидает ошибку позиции reader")]
     public async Task Get_value_before_read_throws()
     {
@@ -196,6 +238,22 @@ public sealed class DomainDataReaderTests
         await Assert.That(() => rawReader.Normalize())
             .ThrowsExactly<UnknownClrTypeException>()
             .WithMessage("CLR type 'System.Object' is unknown to Loader data type mapper.");
+    }
+
+    private sealed class CountingValueReader : DbDataReaderDecorator
+    {
+        public CountingValueReader(DbDataReader inner)
+            : base(inner)
+        {
+        }
+
+        public int ValueReadAttempts { get; private set; }
+
+        public override object GetValue(int ordinal)
+        {
+            ValueReadAttempts++;
+            return Inner.GetValue(ordinal);
+        }
     }
 
     private sealed class ThrowOnValueReader : DbDataReaderDecorator

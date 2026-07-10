@@ -11,9 +11,20 @@ public static class DbDataReaderExtensions
 
     public static DomainDataReader Normalize(this DbDataReader reader)
     {
-        return reader is DomainDataReader domainReader
-            ? domainReader
-            : new NormalizingDomainDataReader(reader);
+        return Normalize(reader, new NormalizeOptions());
+    }
+
+    public static DomainDataReader Normalize(this DbDataReader reader, NormalizeOptions options)
+    {
+        if (reader is DomainDataReader domainReader)
+        {
+            return domainReader;
+        }
+
+        var normalized = new NormalizingDomainDataReader(reader);
+        return options.Buffer
+            ? new BufferingDomainDataReader(normalized)
+            : normalized;
     }
 
     public static DomainDataReader Where(this DomainDataReader reader, Func<Row, bool> predicate)

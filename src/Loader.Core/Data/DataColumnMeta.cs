@@ -8,15 +8,17 @@ namespace Loader.Core.Data;
 public sealed class DataColumnMeta
 {
     private readonly HashSet<object> _uniqueValues = [];
+    private readonly int? _maxCardinality;
     private long _nonNullCount;
 
-    internal DataColumnMeta(int ordinal, string name, DataType dataType, int? decimalPrecision, int? decimalScale)
+    internal DataColumnMeta(int ordinal, string name, DataType dataType, int? decimalPrecision, int? decimalScale, int? maxCardinality)
     {
         Ordinal = ordinal;
         Name = name;
         DataType = dataType;
         DecimalPrecision = decimalPrecision;
         DecimalScale = decimalScale;
+        _maxCardinality = maxCardinality;
     }
 
     public int Ordinal { get; }
@@ -28,6 +30,8 @@ public sealed class DataColumnMeta
     public int UniqueValueCount => _uniqueValues.Count;
 
     public bool AllValuesUnique { get; private set; } = true;
+
+    public bool CardinalityExceeded { get; private set; }
 
     public decimal Density { get; private set; }
 
@@ -41,10 +45,7 @@ public sealed class DataColumnMeta
 
     internal void CollectValue(object value, long rowCount)
     {
-        if (!_uniqueValues.Add(value))
-        {
-            AllValuesUnique = false;
-        }
+        CollectCardinality(value);
 
         if (value != DBNull.Value)
         {
@@ -55,6 +56,35 @@ public sealed class DataColumnMeta
         Density = rowCount == 0
             ? 0m
             : _nonNullCount / (decimal)rowCount;
+    }
+
+    private void CollectCardinality(object value)
+    {
+        if (CardinalityExceeded)
+        {
+            AllValuesUnique = false;
+            return;
+        }
+
+        if (_maxCardinality == 0)
+        {
+            CardinalityExceeded = true;
+            AllValuesUnique = false;
+            return;
+        }
+
+        if (!_uniqueValues.Add(value))
+        {
+            AllValuesUnique = false;
+            return;
+        }
+
+        if (_maxCardinality is not null && _uniqueValues.Count > _maxCardinality.Value)
+        {
+            CardinalityExceeded = true;
+            AllValuesUnique = false;
+            _uniqueValues.Clear();
+        }
     }
 
     private void CollectNumericBounds(object value)

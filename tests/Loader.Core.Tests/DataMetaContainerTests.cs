@@ -123,6 +123,64 @@ public sealed class DataMetaContainerTests
     }
 
     [Test]
+    [DisplayName("CollectMeta MaxCardinality ограничивает хранение уникальных значений")]
+    public async Task Max_cardinality_limits_unique_value_storage()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, 10m, "Moscow");
+        table.Rows.Add(2, 20m, "London");
+        table.Rows.Add(3, 30m, "Berlin");
+        var meta = new DataMetaContainer(new DataMetaOptions
+        {
+            MaxCardinality = 2
+        });
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .CollectMeta(meta);
+
+        while (await reader.ReadAsync())
+        {
+        }
+
+        await Assert.That(meta.Success).IsTrue();
+        await Assert.That(meta.Columns[0].CardinalityExceeded).IsTrue();
+        await Assert.That(meta.Columns[0].UniqueValueCount).IsEqualTo(0);
+        await Assert.That(meta.Columns[2].CardinalityExceeded).IsTrue();
+        await Assert.That(meta.Columns[2].UniqueValueCount).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("CollectMeta MaxCardinality 0 отключает хранение уникальных значений")]
+    public async Task Max_cardinality_zero_disables_unique_value_storage()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, 10m, "Moscow");
+        table.Rows.Add(2, 20m, "London");
+        var meta = new DataMetaContainer(new DataMetaOptions
+        {
+            MaxCardinality = 0
+        });
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .CollectMeta(meta);
+
+        while (await reader.ReadAsync())
+        {
+        }
+
+        await Assert.That(meta.Success).IsTrue();
+        await Assert.That(meta.Columns[0].CardinalityExceeded).IsTrue();
+        await Assert.That(meta.Columns[0].UniqueValueCount).IsEqualTo(0);
+        await Assert.That(meta.Columns[0].Min).IsEqualTo(1m);
+        await Assert.That(meta.Columns[0].Max).IsEqualTo(2m);
+        await Assert.That(meta.Columns[2].Density).IsEqualTo(1m);
+    }
+
+    [Test]
     [DisplayName("CollectMeta на пустом потоке сохраняет схему и завершает Success true")]
     public async Task Empty_stream_completes_meta_with_schema()
     {

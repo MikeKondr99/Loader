@@ -4,7 +4,6 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
 {
     private readonly DataSchema _schema;
     private readonly IAutoCastFormat?[] _formatsByOrdinal;
-    private object[] _rowBuffer = [];
 
     public AutoCastDataReader(DomainDataReader inner, AutoCastSchema autoCastSchema)
         : base(inner)
@@ -23,7 +22,7 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
             return false;
         }
 
-        BufferCurrentRow();
+        HasReadableRow = true;
         return true;
     }
 
@@ -35,7 +34,7 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
             return false;
         }
 
-        BufferCurrentRow();
+        HasReadableRow = true;
         return true;
     }
 
@@ -43,7 +42,7 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
     {
         EnsureReadableRow();
         _schema.GetField(ordinal);
-        return _rowBuffer[ordinal];
+        return ReadAndConvertValue(ordinal);
     }
 
     public override int GetValues(object[] values)
@@ -99,21 +98,6 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
     private static bool ShouldAutoCast(DataField field)
     {
         return field.DataType == DataType.Text && field.ClrType == typeof(string);
-    }
-
-    private void BufferCurrentRow()
-    {
-        if (_rowBuffer.Length != FieldCount)
-        {
-            _rowBuffer = new object[FieldCount];
-        }
-
-        for (var ordinal = 0; ordinal < FieldCount; ordinal++)
-        {
-            _rowBuffer[ordinal] = ReadAndConvertValue(ordinal);
-        }
-
-        HasReadableRow = true;
     }
 
     private object ReadAndConvertValue(int ordinal)

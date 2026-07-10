@@ -123,7 +123,7 @@ public sealed class AutoCastDataReaderTests
 
     [Test]
     [DisplayName("AutoCast ошибка преобразования оборачивается в DataReaderValueException")]
-    public async Task Conversion_error_is_wrapped_in_data_reader_value_exception()
+    public async Task Conversion_error_is_thrown_when_field_is_read()
     {
         using var table = CreateTextTable("id");
         table.Rows.Add("not-int");
@@ -139,9 +139,32 @@ public sealed class AutoCastDataReaderTests
                 ]
             });
 
-        await Assert.That(() => reader.Read())
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetValue(0))
             .ThrowsExactly<DataReaderValueException>()
             .WithMessage("Failed to read field 'id' at ordinal 0.");
+    }
+
+    [Test]
+    [DisplayName("AutoCast Read не конвертирует неиспользованное поле")]
+    public async Task Read_does_not_convert_unused_field()
+    {
+        using var table = CreateTextTable("id", "name");
+        table.Rows.Add("not-int", "Moscow");
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .AutoCast(new AutoCastSchema
+            {
+                Fields =
+                [
+                    new AutoCastField { Name = "id", Format = AutoCastFormats.Integer }
+                ]
+            });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Moscow");
     }
 
     [Test]

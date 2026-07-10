@@ -98,61 +98,131 @@ public static class AutoCastFormats
 
     private static bool IsValidNumberText(string? text, string decimalSeparator, string groupSeparator)
     {
-        if (string.IsNullOrWhiteSpace(text))
+        if (text is null)
         {
             return false;
         }
 
-        var trimmed = text.Trim();
-        if (trimmed.Contains('e', StringComparison.OrdinalIgnoreCase))
+        var span = text.AsSpan().Trim();
+        if (span.IsEmpty)
         {
             return false;
         }
 
-        var otherDecimalSeparator = decimalSeparator == "." ? "," : ".";
-        if (trimmed.Contains(otherDecimalSeparator, StringComparison.Ordinal) &&
-            !trimmed.Contains(groupSeparator, StringComparison.Ordinal))
+        var decimalSeparatorChar = decimalSeparator[0];
+        var groupSeparatorChar = groupSeparator[0];
+        var otherDecimalSeparatorChar = decimalSeparatorChar == '.' ? ',' : '.';
+
+        if (span.Contains('e') || span.Contains('E'))
         {
             return false;
         }
 
-        var allowed = "+-0123456789" + decimalSeparator + groupSeparator;
-        if (trimmed.Any(character => !allowed.Contains(character, StringComparison.Ordinal)))
+        var hasGroupSeparator = false;
+        var hasOtherDecimalSeparator = false;
+        for (var i = 0; i < span.Length; i++)
+        {
+            var character = span[i];
+            if (char.IsDigit(character) ||
+                character == decimalSeparatorChar ||
+                character == groupSeparatorChar ||
+                character is '+' or '-')
+            {
+                hasGroupSeparator |= character == groupSeparatorChar;
+                continue;
+            }
+
+            if (character == otherDecimalSeparatorChar)
+            {
+                hasOtherDecimalSeparator = true;
+                continue;
+            }
+
+            return false;
+        }
+
+        if (hasOtherDecimalSeparator && !hasGroupSeparator)
         {
             return false;
         }
 
-        var decimalIndex = trimmed.IndexOf(decimalSeparator, StringComparison.Ordinal);
-        if (decimalIndex >= 0 &&
-            trimmed[(decimalIndex + decimalSeparator.Length)..].Contains(groupSeparator, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var signless = trimmed.TrimStart('+', '-');
-        var integerPart = decimalIndex >= 0
-            ? signless[..signless.IndexOf(decimalSeparator, StringComparison.Ordinal)]
-            : signless;
-
-        return HasValidGroupSeparators(integerPart, groupSeparator);
+        return HasValidNumberShape(span, decimalSeparatorChar, groupSeparatorChar);
     }
 
-    private static bool HasValidGroupSeparators(string integerPart, string groupSeparator)
+    private static bool HasValidNumberShape(ReadOnlySpan<char> value, char decimalSeparator, char groupSeparator)
     {
-        if (!integerPart.Contains(groupSeparator, StringComparison.Ordinal))
+        var start = value[0] is '+' or '-' ? 1 : 0;
+        if (start == value.Length)
+        {
+            return false;
+        }
+
+        var decimalIndex = value[start..].IndexOf(decimalSeparator);
+        if (decimalIndex >= 0)
+        {
+            decimalIndex += start;
+            if (value[(decimalIndex + 1)..].Contains(groupSeparator))
+            {
+                return false;
+            }
+        }
+
+        var integerEnd = decimalIndex >= 0 ? decimalIndex : value.Length;
+        var integerPart = value[start..integerEnd];
+        if (integerPart.IsEmpty)
+        {
+            return false;
+        }
+
+        var firstGroupLength = 0;
+        var currentGroupLength = 0;
+        var seenGroupSeparator = false;
+        var groupsAfterFirst = 0;
+
+        for (var i = 0; i < integerPart.Length; i++)
+        {
+            var character = integerPart[i];
+            if (character == groupSeparator)
+            {
+                if (currentGroupLength == 0)
+                {
+                    return false;
+                }
+
+                if (!seenGroupSeparator)
+                {
+                    firstGroupLength = currentGroupLength;
+                    if (firstGroupLength > 3)
+                    {
+                        return false;
+                    }
+
+                    seenGroupSeparator = true;
+                }
+                else if (currentGroupLength != 3)
+                {
+                    return false;
+                }
+
+                groupsAfterFirst++;
+                currentGroupLength = 0;
+                continue;
+            }
+
+            if (!char.IsDigit(character))
+            {
+                return false;
+            }
+
+            currentGroupLength++;
+        }
+
+        if (!seenGroupSeparator)
         {
             return true;
         }
 
-        var groups = integerPart.Split(groupSeparator);
-        if (groups.Length < 2 || groups[0].Length is < 1 or > 3 || groups[0].Any(static character => !char.IsDigit(character)))
-        {
-            return false;
-        }
-
-        return groups
-            .Skip(1)
-            .All(static group => group.Length == 3 && group.All(static character => char.IsDigit(character)));
+        return groupsAfterFirst > 0 && currentGroupLength == 3;
     }
 
     public static IAutoCastFormat DateExact(string format)

@@ -3,13 +3,11 @@ using System.Data.Common;
 namespace Loader.Core.Data;
 
 /// <summary>
-/// Domain reader that normalizes a raw DbDataReader: builds domain schema,
-/// converts provider values, and buffers one current row.
+/// Domain reader that normalizes a raw DbDataReader: builds domain schema and converts provider values on demand.
 /// </summary>
 internal sealed class NormalizingDomainDataReader : DomainDataReader
 {
     private readonly DataSchema _schema;
-    private object[] _rowBuffer = [];
 
     public NormalizingDomainDataReader(DbDataReader inner)
         : base(inner)
@@ -27,7 +25,7 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
             return false;
         }
 
-        BufferCurrentRow();
+        HasReadableRow = true;
         return true;
     }
 
@@ -39,15 +37,14 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
             return false;
         }
 
-        BufferCurrentRow();
+        HasReadableRow = true;
         return true;
     }
 
     public override object GetValue(int ordinal)
     {
         EnsureReadableRow();
-        _schema.GetField(ordinal);
-        return _rowBuffer[ordinal];
+        return ReadAndConvertValue(ordinal);
     }
 
     public override int GetValues(object[] values)
@@ -61,23 +58,6 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
         return count;
     }
 
-    private void BufferCurrentRow()
-    {
-        // 1. Read inner reader left-to-right once, preserving SequentialAccess semantics.
-        if (_rowBuffer.Length != FieldCount)
-        {
-            _rowBuffer = new object[FieldCount];
-        }
-
-        // 2. Normalize values once and keep a snapshot of only the current row.
-        for (var ordinal = 0; ordinal < FieldCount; ordinal++)
-        {
-            _rowBuffer[ordinal] = ReadAndConvertValue(ordinal);
-        }
-
-        HasReadableRow = true;
-    }
-
     private object ReadAndConvertValue(int ordinal)
     {
         var field = _schema.GetField(ordinal);
@@ -89,13 +69,8 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
                 return DBNull.Value;
             }
 
-            if (Inner.IsDBNull(ordinal))
-            {
-                return DBNull.Value;
-            }
-
             var value = Inner.GetValue(ordinal);
-            if (value is null)
+            if (value is null || value == DBNull.Value)
             {
                 return DBNull.Value;
             }
