@@ -1,4 +1,5 @@
 using System.Data.Common;
+using Loader.Core.Data.AutoCast;
 
 namespace Loader.Core.Data;
 
@@ -33,6 +34,16 @@ public static class DbDataReaderExtensions
     public static DomainDataReader CollectMeta(this DomainDataReader reader, DataMetaContainer metaContainer)
     {
         return new MetaCollectingDataReader(reader, metaContainer);
+    }
+
+    public static DomainDataReader CollectAutoCast(this DomainDataReader reader, AutoCastAnalyzer analyzer)
+    {
+        return new AutoCastAnalyzingDataReader(reader, analyzer);
+    }
+
+    public static DomainDataReader AutoCast(this DomainDataReader reader, AutoCastSchema schema)
+    {
+        return new AutoCastDataReader(reader, schema);
     }
 
 }
