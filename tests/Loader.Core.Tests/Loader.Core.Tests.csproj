@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <None Include="Fixtures\Excel\**\*.xlsx" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Qvd\**\*.qvd" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <PropertyGroup>

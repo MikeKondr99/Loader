@@ -20,7 +20,7 @@ public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
         var document = await OpenDocumentAsync(source, config.FileName, cancellationToken).ConfigureAwait(false);
 
         // 1. Находим массив, который config объявил таблицей.
-        if (!TryGetArray(document.RootElement, config.ArrayPath, out var array))
+        if (!TryGetArray(document.RootElement, config.ArrayPath, out JsonElement array))
         {
             document.Dispose();
             throw new JsonArrayPathNotFoundProviderException(config.FileName, config.ArrayPath);

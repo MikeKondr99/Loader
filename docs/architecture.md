@@ -50,11 +50,13 @@ classDiagram
     ITableConfig <|-- CsvTableConfig
     ITableConfig <|-- ExcelTableConfig
     ITableConfig <|-- JsonTableConfig
+    ITableConfig <|-- QvdTableConfig
     ITableConfig <|-- SqlTableConfig
 
     IProvider <|-- CsvProvider
     IProvider <|-- ExcelProvider
     IProvider <|-- JsonProvider
+    IProvider <|-- QvdProvider
     IProvider <|-- PostgresProvider
     IProvider <|-- ClickHouseProvider
     IProvider <|-- SqlServerProvider
@@ -62,6 +64,8 @@ classDiagram
 ```
 
 ## Текущие провайдеры
+
+QVD provider сейчас имеет статус beta: базовое чтение, symbol tables, dual values и ошибки layout покрыты маленькими fixtures, но формат proprietary и набор тестов пока ограничен.
 
 ```mermaid
 flowchart LR
@@ -76,6 +80,10 @@ flowchart LR
     FileSource --> JsonProvider
     JsonConfig[JsonTableConfig] --> JsonProvider
     JsonProvider --> JsonReader[DbDataReader]
+
+    FileSource --> QvdProvider
+    QvdConfig[QvdTableConfig] --> QvdProvider
+    QvdProvider --> QvdReader[DbDataReader]
 
     DbSource[ConnectionStringSource] --> PgProvider[PostgresProvider]
     SqlConfig[SqlTableConfig] --> PgProvider
@@ -96,6 +104,7 @@ flowchart LR
     CsvReader --> Typed[TypedDbDataReader]
     ExcelReader --> Typed
     JsonReader --> Typed
+    QvdReader --> Typed
     PgReader --> Typed
     ChReader --> Typed
     SqlServerReader --> Typed

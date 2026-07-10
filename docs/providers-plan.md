@@ -13,7 +13,7 @@
 
 - [x] Excel
 - [x] CSV
-- [ ] QVD
+- [x] QVD (beta)
 - [ ] XML
 - [x] JSON
 
