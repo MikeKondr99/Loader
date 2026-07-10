@@ -49,10 +49,12 @@ classDiagram
 
     ITableConfig <|-- CsvTableConfig
     ITableConfig <|-- ExcelTableConfig
+    ITableConfig <|-- JsonTableConfig
     ITableConfig <|-- SqlTableConfig
 
     IProvider <|-- CsvProvider
     IProvider <|-- ExcelProvider
+    IProvider <|-- JsonProvider
     IProvider <|-- PostgresProvider
     IProvider <|-- ClickHouseProvider
     IProvider <|-- SqlServerProvider
@@ -70,6 +72,10 @@ flowchart LR
     FileSource --> ExcelProvider
     ExcelConfig[ExcelTableConfig] --> ExcelProvider
     ExcelProvider --> ExcelReader[DbDataReader]
+
+    FileSource --> JsonProvider
+    JsonConfig[JsonTableConfig] --> JsonProvider
+    JsonProvider --> JsonReader[DbDataReader]
 
     DbSource[ConnectionStringSource] --> PgProvider[PostgresProvider]
     SqlConfig[SqlTableConfig] --> PgProvider
@@ -89,6 +95,7 @@ flowchart LR
 
     CsvReader --> Typed[TypedDbDataReader]
     ExcelReader --> Typed
+    JsonReader --> Typed
     PgReader --> Typed
     ChReader --> Typed
     SqlServerReader --> Typed
