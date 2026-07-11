@@ -1,5 +1,4 @@
 using System.Data;
-using Loader.Core.Data;
 using Loader.Core.Providers.Excel;
 using Loader.Core.Sources;
 using Loader.Core.Tests.Infrastructure;

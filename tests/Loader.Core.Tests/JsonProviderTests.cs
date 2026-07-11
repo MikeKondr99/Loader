@@ -1,4 +1,3 @@
-using Loader.Core.Data;
 using Loader.Core.Providers.Json;
 using Loader.Core.Tests.Infrastructure;
 using System.Text;

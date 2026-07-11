@@ -1,6 +1,4 @@
 using System.Data.Common;
-using Loader.Core.Data;
-using Loader.Core.Data.AutoCast;
 using Loader.Core.Providers;
 using Loader.Core.Providers.Postgres;
 using Loader.Core.Providers.Sql;

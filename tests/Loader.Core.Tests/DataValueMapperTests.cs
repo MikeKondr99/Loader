@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Numerics;
 using ClickHouse.Client.Numerics;
-using Loader.Core.Data;
 using NpgsqlTypes;
 using Oracle.ManagedDataAccess.Types;
 using TUnit.Assertions;

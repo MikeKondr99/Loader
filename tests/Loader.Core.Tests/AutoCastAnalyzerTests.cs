@@ -1,6 +1,4 @@
 using System.Data;
-using Loader.Core.Data;
-using Loader.Core.Data.AutoCast;
 using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;

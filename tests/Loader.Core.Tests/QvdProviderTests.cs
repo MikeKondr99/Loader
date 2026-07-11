@@ -1,4 +1,3 @@
-using Loader.Core.Data;
 using Loader.Core.Providers.Qvd;
 using Loader.Core.Sources;
 using Loader.Core.Tests.Infrastructure;

@@ -3,8 +3,6 @@ using System.Data.Common;
 using System.Text;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Running;
-using Loader.Core.Data;
-using Loader.Core.Data.AutoCast;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Sources;
 

@@ -1,6 +1,4 @@
 using System.Data.Common;
-using Loader.Core.Data;
-using Loader.Core.Data.AutoCast;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Providers.Json;
 using Loader.Core.Tests.Infrastructure;

@@ -1,5 +1,4 @@
 using System.Text;
-using Loader.Core.Data;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Tests.Infrastructure;
 using TUnit.Assertions;

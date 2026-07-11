@@ -1,6 +1,5 @@
 using System.Data;
 using System.Data.Common;
-using Loader.Core.Data;
 using Loader.Core.Tests.Infrastructure;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
