@@ -1,7 +1,6 @@
-using System.Data.Common;
 using System.Globalization;
 
-namespace Loader.Core.Decorators.Etl;
+namespace Loader.Core.Decorators;
 
 /// <summary>
 /// Фасад доступа к текущей строке reader-а для будущих Where/Select выражений.

@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Data.Common;
 
-namespace Loader.Core.Decorators.Etl;
+namespace Loader.Core.Decorators;
 
 /// <summary>
 /// DbDataReader-декоратор, который останавливает чтение после заданного количества строк.

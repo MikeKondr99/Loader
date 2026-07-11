@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Data.Common;
 
-namespace Loader.Core.Decorators.Etl;
+namespace Loader.Core.Decorators;
 
 /// <summary>
 /// DbDataReader-декоратор, который пропускает строки доменного reader-а до первой строки, прошедшей predicate.
