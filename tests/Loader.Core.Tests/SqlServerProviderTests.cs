@@ -268,8 +268,8 @@ public sealed class SqlServerProviderTests
     }
 
     [Test]
-    [DisplayName("SqlServer CollectMeta не выдумывает decimal precision и scale если драйвер их не отдал")]
-    public async Task Collect_meta_keeps_decimal_precision_and_scale_empty_when_driver_does_not_provide_them()
+    [DisplayName("SqlServer CollectMeta сохраняет decimal precision и scale если драйвер их отдал")]
+    public async Task Collect_meta_preserves_decimal_precision_and_scale_when_driver_provides_them()
     {
         var meta = new DataMetaContainer();
         await using var rawReader = await OpenReaderAsync("select cast(12.34 as decimal(10, 2)) as amount");
@@ -285,8 +285,8 @@ public sealed class SqlServerProviderTests
             ]);
 
         await Assert.That(meta.Success).IsTrue();
-        await Assert.That(meta.Columns[0].DecimalPrecision).IsNull();
-        await Assert.That(meta.Columns[0].DecimalScale).IsNull();
+        await Assert.That(meta.Columns[0].DecimalPrecision).IsEqualTo(10);
+        await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
     }
 
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
