@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
@@ -70,6 +71,32 @@ public sealed class AutoCastDataReaderTests
         await Assert.That(() => reader.GetInt32(0))
             .ThrowsExactly<InvalidCastException>()
             .WithMessage("Column 'id' at ordinal 0 has CLR type 'System.Int64' and cannot be read with accessor 'GetInt32'.");
+    }
+
+    [Test]
+    [DisplayName("AutoCast обновляет GetColumnSchema и GetSchemaTable")]
+    public async Task Updates_ado_schema_metadata()
+    {
+        using var table = CreateTextTable("id");
+        table.Rows.Add("42");
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .AutoCast(new AutoCastSchema
+            {
+                Fields =
+                [
+                    new AutoCastField { Name = "id", Format = AutoCastFormats.Integer }
+                ]
+            });
+
+        var column = reader.GetColumnSchema().Single();
+        var schemaTable = reader.GetSchemaTable();
+
+        await Assert.That(column.ColumnName).IsEqualTo("id");
+        await Assert.That(column.DataType).IsEqualTo(typeof(long));
+        await Assert.That((Type)schemaTable.Rows[0][SchemaTableColumn.DataType]).IsEqualTo(typeof(long));
     }
 
     [Test]

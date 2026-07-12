@@ -46,11 +46,14 @@ public sealed record DataSchema
 
     internal static DataSchema FromReader(DbDataReader reader)
     {
+        var columnSchemaByOrdinal = ReadColumnSchemaByOrdinal(reader);
+
         // 1. Берем имена и CLR-типы из reader.
         var fields = Enumerable
             .Range(0, reader.FieldCount)
             .Select(i =>
             {
+                columnSchemaByOrdinal.TryGetValue(i, out var column);
                 var mapping = DataValueMapper.MapType(reader.GetFieldType(i));
                 return new DataField
                 {
@@ -58,6 +61,10 @@ public sealed record DataSchema
                     Name = reader.GetName(i),
                     DataType = mapping.DataType,
                     ClrType = mapping.ClrType,
+                    AllowDBNull = column?.AllowDBNull,
+                    ColumnSize = column?.ColumnSize,
+                    NumericPrecision = column?.NumericPrecision,
+                    NumericScale = column?.NumericScale,
                     Convert = mapping.Convert,
                     ReadValue = mapping.ReadValue
                 };
@@ -77,5 +84,19 @@ public sealed record DataSchema
         {
             Fields = fields
         };
+    }
+
+    private static IReadOnlyDictionary<int, DbColumn> ReadColumnSchemaByOrdinal(DbDataReader reader)
+    {
+        try
+        {
+            return reader.GetColumnSchema()
+                .Where(column => column.ColumnOrdinal.HasValue)
+                .ToDictionary(column => column.ColumnOrdinal!.Value);
+        }
+        catch (NotSupportedException)
+        {
+            return new Dictionary<int, DbColumn>();
+        }
     }
 }

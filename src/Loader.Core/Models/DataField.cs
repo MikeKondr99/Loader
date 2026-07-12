@@ -13,6 +13,14 @@ public sealed record DataField
 
     public required Type ClrType { get; init; }
 
+    public bool? AllowDBNull { get; init; }
+
+    public int? ColumnSize { get; init; }
+
+    public int? NumericPrecision { get; init; }
+
+    public int? NumericScale { get; init; }
+
     public required Func<object, object>? Convert { get; init; }
 
     public required bool ReadValue { get; init; }

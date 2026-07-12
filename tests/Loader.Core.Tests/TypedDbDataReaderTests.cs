@@ -189,6 +189,70 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("DomainDataReader GetColumnSchema возвращает нормализованную схему")]
+    public async Task Get_column_schema_returns_normalized_schema()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("created", typeof(TimeSpan));
+        table.Rows.Add(new TimeSpan(3, 4, 5));
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        var column = reader.GetColumnSchema().Single();
+
+        await Assert.That(column.ColumnName).IsEqualTo("created");
+        await Assert.That(column.ColumnOrdinal).IsEqualTo(0);
+        await Assert.That(column.DataType).IsEqualTo(typeof(TimeOnly));
+        await Assert.That(reader.DataSchema.Fields[0].ClrType).IsEqualTo(typeof(TimeOnly));
+    }
+
+    [Test]
+    [DisplayName("DomainDataReader GetSchemaTable возвращает нормализованную схему")]
+    public async Task Get_schema_table_returns_normalized_schema()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("created", typeof(TimeSpan));
+        table.Rows.Add(new TimeSpan(3, 4, 5));
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        var schemaTable = reader.GetSchemaTable();
+
+        await Assert.That((string)schemaTable.Rows[0][SchemaTableColumn.ColumnName]).IsEqualTo("created");
+        await Assert.That((int)schemaTable.Rows[0][SchemaTableColumn.ColumnOrdinal]).IsEqualTo(0);
+        await Assert.That((Type)schemaTable.Rows[0][SchemaTableColumn.DataType]).IsEqualTo(typeof(TimeOnly));
+    }
+
+    [Test]
+    [DisplayName("Normalize сохраняет доступную ADO metadata из inner reader")]
+    public async Task Normalize_preserves_available_inner_ado_metadata()
+    {
+        using var table = new DataTable();
+        var name = table.Columns.Add("name", typeof(string));
+        name.AllowDBNull = false;
+        name.MaxLength = 12;
+        table.Rows.Add("Moscow");
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        var field = reader.DataSchema.Fields[0];
+        var column = reader.GetColumnSchema().Single();
+        var schemaTable = reader.GetSchemaTable();
+
+        await Assert.That(field.AllowDBNull).IsNotNull();
+        await Assert.That(field.AllowDBNull!.Value).IsFalse();
+        await Assert.That(field.ColumnSize).IsEqualTo(12);
+        await Assert.That(column.AllowDBNull).IsNotNull();
+        await Assert.That(column.AllowDBNull!.Value).IsFalse();
+        await Assert.That(column.ColumnSize).IsEqualTo(12);
+        await Assert.That((bool)schemaTable.Rows[0][SchemaTableColumn.AllowDBNull]).IsFalse();
+        await Assert.That((int)schemaTable.Rows[0][SchemaTableColumn.ColumnSize]).IsEqualTo(12);
+    }
+
+    [Test]
     [DisplayName("DomainDataReader pipeline GetEnumerator запрещен чтобы не обходить accessors")]
     public async Task Pipeline_get_enumerator_is_not_supported()
     {

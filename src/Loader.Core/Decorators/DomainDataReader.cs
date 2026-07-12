@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Collections;
+using System.Data;
 
 namespace Loader.Core.Decorators;
 
@@ -110,6 +111,46 @@ public abstract class DomainDataReader : DbDataReaderDecorator
     public override long GetInt64(int ordinal) => GetTypedValue<long>(ordinal, nameof(GetInt64));
 
     public override string GetString(int ordinal) => GetTypedValue<string>(ordinal, nameof(GetString));
+
+    public override DataTable GetSchemaTable()
+    {
+        var table = new DataTable("SchemaTable");
+        table.Columns.Add(SchemaTableColumn.ColumnName, typeof(string));
+        table.Columns.Add(SchemaTableColumn.ColumnOrdinal, typeof(int));
+        table.Columns.Add(SchemaTableColumn.DataType, typeof(Type));
+        table.Columns.Add(SchemaTableColumn.ProviderType, typeof(int));
+        table.Columns.Add(SchemaTableColumn.ColumnSize, typeof(int));
+        table.Columns.Add(SchemaTableColumn.NumericPrecision, typeof(int));
+        table.Columns.Add(SchemaTableColumn.NumericScale, typeof(int));
+        table.Columns.Add(SchemaTableColumn.AllowDBNull, typeof(bool));
+        table.Columns.Add(SchemaTableColumn.IsKey, typeof(bool));
+        table.Columns.Add(SchemaTableColumn.IsUnique, typeof(bool));
+        table.Columns.Add(SchemaTableColumn.IsLong, typeof(bool));
+
+        foreach (var field in DataSchema.Fields)
+        {
+            var row = table.NewRow();
+            row[SchemaTableColumn.ColumnName] = field.Name;
+            row[SchemaTableColumn.ColumnOrdinal] = field.Ordinal;
+            row[SchemaTableColumn.DataType] = field.ClrType;
+            row[SchemaTableColumn.ProviderType] = field.Ordinal;
+            row[SchemaTableColumn.ColumnSize] = ToDbValue(field.ColumnSize);
+            row[SchemaTableColumn.NumericPrecision] = ToDbValue(field.NumericPrecision);
+            row[SchemaTableColumn.NumericScale] = ToDbValue(field.NumericScale);
+            row[SchemaTableColumn.AllowDBNull] = field.AllowDBNull ?? true;
+            row[SchemaTableColumn.IsKey] = false;
+            row[SchemaTableColumn.IsUnique] = false;
+            row[SchemaTableColumn.IsLong] = false;
+            table.Rows.Add(row);
+        }
+
+        return table;
+    }
+
+    private static object ToDbValue(int? value)
+    {
+        return value.HasValue ? value.Value : DBNull.Value;
+    }
 
     public override IEnumerator GetEnumerator()
     {
