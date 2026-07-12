@@ -290,6 +290,23 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("Normalize IsDBNull использует inner IsDBNull без inner GetValue")]
+    public async Task Normalize_is_db_null_uses_inner_is_db_null_without_inner_get_value()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("name", typeof(string));
+        table.Rows.Add(DBNull.Value);
+
+        using var rawReader = new CountingNullAccessReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.IsDBNull(0)).IsTrue();
+        await Assert.That(rawReader.IsDbNullCalls).IsEqualTo(1);
+        await Assert.That(rawReader.GetValueCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("DomainDataReader typed getter на DBNull кидает InvalidCastException")]
     public async Task Typed_getter_over_dbnull_throws()
     {
@@ -501,6 +518,30 @@ public sealed class DomainDataReaderTests
         {
             GetInt16Calls++;
             return Inner.GetInt16(ordinal);
+        }
+
+        public override object GetValue(int ordinal)
+        {
+            GetValueCalls++;
+            return Inner.GetValue(ordinal);
+        }
+    }
+
+    private sealed class CountingNullAccessReader : DbDataReaderDecorator
+    {
+        public CountingNullAccessReader(DbDataReader inner)
+            : base(inner)
+        {
+        }
+
+        public int IsDbNullCalls { get; private set; }
+
+        public int GetValueCalls { get; private set; }
+
+        public override bool IsDBNull(int ordinal)
+        {
+            IsDbNullCalls++;
+            return Inner.IsDBNull(ordinal);
         }
 
         public override object GetValue(int ordinal)

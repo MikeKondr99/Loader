@@ -47,6 +47,21 @@ internal sealed class NormalizingDomainDataReader : DomainDataReader
         return ReadAndConvertValue(ordinal);
     }
 
+    public override bool IsDBNull(int ordinal)
+    {
+        EnsureReadableRow();
+        var field = _schema.GetField(ordinal);
+
+        if (!field.ReadValue)
+        {
+            return true;
+        }
+
+        return field.Convert is null
+            ? Inner.IsDBNull(ordinal)
+            : GetValue(ordinal) == DBNull.Value;
+    }
+
     public override int GetValues(object[] values)
     {
         var count = Math.Min(values.Length, FieldCount);
