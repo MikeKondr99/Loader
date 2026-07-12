@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using TUnit.Assertions;
 using TUnit.Assertions.Core;
+using TUnit.Assertions.Enums;
 using TUnit.Assertions.Extensions;
 
 namespace Loader.Core.Tests.Infrastructure;
@@ -43,6 +44,12 @@ internal static class ReaderAssert
         await Assert.That(reader.FieldCount).IsEqualTo(columns.Length);
         await Assert.That(reader.DataSchema.Fields.Count).IsEqualTo(columns.Length);
         await Assert.That(types.Length).IsEqualTo(columns.Length);
+        await Assert.That(Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToArray())
+            .IsEquivalentTo(columns, CollectionOrdering.Matching);
+        await Assert.That(reader.DataSchema.Fields.Select(field => field.Name).ToArray())
+            .IsEquivalentTo(columns, CollectionOrdering.Matching);
+        await Assert.That(reader.DataSchema.Fields.Select(field => field.DataType).ToArray())
+            .IsEquivalentTo(types, CollectionOrdering.Matching);
 
         for (var i = 0; i < columns.Length; i++)
         {

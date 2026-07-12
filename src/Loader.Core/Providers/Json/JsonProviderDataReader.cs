@@ -5,21 +5,51 @@ using System.Text.Json;
 
 namespace Loader.Core.Providers.Json;
 
+/// <summary>
+/// DbDataReader для JSON-таблицы.
+///
+/// Reader получает уже явную схему колонок и потоково читает элементы массива-таблицы.
+/// В памяти держится только текущий элемент массива как JsonDocument, а не весь JSON-файл.
+/// Это компромиссный этап: значения всё еще извлекаются через JsonElement/dot-path, но
+/// основной файл больше не материализуется полностью.
+/// </summary>
 internal sealed class JsonProviderDataReader : DbDataReader
 {
-    private readonly JsonDocument _document;
-    private readonly IEnumerator<JsonElement> _rows;
+    private readonly string _fileName;
+    private readonly JsonUtf8StreamRowReader _rows;
     private readonly JsonTableSchema _schema;
+    private JsonDocument? _currentRowDocument;
+    private JsonDocument? _prefetchedRowDocument;
     private object[] _values;
+    private bool _hasPrefetchedRow;
     private bool _hasRow;
     private bool _isClosed;
 
-    public JsonProviderDataReader(JsonDocument document, JsonElement array, JsonTableSchema schema)
+    public JsonProviderDataReader(
+        Stream stream,
+        string fileName,
+        IReadOnlyList<string> arrayPath,
+        JsonTableSchema schema)
     {
-        _document = document;
-        _rows = array.EnumerateArray().GetEnumerator();
+        _fileName = fileName;
+        _rows = new JsonUtf8StreamRowReader(stream);
         _schema = schema;
         _values = new object[schema.Columns.Count];
+
+        try
+        {
+            // 1. На этапе открытия доходим до массива-таблицы, но не читаем его строки.
+            _rows.MoveToArray(arrayPath);
+        }
+        catch (InvalidOperationException)
+        {
+            _rows.Dispose();
+            throw new JsonArrayPathNotFoundProviderException(fileName, arrayPath);
+        }
+
+        // 2. Сохраняем старый контракт: ошибки первой строки видны уже на OpenReaderAsync.
+        _prefetchedRowDocument = _rows.ReadNextRow();
+        _hasPrefetchedRow = true;
     }
 
     public override object this[int ordinal] => GetValue(ordinal);
@@ -38,28 +68,49 @@ internal sealed class JsonProviderDataReader : DbDataReader
 
     public override bool Read()
     {
-        // 1. Двигаемся к следующему элементу массива-таблицы.
-        if (!_rows.MoveNext())
+        try
         {
-            _hasRow = false;
-            return false;
-        }
+            // 1. Освобождаем материализованную строку прошлого Read().
+            _currentRowDocument?.Dispose();
 
-        // 2. Готовим буфер под фиксированную схему текущей строки.
-        if (_values.Length != FieldCount)
+            // 2. Берем prefetched строку или читаем следующий элемент массива-таблицы.
+            if (_hasPrefetchedRow)
+            {
+                _currentRowDocument = _prefetchedRowDocument;
+                _prefetchedRowDocument = null;
+                _hasPrefetchedRow = false;
+            }
+            else
+            {
+                _currentRowDocument = _rows.ReadNextRow();
+            }
+
+            if (_currentRowDocument is null)
+            {
+                _hasRow = false;
+                return false;
+            }
+
+            // 3. Готовим буфер значений под фиксированную схему.
+            if (_values.Length != FieldCount)
+            {
+                _values = new object[FieldCount];
+            }
+
+            // 4. Извлекаем значения по dot-path из схемы.
+            var row = _currentRowDocument.RootElement;
+            for (var i = 0; i < FieldCount; i++)
+            {
+                _values[i] = ReadValue(row, _schema.Columns[i].Path);
+            }
+
+            _hasRow = true;
+            return true;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
-            _values = new object[FieldCount];
+            throw new JsonFileOpenProviderException(_fileName, ex);
         }
-
-        // 3. Заполняем буфер значениями по путям из схемы.
-        var row = _rows.Current;
-        for (var i = 0; i < FieldCount; i++)
-        {
-            _values[i] = ReadValue(row, _schema.Columns[i].Path);
-        }
-
-        _hasRow = true;
-        return true;
     }
 
     public override bool NextResult() => false;
@@ -154,8 +205,9 @@ internal sealed class JsonProviderDataReader : DbDataReader
     public override void Close()
     {
         _isClosed = true;
+        _currentRowDocument?.Dispose();
+        _prefetchedRowDocument?.Dispose();
         _rows.Dispose();
-        _document.Dispose();
     }
 
     protected override void Dispose(bool disposing)

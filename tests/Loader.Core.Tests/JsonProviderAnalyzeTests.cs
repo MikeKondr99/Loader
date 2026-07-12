@@ -1,5 +1,6 @@
 using Loader.Core.Providers.Json;
 using Loader.Core.Tests.Infrastructure;
+using TUnit.Assertions.Enums;
 
 namespace Loader.Core.Tests;
 
@@ -24,7 +25,7 @@ public sealed class JsonProviderAnalyzeTests
         var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", ["items"]);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEquivalentTo(["id", "user.name", "amount"]);
+            .IsEquivalentTo(["id", "user.name", "amount"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -41,7 +42,7 @@ public sealed class JsonProviderAnalyzeTests
         var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEquivalentTo(["id", "user.profile.city"]);
+            .IsEquivalentTo(["id", "user.profile.city"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -57,7 +58,7 @@ public sealed class JsonProviderAnalyzeTests
             flattenObjects: false);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEquivalentTo(["id", "user"]);
+            .IsEquivalentTo(["id", "user"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -107,7 +108,7 @@ public sealed class JsonProviderAnalyzeTests
             ["response", "payload", "wrapper", "items"]);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEquivalentTo(["id", "city", "user.name"]);
+            .IsEquivalentTo(["id", "city", "user.name"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -125,9 +126,7 @@ public sealed class JsonProviderAnalyzeTests
         var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEquivalentTo(["id", "city", "amount", "user.name"]);
-        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEqualTo(["id", "city", "amount", "user.name"]);
+            .IsEquivalentTo(["id", "city", "amount", "user.name"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -159,7 +158,7 @@ public sealed class JsonProviderAnalyzeTests
         var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEqualTo(["id", "city"]);
+            .IsEquivalentTo(["id", "city"], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -171,6 +170,46 @@ public sealed class JsonProviderAnalyzeTests
         var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
 
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
-            .IsEqualTo(["id", "tags"]);
+            .IsEquivalentTo(["id", "tags"], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema streaming находит ArrayPath после большого мусорного значения")]
+    public async Task Analyze_schema_reads_deep_array_path_after_large_noise()
+    {
+        var noise = new string('n', 70_000);
+        var source = new InlineJson($$"""
+            {
+              "noise": "{{noise}}",
+              "data": {
+                "items": [
+                  { "id": 1, "city": "Moscow" }
+                ]
+              }
+            }
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", ["data", "items"]);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "city"], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema streaming собирает схему когда значение больше стартового буфера")]
+    public async Task Analyze_schema_collects_columns_when_value_is_larger_than_stream_buffer()
+    {
+        var largeText = new string('x', 70_000);
+        var source = new InlineJson($$"""
+            [
+              { "id": 1, "payload": "{{largeText}}" },
+              { "amount": 10.50 }
+            ]
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "payload", "amount"], CollectionOrdering.Matching);
     }
 }

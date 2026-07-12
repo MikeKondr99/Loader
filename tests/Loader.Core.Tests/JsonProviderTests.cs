@@ -454,6 +454,143 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json streaming читает строковое значение больше стартового буфера")]
+    public async Task Reads_string_value_larger_than_stream_buffer()
+    {
+        var largeText = new string('x', 70_000);
+        var source = new InlineJson($$"""[{ "id": 1, "payload": "{{largeText}}" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "payload")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "payload"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", largeText)
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json streaming читает объектную строку больше стартового буфера")]
+    public async Task Reads_object_row_larger_than_stream_buffer()
+    {
+        var largeText = new string('y', 70_000);
+        var source = new InlineJson($$"""
+            [
+              { "id": 1, "nested": { "payload": "{{largeText}}" } },
+              { "id": 2, "nested": { "payload": "small" } }
+            ]
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "nested.payload")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "nested.payload"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", largeText),
+                ("2", "small")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json streaming читает большой массив как JSON строку")]
+    public async Task Reads_large_array_value_as_json_text()
+    {
+        var numbers = string.Join(", ", Enumerable.Range(1, 20_000));
+        var source = new InlineJson($$"""[{ "id": 1, "numbers": [{{numbers}}] }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "numbers")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "numbers"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", $"[{numbers}]")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json streaming находит ArrayPath после большого мусорного значения")]
+    public async Task Reads_nested_array_after_large_noise_before_path()
+    {
+        var noise = new string('n', 70_000);
+        var source = new InlineJson($$"""
+            {
+              "noise": "{{noise}}",
+              "data": {
+                "items": [
+                  { "id": 1, "city": "Moscow" }
+                ]
+              }
+            }
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = ["data", "items"],
+                Schema = Schema("id", "city")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "city"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Moscow")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json streaming ошибка после первой строки кидается при Read")]
+    public async Task Malformed_json_after_first_row_throws_provider_exception_on_read()
+    {
+        var source = new InlineJson("""[{ "id": 1 }, { "id": 2 """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id")
+            });
+
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(() => rawReader.Read())
+            .ThrowsExactly<JsonFileOpenProviderException>()
+            .WithMessage("JSON file 'inline.json' could not be opened or parsed.");
+    }
+
+    [Test]
     [DisplayName("Json если ArrayPath не указывает на массив кидает provider exception")]
     public async Task Missing_array_path_throws_provider_exception()
     {
