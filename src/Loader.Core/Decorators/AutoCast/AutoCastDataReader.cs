@@ -83,6 +83,9 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
                     {
                         DataType = format.DataType,
                         ClrType = format.ClrType,
+                        ColumnSize = null,
+                        NumericPrecision = null,
+                        NumericScale = null,
                         Convert = null,
                         ReadValue = true
                     };

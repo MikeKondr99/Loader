@@ -78,6 +78,8 @@ public sealed class AutoCastDataReaderTests
     public async Task Updates_ado_schema_metadata()
     {
         using var table = CreateTextTable("id");
+        table.Columns["id"]!.AllowDBNull = false;
+        table.Columns["id"]!.MaxLength = 12;
         table.Rows.Add("42");
 
         using var rawReader = table.CreateDataReader();
@@ -96,7 +98,12 @@ public sealed class AutoCastDataReaderTests
 
         await Assert.That(column.ColumnName).IsEqualTo("id");
         await Assert.That(column.DataType).IsEqualTo(typeof(long));
+        await Assert.That(column.AllowDBNull).IsNotNull();
+        await Assert.That(column.AllowDBNull!.Value).IsFalse();
+        await Assert.That(column.ColumnSize).IsNull();
         await Assert.That((Type)schemaTable.Rows[0][SchemaTableColumn.DataType]).IsEqualTo(typeof(long));
+        await Assert.That((bool)schemaTable.Rows[0][SchemaTableColumn.AllowDBNull]).IsFalse();
+        await Assert.That(schemaTable.Rows[0][SchemaTableColumn.ColumnSize]).IsEqualTo(DBNull.Value);
     }
 
     [Test]
