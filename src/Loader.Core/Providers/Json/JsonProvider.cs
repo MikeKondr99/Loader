@@ -11,7 +11,7 @@ public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
 {
     public string Kind => "json";
 
-    public ValueTask<DbDataReader> OpenReaderAsync(
+    public async ValueTask<DbDataReader> OpenReaderAsync(
         IFileSource source,
         JsonTableConfig config,
         CancellationToken cancellationToken = default)
@@ -20,8 +20,9 @@ public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
         {
             // 1. Открываем поток и сразу позиционируем streaming-reader на массиве-таблице.
             var stream = source.OpenRead(config.FileName);
-            return ValueTask.FromResult<DbDataReader>(
-                new JsonProviderDataReader(stream, config.FileName, config.ArrayPath, config.Schema));
+            return await JsonProviderDataReader
+                .CreateAsync(stream, config.FileName, config.ArrayPath, config.Schema, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not JsonArrayPathNotFoundProviderException)
         {

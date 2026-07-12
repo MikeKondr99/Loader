@@ -128,6 +128,36 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
         }
     }
 
+    public async ValueTask<JsonDocument?> ReadNextRowAsync(CancellationToken cancellationToken)
+    {
+        EnsurePositionedOnArray();
+
+        while (true)
+        {
+            var reader = CreateReader();
+            if (!reader.Read())
+            {
+                if (_isFinalBlock)
+                {
+                    return null;
+                }
+
+                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            // 1. EndArray на глубине таблицы означает конец результата.
+            if (reader.TokenType == JsonTokenType.EndArray && reader.CurrentDepth == _arrayDepth)
+            {
+                Consume((int)reader.BytesConsumed, reader.CurrentState);
+                return null;
+            }
+
+            // 2. Любой другой JSON value внутри массива является строкой таблицы.
+            return await ReadCurrentValueAsDocumentAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     public void Dispose()
     {
         if (_isDisposed)
@@ -186,6 +216,52 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
         }
     }
 
+    private async ValueTask<JsonDocument> ReadCurrentValueAsDocumentAsync(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var parentReader = CreateReader();
+            if (!parentReader.Read())
+            {
+                if (_isFinalBlock)
+                {
+                    throw new JsonException("Unexpected end of JSON while reading array item.");
+                }
+
+                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            var tokenStart = (int)parentReader.TokenStartIndex;
+            var valueReader = new Utf8JsonReader(_buffer.AsSpan(tokenStart, _bytesInBuffer - tokenStart), _isFinalBlock, default);
+
+            try
+            {
+                // 1. Парсим только текущий элемент массива как standalone JSON value.
+                var document = JsonDocument.ParseValue(ref valueReader);
+
+                // 2. Отдельным reader-ом продвигаем parent state внутри исходного массива.
+                var advancingReader = CreateReader();
+                advancingReader.Read();
+                if (!advancingReader.TrySkip())
+                {
+                    await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+                    document.Dispose();
+                    continue;
+                }
+
+                // 3. Удаляем из buffer-а байты прочитанного элемента и продолжаем после него.
+                Consume((int)advancingReader.BytesConsumed, advancingReader.CurrentState);
+                return document;
+            }
+            catch (JsonException) when (!_isFinalBlock)
+            {
+                // 4. Значение не поместилось в текущий buffer: дочитываем и пробуем снова.
+                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
     private bool ReadNavigationToken(out JsonTokenSnapshot token)
     {
         while (true)
@@ -228,6 +304,23 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
         }
 
         var read = _stream.Read(_buffer, _bytesInBuffer, _buffer.Length - _bytesInBuffer);
+        _isFinalBlock = read == 0;
+        _bytesInBuffer += read;
+    }
+
+    private async ValueTask ReadMoreAsync(CancellationToken cancellationToken)
+    {
+        if (_bytesInBuffer == _buffer.Length)
+        {
+            var grown = ArrayPool<byte>.Shared.Rent(_buffer.Length * 2);
+            Buffer.BlockCopy(_buffer, 0, grown, 0, _bytesInBuffer);
+            ArrayPool<byte>.Shared.Return(_buffer);
+            _buffer = grown;
+        }
+
+        var read = await _stream
+            .ReadAsync(_buffer.AsMemory(_bytesInBuffer, _buffer.Length - _bytesInBuffer), cancellationToken)
+            .ConfigureAwait(false);
         _isFinalBlock = read == 0;
         _bytesInBuffer += read;
     }

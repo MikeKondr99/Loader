@@ -479,6 +479,38 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json streaming ReadAsync читает строки асинхронным путем")]
+    public async Task Read_async_reads_rows_through_async_streaming_path()
+    {
+        var largeText = new string('a', 70_000);
+        var source = new InlineJson($$"""
+            [
+              { "id": 1, "payload": "{{largeText}}" },
+              { "id": 2, "payload": "small" }
+            ]
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "payload")
+            });
+
+        await Assert.That(await rawReader.ReadAsync()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo(largeText);
+
+        await Assert.That(await rawReader.ReadAsync()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("2");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("small");
+
+        await Assert.That(await rawReader.ReadAsync()).IsFalse();
+    }
+
+    [Test]
     [DisplayName("Json streaming читает объектную строку больше стартового буфера")]
     public async Task Reads_object_row_larger_than_stream_buffer()
     {
