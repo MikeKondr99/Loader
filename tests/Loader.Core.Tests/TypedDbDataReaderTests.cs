@@ -267,8 +267,8 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
-    [DisplayName("Normalize по умолчанию буферизует всю текущую строку во время Read")]
-    public async Task Normalize_default_buffers_current_row_during_read()
+    [DisplayName("Normalize по умолчанию читает значения лениво без буфера")]
+    public async Task Normalize_default_reads_values_lazily_without_buffer()
     {
         using var table = new DataTable();
         table.Columns.Add("id", typeof(int));
@@ -279,9 +279,11 @@ public sealed class DomainDataReaderTests
         using var reader = rawReader.Normalize();
 
         await Assert.That(reader.Read()).IsTrue();
-        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(2);
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(0);
 
         await Assert.That(reader.GetValue(0)).IsEqualTo(1);
+        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(1);
+
         await Assert.That(reader.GetValue(1)).IsEqualTo("Moscow");
         await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(2);
     }

@@ -126,7 +126,7 @@ public sealed class SqlServerProviderTests
                 (cast(3 as int), cast('Moscow' as nvarchar(30)))
             ) as rows(id, city)
             order by id
-            """);
+        """);
         await using var reader = rawReader
             .Normalize()
             .Where(row => row.Text("city") == "Moscow" && row.Integer("id") > 1);
@@ -250,7 +250,8 @@ public sealed class SqlServerProviderTests
         await using var rawReader = await OpenReaderAsync("select cast(99999999999999999999999999999999999999 as decimal(38, 0)) as value");
         await using var reader = rawReader.Normalize();
 
-        await Assert.That(() => reader.Read())
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetValue(0))
             .ThrowsExactly<DataReaderValueException>()
             .WithMessage("Failed to read field 'value' at ordinal 0.");
     }

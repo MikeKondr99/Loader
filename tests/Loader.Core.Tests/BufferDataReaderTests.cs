@@ -102,15 +102,15 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
-    [DisplayName("PostgresProvider works only with buffer")]
-    public async Task Postgres_provider_works_only_with_buffer()
+    [DisplayName("PostgresProvider works without buffer")]
+    public async Task Postgres_provider_works_without_buffer()
     {
         await using var database = await PostgresTestDatabase.StartAsync();
         var provider = new PostgresProvider();
         var source = new ConnectionStringSource { ConnectionString = database.ConnectionString };
         var config = new SqlTableConfig { Sql = "select 1::integer as id, 'Moscow'::text as name" };
 
-        await AssertProviderNeedsBuffer(
+        await AssertProviderWorksWithAndWithoutBuffer(
             () => provider.OpenReaderAsync(source, config),
             1,
             "Moscow");
@@ -140,7 +140,7 @@ public sealed class BufferDataReaderTests
         var source = new ConnectionStringSource { ConnectionString = database.ConnectionString };
         var config = new SqlTableConfig { Sql = "select cast(1 as int) as id, cast('Moscow' as nvarchar(20)) as name" };
 
-        await AssertProviderNeedsBuffer(
+        await AssertProviderWorksWithAndWithoutBuffer(
             () => provider.OpenReaderAsync(source, config),
             1,
             "Moscow");
@@ -216,7 +216,7 @@ public sealed class BufferDataReaderTests
     {
         using var table = CreateTable();
         using var rawReader = new SequentialOnlyReader(table.CreateDataReader());
-        using var reader = rawReader.Normalize();
+        using var reader = rawReader.Normalize(new NormalizeOptions { Buffer = true });
 
         await Assert.That(rawReader.GetValueCalls).IsEqualTo(0);
         await Assert.That(reader.Read()).IsTrue();

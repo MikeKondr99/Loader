@@ -5,5 +5,5 @@ namespace Loader.Core.Decorators;
 /// </summary>
 public sealed record NormalizeOptions
 {
-    public bool Buffer { get; init; } = true;
+    public bool Buffer { get; init; }
 }

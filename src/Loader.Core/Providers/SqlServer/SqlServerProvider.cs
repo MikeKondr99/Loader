@@ -32,7 +32,7 @@ public sealed class SqlServerProvider : IProvider<IDatabaseSource, SqlTableConfi
 
             // 3. Возвращаем потоковый reader; закрытие reader закроет соединение.
             return await command
-                .ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.CloseConnection, cancellationToken)
+                .ExecuteReaderAsync(CommandBehavior.CloseConnection, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

@@ -130,7 +130,7 @@ public sealed class OracleProviderTests
             union all
             select cast(3 as number(10, 0)) as "id", 'Moscow' as "city" from dual
             order by "id"
-            """);
+        """);
         await using var reader = rawReader
             .Normalize()
             .Where(row => row.Text("city") == "Moscow" && row.Number("id") > 1m);
@@ -217,7 +217,8 @@ public sealed class OracleProviderTests
             "select cast(99999999999999999999999999999999999999 as number(38, 0)) as \"value\" from dual");
         await using var reader = rawReader.Normalize();
 
-        await Assert.That(() => reader.Read())
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetValue(0))
             .ThrowsExactly<DataReaderValueException>()
             .WithMessage("Failed to read field 'value' at ordinal 0.");
     }

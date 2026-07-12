@@ -845,8 +845,9 @@ public sealed class ExcelProviderTests
                 HasHeader = true
             });
         await using var reader = rawReader.Normalize();
+        await reader.ReadAsync();
 
-        await Assert.That(() => reader.Read())
+        await Assert.That(() => reader.GetValue(1))
             .Throws<DataReaderValueException>();
     }
 

@@ -206,7 +206,8 @@ public sealed class PostgresProviderTests
         await using var rawReader = await OpenReaderAsync("select repeat('9', 100)::numeric as value");
         await using var reader = rawReader.Normalize();
 
-        await Assert.That(() => reader.Read())
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetValue(0))
             .ThrowsExactly<DataReaderValueException>()
             .WithMessage("Failed to read field 'value' at ordinal 0.");
     }
