@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Data.Common;
-
 namespace Loader.Core.Decorators;
 
 /// <summary>
@@ -52,10 +49,5 @@ internal sealed class WhereDomainDataReader : DomainDataReaderDecorator
         // 3. Если подходящих строк больше нет, завершаем stream.
         HasReadableRow = false;
         return false;
-    }
-
-    public override IEnumerator GetEnumerator()
-    {
-        return new DbEnumerator(this);
     }
 }

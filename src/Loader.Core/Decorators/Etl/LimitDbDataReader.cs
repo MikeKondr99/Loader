@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Data.Common;
-
 namespace Loader.Core.Decorators;
 
 /// <summary>
@@ -60,10 +57,5 @@ internal sealed class LimitDbDataReader : DomainDataReaderDecorator
         _readRows++;
         HasReadableRow = true;
         return true;
-    }
-
-    public override IEnumerator GetEnumerator()
-    {
-        return new DbEnumerator(this);
     }
 }

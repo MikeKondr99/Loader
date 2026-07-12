@@ -92,6 +92,123 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
+    [DisplayName("DomainDataReader typed getters читают нормализованные значения")]
+    public async Task Typed_getters_read_normalized_values()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("text", typeof(string));
+        table.Columns.Add("integer", typeof(int));
+        table.Columns.Add("number", typeof(decimal));
+        table.Columns.Add("boolean", typeof(bool));
+        table.Columns.Add("datetime", typeof(DateTime));
+        table.Columns.Add("time", typeof(TimeSpan));
+        table.Rows.Add("Moscow", 42, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), new TimeSpan(6, 7, 8));
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetString(0)).IsEqualTo("Moscow");
+        await Assert.That(reader.GetInt32(1)).IsEqualTo(42);
+        await Assert.That(reader.GetDecimal(2)).IsEqualTo(10.50m);
+        await Assert.That(reader.GetBoolean(3)).IsTrue();
+        await Assert.That(reader.GetDateTime(4)).IsEqualTo(new DateTime(2026, 1, 2, 3, 4, 5));
+        await Assert.That(reader.GetFieldValue<TimeOnly>(5)).IsEqualTo(new TimeOnly(6, 7, 8));
+    }
+
+    [Test]
+    [DisplayName("Normalize without buffer GetString uses inner GetString and does not call inner GetValue")]
+    public async Task Normalize_without_buffer_get_string_uses_inner_typed_accessor()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("name", typeof(string));
+        table.Rows.Add("Moscow");
+
+        using var rawReader = new CountingTypedAccessReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize(new NormalizeOptions { Buffer = false });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetString(0)).IsEqualTo("Moscow");
+
+        await Assert.That(rawReader.GetStringCalls).IsEqualTo(1);
+        await Assert.That(rawReader.GetValueCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("Normalize without buffer GetInt16 uses inner GetInt16 and does not call inner GetValue")]
+    public async Task Normalize_without_buffer_get_int16_uses_inner_typed_accessor()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(short));
+        table.Rows.Add((short)42);
+
+        using var rawReader = new CountingTypedAccessReader(table.CreateDataReader());
+        using var reader = rawReader.Normalize(new NormalizeOptions { Buffer = false });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetInt16(0)).IsEqualTo((short)42);
+
+        await Assert.That(rawReader.GetInt16Calls).IsEqualTo(1);
+        await Assert.That(rawReader.GetValueCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("DomainDataReader typed getter кидает InvalidCastException если accessor не совпадает со схемой")]
+    public async Task Typed_getter_not_matching_schema_clr_type_throws()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Rows.Add(42);
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetInt64(0))
+            .ThrowsExactly<InvalidCastException>()
+            .WithMessage("Column 'id' at ordinal 0 has CLR type 'System.Int32' and cannot be read with accessor 'GetInt64'.");
+        await Assert.That(() => reader.GetFieldValue<long>(0))
+            .ThrowsExactly<InvalidCastException>()
+            .WithMessage("Column 'id' at ordinal 0 has CLR type 'System.Int32' and cannot be read with accessor 'GetFieldValue<Int64>'.");
+    }
+
+    [Test]
+    [DisplayName("DomainDataReader GetEnumerator запрещен чтобы не обходить accessors")]
+    public async Task Get_enumerator_is_not_supported()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Rows.Add(1);
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        await Assert.That(() => reader.GetEnumerator())
+            .ThrowsExactly<NotSupportedException>()
+            .WithMessage("DomainDataReader supports only explicit Read() and accessor methods.");
+    }
+
+    [Test]
+    [DisplayName("DomainDataReader pipeline GetEnumerator запрещен чтобы не обходить accessors")]
+    public async Task Pipeline_get_enumerator_is_not_supported()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("id", typeof(int));
+        table.Rows.Add(1);
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader
+            .Normalize()
+            .Where(row => row.Integer("id") == 1)
+            .Limit(1)
+            .CollectMeta(new DataMetaContainer());
+
+        await Assert.That(() => reader.GetEnumerator())
+            .ThrowsExactly<NotSupportedException>()
+            .WithMessage("DomainDataReader supports only explicit Read() and accessor methods.");
+    }
+
+    [Test]
     [DisplayName("DomainDataReader сводит null значение к DBNull")]
     public async Task Converts_null_values_to_db_null()
     {
@@ -106,6 +223,24 @@ public sealed class DomainDataReaderTests
         await Assert.That(reader.IsDBNull(0)).IsTrue();
         await Assert.That(reader.GetValue(0)).IsEqualTo(DBNull.Value);
         await Assert.That(reader["name"]).IsEqualTo(DBNull.Value);
+    }
+
+    [Test]
+    [DisplayName("DomainDataReader typed getter на DBNull кидает InvalidCastException")]
+    public async Task Typed_getter_over_dbnull_throws()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("name", typeof(string));
+        table.Rows.Add(DBNull.Value);
+
+        using var rawReader = table.CreateDataReader();
+        using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(() => reader.GetString(0))
+            .ThrowsExactly<InvalidCastException>()
+            .WithMessage("Column ordinal 0 contains DBNull.");
+        await Assert.That(reader.GetFieldValue<object>(0)).IsEqualTo(DBNull.Value);
     }
 
     [Test]
@@ -274,6 +409,38 @@ public sealed class DomainDataReaderTests
         {
             ValueReadAttempts++;
             throw new InvalidOperationException("Unsupported value must not be read.");
+        }
+    }
+
+    private sealed class CountingTypedAccessReader : DbDataReaderDecorator
+    {
+        public CountingTypedAccessReader(DbDataReader inner)
+            : base(inner)
+        {
+        }
+
+        public int GetStringCalls { get; private set; }
+
+        public int GetInt16Calls { get; private set; }
+
+        public int GetValueCalls { get; private set; }
+
+        public override string GetString(int ordinal)
+        {
+            GetStringCalls++;
+            return Inner.GetString(ordinal);
+        }
+
+        public override short GetInt16(int ordinal)
+        {
+            GetInt16Calls++;
+            return Inner.GetInt16(ordinal);
+        }
+
+        public override object GetValue(int ordinal)
+        {
+            GetValueCalls++;
+            return Inner.GetValue(ordinal);
         }
     }
 }

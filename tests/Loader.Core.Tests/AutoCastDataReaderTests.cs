@@ -38,6 +38,41 @@ public sealed class AutoCastDataReaderTests
     }
 
     [Test]
+    [DisplayName("AutoCast typed getters читают сконвертированные значения")]
+    public async Task Typed_getters_read_converted_values()
+    {
+        using var table = CreateTextTable("id", "amount", "active", "created", "date", "time");
+        table.Rows.Add("42", "10.50", "true", "2026-01-02 03:04:05", "2026-01-02", "03:04:05");
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .AutoCast(new AutoCastSchema
+            {
+                Fields =
+                [
+                    new AutoCastField { Name = "id", Format = AutoCastFormats.Integer },
+                    new AutoCastField { Name = "amount", Format = AutoCastFormats.InvariantNumber },
+                    new AutoCastField { Name = "active", Format = AutoCastFormats.Boolean },
+                    new AutoCastField { Name = "created", Format = AutoCastFormats.DateTimeExact("yyyy-MM-dd HH:mm:ss") },
+                    new AutoCastField { Name = "date", Format = AutoCastFormats.DateExact("yyyy-MM-dd") },
+                    new AutoCastField { Name = "time", Format = AutoCastFormats.TimeExact("HH:mm:ss") }
+                ]
+            });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetInt64(0)).IsEqualTo(42L);
+        await Assert.That(reader.GetDecimal(1)).IsEqualTo(10.50m);
+        await Assert.That(reader.GetBoolean(2)).IsTrue();
+        await Assert.That(reader.GetDateTime(3)).IsEqualTo(new DateTime(2026, 1, 2, 3, 4, 5));
+        await Assert.That(reader.GetFieldValue<DateOnly>(4)).IsEqualTo(new DateOnly(2026, 1, 2));
+        await Assert.That(reader.GetFieldValue<TimeOnly>(5)).IsEqualTo(new TimeOnly(3, 4, 5));
+        await Assert.That(() => reader.GetInt32(0))
+            .ThrowsExactly<InvalidCastException>()
+            .WithMessage("Column 'id' at ordinal 0 has CLR type 'System.Int64' and cannot be read with accessor 'GetInt32'.");
+    }
+
+    [Test]
     [DisplayName("AutoCast не указанные в схеме поля оставляет без изменений")]
     public async Task Leaves_fields_not_present_in_schema_unchanged()
     {

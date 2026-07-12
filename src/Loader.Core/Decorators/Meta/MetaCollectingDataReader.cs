@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Data.Common;
 
 namespace Loader.Core.Decorators;
@@ -59,10 +58,5 @@ internal sealed class MetaCollectingDataReader : DomainDataReaderDecorator
             _metaContainer.Fail();
             throw;
         }
-    }
-
-    public override IEnumerator GetEnumerator()
-    {
-        return new DbEnumerator(this);
     }
 }
