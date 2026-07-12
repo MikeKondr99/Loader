@@ -109,4 +109,68 @@ public sealed class JsonProviderAnalyzeTests
         await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
             .IsEquivalentTo(["id", "city", "user.name"]);
     }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema сохраняет порядок первого появления колонок")]
+    public async Task Analyze_schema_preserves_first_seen_column_order()
+    {
+        var source = new InlineJson(
+            """
+            [
+              { "id": 1, "city": "Moscow" },
+              { "amount": 10.50, "id": 2, "user": { "name": "Mike" } }
+            ]
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "city", "amount", "user.name"]);
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEqualTo(["id", "city", "amount", "user.name"]);
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema пустого массива возвращает пустую схему")]
+    public async Task Analyze_schema_empty_array_returns_empty_schema()
+    {
+        var source = new InlineJson("""[]""");
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
+
+        await Assert.That(schema.Columns).IsEmpty();
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema пропускает не объектные элементы массива")]
+    public async Task Analyze_schema_skips_non_object_array_items()
+    {
+        var source = new InlineJson(
+            """
+            [
+              1,
+              "text",
+              true,
+              null,
+              { "id": 1, "city": "Moscow" }
+            ]
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEqualTo(["id", "city"]);
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema flatten не раскрывает массивы и оставляет их колонкой")]
+    public async Task Analyze_schema_keeps_arrays_as_columns()
+    {
+        var source = new InlineJson("""[{ "id": 1, "tags": ["a", "b"] }]""");
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", []);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEqualTo(["id", "tags"]);
+    }
 }

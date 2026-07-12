@@ -161,6 +161,103 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json пустой массив не возвращает строк но HasRows сейчас true")]
+    public async Task Empty_array_returns_no_rows_but_has_rows_is_true()
+    {
+        var source = new InlineJson("""[]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id")
+            });
+
+        await Assert.That(rawReader.HasRows).IsTrue();
+        await Assert.That(rawReader.Read()).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Json не объектная строка с обычной схемой возвращает DBNull")]
+    public async Task Non_object_row_with_regular_schema_returns_dbnull()
+    {
+        var source = new InlineJson(
+            """
+            [
+              1,
+              "text",
+              true,
+              null
+            ]
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create(DBNull.Value),
+                ValueTuple.Create(DBNull.Value),
+                ValueTuple.Create(DBNull.Value),
+                ValueTuple.Create(DBNull.Value)
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json пустой path читает весь элемент массива как значение")]
+    public async Task Empty_path_reads_whole_array_item_as_value()
+    {
+        var source = new InlineJson(
+            """
+            [
+              1,
+              "text",
+              true,
+              null,
+              { "id": 1 }
+            ]
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "value", Path = string.Empty }
+                    ]
+                }
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create<object>("1"),
+                ValueTuple.Create<object>("text"),
+                ValueTuple.Create<object>("true"),
+                ValueTuple.Create<object>(DBNull.Value),
+                ValueTuple.Create<object>("{ \"id\": 1 }")
+            ]);
+    }
+
+    [Test]
     [DisplayName("Json разные примитивы читаются строками")]
     public async Task Reads_different_primitives_as_strings()
     {
@@ -255,6 +352,36 @@ public sealed class JsonProviderTests
             types: [DataType.Text, DataType.Text],
             rows: [
                 ("1", "{ \"name\": \"Mike\", \"age\": 30 }")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json dot-path не может обратиться к имени свойства с точкой")]
+    public async Task Dot_path_cannot_read_property_name_that_contains_dot()
+    {
+        var source = new InlineJson("""[{ "user.name": "Mike" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "user.name", Path = "user.name" }
+                    ]
+                }
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["user.name"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create(DBNull.Value)
             ]);
     }
 
