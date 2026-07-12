@@ -105,19 +105,23 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
 
     private object ReadAndConvertValue(int ordinal)
     {
-        var value = InnerDomain.GetValue(ordinal);
-        if (value == DBNull.Value)
+        var format = _formatsByOrdinal[ordinal];
+        if (format is null)
+        {
+            return InnerDomain.GetValue(ordinal);
+        }
+
+        string text;
+        try
+        {
+            text = InnerDomain.GetString(ordinal);
+        }
+        catch (InvalidCastException) when (InnerDomain.IsDBNull(ordinal))
         {
             return DBNull.Value;
         }
 
-        var format = _formatsByOrdinal[ordinal];
-        if (format is null)
-        {
-            return value;
-        }
-
-        if (format.TryConvert(value, out var converted))
+        if (format.TryConvert(text, out var converted))
         {
             return converted;
         }
@@ -126,6 +130,6 @@ internal sealed class AutoCastDataReader : DomainDataReaderDecorator
         throw new DataReaderValueException(
             field.Name,
             ordinal,
-            new FormatException($"Value '{value}' cannot be converted by auto-cast format '{format.Name}'."));
+            new FormatException($"Value '{text}' cannot be converted by auto-cast format '{format.Name}'."));
     }
 }

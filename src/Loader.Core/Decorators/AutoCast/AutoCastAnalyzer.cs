@@ -36,6 +36,11 @@ public sealed class AutoCastAnalyzer
             return;
         }
 
+        if (value is not string text)
+        {
+            return;
+        }
+
         field.HasObservedValue = true;
         for (var i = 0; i < _formats.Count; i++)
         {
@@ -44,7 +49,7 @@ public sealed class AutoCastAnalyzer
                 continue;
             }
 
-            if (!_formats[i].TryConvert(value, out _))
+            if (!_formats[i].TryConvert(text, out _))
             {
                 field.ActiveFormats[i] = false;
             }

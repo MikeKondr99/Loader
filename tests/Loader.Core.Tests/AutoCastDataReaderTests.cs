@@ -74,6 +74,30 @@ public sealed class AutoCastDataReaderTests
     }
 
     [Test]
+    [DisplayName("AutoCast для текстового поля читает inner GetString без inner GetValue")]
+    public async Task Cast_text_field_uses_inner_get_string_without_inner_get_value()
+    {
+        using var table = CreateTextTable("id");
+        table.Rows.Add("42");
+
+        using var rawReader = new CountingStringAccessReader(table.CreateDataReader());
+        await using var reader = rawReader
+            .Normalize()
+            .AutoCast(new AutoCastSchema
+            {
+                Fields =
+                [
+                    new AutoCastField { Name = "id", Format = AutoCastFormats.Integer }
+                ]
+            });
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(42L);
+        await Assert.That(rawReader.GetStringCalls).IsEqualTo(1);
+        await Assert.That(rawReader.GetValueCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("AutoCast обновляет GetColumnSchema и GetSchemaTable")]
     public async Task Updates_ado_schema_metadata()
     {
@@ -292,5 +316,24 @@ public sealed class AutoCastDataReaderTests
         }
 
         return table;
+    }
+
+    private sealed class CountingStringAccessReader(DbDataReader inner) : DbDataReaderDecorator(inner)
+    {
+        public int GetStringCalls { get; private set; }
+
+        public int GetValueCalls { get; private set; }
+
+        public override string GetString(int ordinal)
+        {
+            GetStringCalls++;
+            return base.GetString(ordinal);
+        }
+
+        public override object GetValue(int ordinal)
+        {
+            GetValueCalls++;
+            return base.GetValue(ordinal);
+        }
     }
 }

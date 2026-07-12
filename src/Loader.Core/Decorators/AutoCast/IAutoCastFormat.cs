@@ -12,5 +12,5 @@ public interface IAutoCastFormat
 
     Type ClrType { get; }
 
-    bool TryConvert(object value, out object converted);
+    bool TryConvert(string value, out object converted);
 }

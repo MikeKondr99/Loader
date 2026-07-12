@@ -3,7 +3,8 @@ using System.Globalization;
 namespace Loader.Core.Decorators.AutoCast;
 
 /// <summary>
-/// Базовые форматы и фабрики автокаста. Default-набор и порядок находятся в AutoCastDefaultFormats.
+/// Базовые форматы и фабрики автокаста. AutoCast работает только со строковыми полями.
+/// Default-набор и порядок находятся в AutoCastDefaultFormats.
 /// </summary>
 public static class AutoCastFormats
 {
@@ -11,16 +12,9 @@ public static class AutoCastFormats
         "Integer",
         DataType.Integer,
         typeof(long),
-        static (object value, out object converted) =>
+        static (string value, out object converted) =>
         {
-            if (value is long longValue)
-            {
-                converted = longValue;
-                return true;
-            }
-
-            if (value is IConvertible &&
-                long.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
+            if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed))
             {
                 converted = parsed;
                 return true;
@@ -36,15 +30,9 @@ public static class AutoCastFormats
         "Boolean",
         DataType.Boolean,
         typeof(bool),
-        static (object value, out object converted) =>
+        static (string value, out object converted) =>
         {
-            if (value is bool boolean)
-            {
-                converted = boolean;
-                return true;
-            }
-
-            if (bool.TryParse(Convert.ToString(value, CultureInfo.InvariantCulture), out var parsed))
+            if (bool.TryParse(value, out var parsed))
             {
                 converted = parsed;
                 return true;
@@ -58,9 +46,9 @@ public static class AutoCastFormats
         "Text",
         DataType.Text,
         typeof(string),
-        static (object value, out object converted) =>
+        static (string value, out object converted) =>
         {
-            converted = Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
+            converted = value;
             return true;
         });
 
@@ -74,18 +62,10 @@ public static class AutoCastFormats
             $"Number(decimal='{decimalSeparator}', group='{groupSeparator}')",
             DataType.Number,
             typeof(decimal),
-            (object value, out object converted) =>
+            (string value, out object converted) =>
             {
-                if (value is decimal decimalValue)
-                {
-                    converted = decimalValue;
-                    return true;
-                }
-
-                var text = Convert.ToString(value, CultureInfo.InvariantCulture);
-                if (value is IConvertible &&
-                    IsValidNumberText(text, decimalSeparator, groupSeparator) &&
-                    decimal.TryParse(text, NumberStyles.Number, culture, out var parsed))
+                if (IsValidNumberText(value, decimalSeparator, groupSeparator) &&
+                    decimal.TryParse(value, NumberStyles.Number, culture, out var parsed))
                 {
                     converted = parsed;
                     return true;
@@ -96,13 +76,8 @@ public static class AutoCastFormats
             });
     }
 
-    private static bool IsValidNumberText(string? text, string decimalSeparator, string groupSeparator)
+    private static bool IsValidNumberText(string text, string decimalSeparator, string groupSeparator)
     {
-        if (text is null)
-        {
-            return false;
-        }
-
         var span = text.AsSpan().Trim();
         if (span.IsEmpty)
         {
@@ -231,21 +206,9 @@ public static class AutoCastFormats
             $"Date({format})",
             DataType.Date,
             typeof(DateOnly),
-            (object value, out object converted) =>
+            (string value, out object converted) =>
             {
-                if (value is DateOnly date)
-                {
-                    converted = date;
-                    return true;
-                }
-
-                if (value is global::System.DateTime dateTime)
-                {
-                    converted = DateOnly.FromDateTime(dateTime);
-                    return true;
-                }
-
-                if (DateOnly.TryParseExact(Convert.ToString(value, CultureInfo.InvariantCulture), format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                if (DateOnly.TryParseExact(value, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                 {
                     converted = parsed;
                     return true;
@@ -262,15 +225,9 @@ public static class AutoCastFormats
             $"DateTime({format})",
             DataType.DateTime,
             typeof(DateTime),
-            (object value, out object converted) =>
+            (string value, out object converted) =>
             {
-                if (value is global::System.DateTime dateTime)
-                {
-                    converted = dateTime;
-                    return true;
-                }
-
-                if (global::System.DateTime.TryParseExact(Convert.ToString(value, CultureInfo.InvariantCulture), format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                if (DateTime.TryParseExact(value, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                 {
                     converted = parsed;
                     return true;
@@ -287,21 +244,9 @@ public static class AutoCastFormats
             $"Time({format})",
             DataType.Time,
             typeof(TimeOnly),
-            (object value, out object converted) =>
+            (string value, out object converted) =>
             {
-                if (value is TimeOnly time)
-                {
-                    converted = time;
-                    return true;
-                }
-
-                if (value is TimeSpan timeSpan)
-                {
-                    converted = TimeOnly.FromTimeSpan(timeSpan);
-                    return true;
-                }
-
-                if (TimeOnly.TryParseExact(Convert.ToString(value, CultureInfo.InvariantCulture), format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                if (TimeOnly.TryParseExact(value, format, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
                 {
                     converted = parsed;
                     return true;
@@ -324,11 +269,11 @@ public static class AutoCastFormats
 
         public Type ClrType => clrType;
 
-        public bool TryConvert(object value, out object converted)
+        public bool TryConvert(string value, out object converted)
         {
             return tryConvert(value, out converted);
         }
     }
 
-    private delegate bool TryConvertValue(object value, out object converted);
+    private delegate bool TryConvertValue(string value, out object converted);
 }
