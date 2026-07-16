@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Antlr4BuildTasks" Version="12.14.0" PrivateAssets="all" />
+    <PackageReference Include="Antlr4.Runtime.Standard" Version="4.13.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Antlr4 Include="LangLexer.g4">
+      <Visitor>false</Visitor>
+      <Listener>false</Listener>
+    </Antlr4>
+    <Antlr4 Include="LangParser.g4">
+      <Visitor>true</Visitor>
+      <Listener>true</Listener>
+    </Antlr4>
+  </ItemGroup>
+
+</Project>
