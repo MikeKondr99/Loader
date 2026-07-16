@@ -2,46 +2,15 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
-using Loader.Query.Lang.Expressions;
+using Loader.Lang.Expressions;
 
-namespace Loader.Query.Lang;
+namespace Loader.Lang;
 
 internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
 {
-    public ExpressionScript VisitScript(LangParser.StartContext context)
-    {
-        var declarations = context.children
-            .OfType<ParserRuleContext>()
-            .Select<ParserRuleContext, ScriptDeclaration?>(node => node switch
-            {
-                LangParser.ConstDeclContext declaration => new ScriptDeclaration
-                {
-                    Kind = ScriptDeclarationKind.Const,
-                    Name = declaration.NAME().GetText(),
-                    Expression = Visit(declaration.expr())
-                },
-                LangParser.LetDeclContext declaration => new ScriptDeclaration
-                {
-                    Kind = ScriptDeclarationKind.Macro,
-                    Name = declaration.NAME().GetText(),
-                    Expression = Visit(declaration.expr())
-                },
-                _ => null
-            })
-            .Where(static declaration => declaration is not null)
-            .Cast<ScriptDeclaration>()
-            .ToArray();
-
-        return new ExpressionScript
-        {
-            Declarations = declarations,
-            Expression = VisitStart(context)
-        };
-    }
-
     public override Expr VisitStart(LangParser.StartContext context)
     {
-        return Visit(context.children[^2]);
+        return Visit(context.expr());
     }
 
     public override Expr VisitUnary(LangParser.UnaryContext context)

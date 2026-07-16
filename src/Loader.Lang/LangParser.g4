@@ -2,13 +2,7 @@ parser grammar LangParser;
 options { tokenVocab=LangLexer; }
 
 start:
-    (constDecl | letDecl)* expr EOF;
-
-constDecl
-    : CONST NAME EQUAL expr SEMICOLON;
-
-letDecl
-    : LET NAME EQUAL expr SEMICOLON;
+    expr EOF;
 
 expr
     : MINUS expr #unary
@@ -46,6 +40,6 @@ integer: INTEGER;
 
 number: NUMBER;
 
-funcName: NAME | CONST;
+funcName: NAME;
 
 func : funcName LEFT_PARENTHESIS (expr (COMMA expr)*)? RIGHT_PARENTHESIS;

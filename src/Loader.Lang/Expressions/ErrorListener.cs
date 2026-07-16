@@ -1,13 +1,13 @@
 using Antlr4.Runtime;
 
-namespace Loader.Query.Lang.Expressions;
+namespace Loader.Lang.Expressions;
 
-internal sealed class TokenErrorListener : IAntlrErrorListener<int>
+internal sealed class ErrorListener : IAntlrErrorListener<IToken>
 {
     public void SyntaxError(
         TextWriter output,
         IRecognizer recognizer,
-        int offendingSymbol,
+        IToken offendingSymbol,
         int line,
         int charPositionInLine,
         string msg,

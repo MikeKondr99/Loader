@@ -1,6 +1,6 @@
-using Loader.Query.Lang.Expressions;
+using Loader.Lang.Expressions;
 
-namespace Loader.Query.Lang.Tests;
+namespace Loader.Lang.Tests;
 
 public sealed class ExpressionParserTests
 {

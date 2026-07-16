@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Loader.Query.Lang.Expressions;
+namespace Loader.Lang.Expressions;
 
 public sealed record IntegerLiteral(long Value) : Literal<long>(Value)
 {

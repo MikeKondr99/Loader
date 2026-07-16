@@ -1,4 +1,4 @@
-namespace Loader.Query.Lang.Expressions;
+namespace Loader.Lang.Expressions;
 
 public sealed record StringLiteral(string Value) : Literal<string>(Value)
 {

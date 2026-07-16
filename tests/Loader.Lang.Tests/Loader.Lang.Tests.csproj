@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\Loader.Query.Lang\Loader.Query.Lang.csproj" />
+    <ProjectReference Include="..\..\src\Loader.Lang\Loader.Lang.csproj" />
   </ItemGroup>
 
   <ItemGroup>

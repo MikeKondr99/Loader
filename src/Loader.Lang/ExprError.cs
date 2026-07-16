@@ -1,4 +1,4 @@
-namespace Loader.Query.Lang;
+namespace Loader.Lang;
 
 /// <summary>
 /// Ошибка парсинга или будущего разрешения выражения.

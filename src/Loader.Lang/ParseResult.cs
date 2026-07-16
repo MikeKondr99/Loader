@@ -1,7 +1,7 @@
-namespace Loader.Query.Lang;
+namespace Loader.Lang;
 
 /// <summary>
-/// Минимальный result без внешних зависимостей ReData/Pattern.
+/// Минимальный result без внешних зависимостей.
 /// </summary>
 public readonly record struct ParseResult<T>
 {

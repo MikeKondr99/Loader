@@ -1,4 +1,4 @@
-namespace Loader.Query.Lang;
+namespace Loader.Lang;
 
 /// <summary>
 /// Диапазон текста в пользовательском выражении.

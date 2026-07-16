@@ -1,11 +1,11 @@
 using System.Diagnostics;
 using Antlr4.Runtime;
 
-namespace Loader.Query.Lang.Expressions;
+namespace Loader.Lang.Expressions;
 
 public abstract record Expr
 {
-    private static readonly ActivitySource ActivitySource = new("Loader.Query.Lang");
+    private static readonly ActivitySource ActivitySource = new("Loader.Lang");
     private int? _hash;
 
     public ExprSpan Span { get; init; }
@@ -34,35 +34,6 @@ public abstract record Expr
             activity?.SetStatus(ActivityStatusCode.Error);
             activity?.AddException(ex);
             return ParseResult<Expr>.Failure(new ExprError
-            {
-                Span = new ExprSpan(1, 1, 100, 100),
-                Message = ex.Message
-            });
-        }
-    }
-
-    public static ParseResult<ExpressionScript> ParseScript(string text)
-    {
-        using var activity = ActivitySource.StartActivity("expression script parsing");
-        activity?.SetTag("expression", text);
-
-        try
-        {
-            var parser = CreateParser(text);
-            var script = new ExpressionParser().VisitScript(parser.start());
-            return ParseResult<ExpressionScript>.Success(script);
-        }
-        catch (ExprErrorException ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error);
-            activity?.AddException(ex);
-            return ParseResult<ExpressionScript>.Failure(ex.Error);
-        }
-        catch (Exception ex)
-        {
-            activity?.SetStatus(ActivityStatusCode.Error);
-            activity?.AddException(ex);
-            return ParseResult<ExpressionScript>.Failure(new ExprError
             {
                 Span = new ExprSpan(1, 1, 100, 100),
                 Message = ex.Message

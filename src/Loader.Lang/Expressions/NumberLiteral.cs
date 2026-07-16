@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Loader.Query.Lang.Expressions;
+namespace Loader.Lang.Expressions;
 
 public sealed record NumberLiteral(double Value) : Literal<double>(Value)
 {
