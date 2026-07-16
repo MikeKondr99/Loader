@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
 using Loader.Query.Template;
@@ -18,7 +19,7 @@ public static class LiteralResolver
             IntegerLiteral integer => Create(integer, DataType.Integer, integer.Value.ToString(CultureInfo.InvariantCulture)),
             NumberLiteral number => Create(number, DataType.Number, number.Value.ToString("0.0###############", CultureInfo.InvariantCulture)),
             BooleanLiteral boolean => Create(boolean, DataType.Boolean, boolean.Value ? "true" : "false"),
-            StringLiteral text => Create(text, DataType.Text, $"'{text.Value.Replace("'", "''", StringComparison.Ordinal)}'"),
+            StringLiteral text => Create(text, DataType.Text, EscapeString(text.Value)),
             NullLiteral nullLiteral => new ResolvedExpression
             {
                 Expression = nullLiteral,
@@ -33,6 +34,31 @@ public static class LiteralResolver
             },
             _ => throw new ArgumentOutOfRangeException(nameof(literal), literal, null)
         };
+    }
+
+    private static string EscapeString(string text)
+    {
+        if (!text.AsSpan().ContainsAny(['\\', '\'', '\n', '\r']))
+        {
+            return $"'{text}'";
+        }
+
+        var builder = new StringBuilder(text.Length + 5);
+        builder.Append('\'');
+        foreach (var symbol in text)
+        {
+            _ = symbol switch
+            {
+                '\\' => builder.Append(@"\\"),
+                '\'' => builder.Append(@"\'"),
+                '\n' => builder.Append(@"\n"),
+                '\r' => builder.Append(@"\r"),
+                _ => builder.Append(symbol)
+            };
+        }
+
+        builder.Append('\'');
+        return builder.ToString();
     }
 
     private static ResolvedExpression Create(Literal literal, DataType dataType, string sqlText)

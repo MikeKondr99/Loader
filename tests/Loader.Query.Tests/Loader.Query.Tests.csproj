@@ -1,11 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Loader.Core\Loader.Core.csproj" />
     <ProjectReference Include="..\..\src\Loader.Query\Loader.Query.csproj" />
     <ProjectReference Include="..\..\src\Loader.Lang\Loader.Lang.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Testcontainers.ClickHouse" Version="4.9.0" />
     <PackageReference Include="TUnit" Version="1.58.0" />
   </ItemGroup>
 

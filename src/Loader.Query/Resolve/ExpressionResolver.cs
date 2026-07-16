@@ -1,7 +1,6 @@
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
-using Loader.Query.Template;
 using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Query.Resolve;
@@ -62,15 +61,15 @@ public sealed class ExpressionResolver
             arguments.Add(resolvedArgument);
         }
 
-        // 2. По типам аргументов ищем конкретную реализацию функции.
+        // 2. По типам аргументов ищем конкретную перегрузку функции.
         var signature = new FunctionSignature
         {
             Name = function.Name,
             Kind = function.Kind,
             ArgumentTypes = arguments.Select(argument => argument.Type).ToArray()
         };
-        var definition = context.Functions.Resolve(signature);
-        if (definition is null)
+        var resolution = context.Functions.Resolve(signature);
+        if (resolution is null)
         {
             context.Errors.Add(new ExprError
             {
@@ -80,19 +79,28 @@ public sealed class ExpressionResolver
             return null;
         }
 
+        var definition = resolution.Function;
+        var resolvedArguments = arguments
+            .Zip(resolution.Casts, static (argument, cast) => argument with
+            {
+                Template = cast.TemplateProvider?.Invoke([argument]) ?? cast.Template,
+                Arguments = [argument]
+            })
+            .ToArray();
+
         // 3. Собираем resolved node: compiler позже раскроет Template через Arguments.
         return new ResolvedExpression
         {
             Expression = function,
-            Template = definition.Template,
+            Template = definition.TemplateProvider?.Invoke(resolvedArguments) ?? definition.Template,
             Type = new ExprType
             {
-                DataType = definition.ReturnType,
-                CanBeNull = definition.PropagatesNull && arguments.Any(argument => argument.Type.CanBeNull),
-                Aggregated = definition.ReturnsAggregated || arguments.Any(argument => argument.Type.Aggregated),
-                IsConstant = definition.ReturnsConstant || arguments.All(argument => argument.Type.IsConstant)
+                DataType = definition.ReturnType.DataType,
+                CanBeNull = resolution.PropagatesNull,
+                Aggregated = resolution.ReturnsAggregated,
+                IsConstant = resolution.ReturnsConst
             },
-            Arguments = arguments
+            Arguments = resolvedArguments
         };
     }
 

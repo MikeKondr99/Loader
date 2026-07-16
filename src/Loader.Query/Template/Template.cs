@@ -7,6 +7,19 @@ public readonly record struct Template : ITemplate
 {
     public required IReadOnlyList<ITemplateToken> Tokens { get; init; }
 
+    public static implicit operator Template(TemplateInterpolatedStringHandler value)
+    {
+        return Create(value);
+    }
+
+    public static Template Create(TemplateInterpolatedStringHandler value)
+    {
+        return new Template
+        {
+            Tokens = value.Tokens
+        };
+    }
+
     public static Template Text(string text)
     {
         return new Template

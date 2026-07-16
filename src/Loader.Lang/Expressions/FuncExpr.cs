@@ -22,7 +22,7 @@ public sealed record FuncExpr : Expr
 
     public override int GetHashCode()
     {
-        var value = HashCode.Combine(nameof(FuncExpr), Name, Kind);
+        var value = Name.GetHashCode(StringComparison.Ordinal);
         foreach (var argument in Arguments)
         {
             value = HashCode.Combine(value, argument.Hash);
