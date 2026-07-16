@@ -229,6 +229,28 @@ public sealed class DataMetaContainerTests
     }
 
     [Test]
+    [DisplayName("CollectMeta выводит decimal precision и scale из значений если schema их не дала")]
+    public async Task Infers_decimal_precision_and_scale_from_values()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, 10.50m, "Moscow");
+        table.Rows.Add(2, 1234.567m, "London");
+        var meta = new DataMetaContainer();
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader
+            .Normalize()
+            .CollectMeta(meta);
+
+        while (await reader.ReadAsync())
+        {
+        }
+
+        await Assert.That(meta.Columns[1].DecimalPrecision).IsEqualTo(7);
+        await Assert.That(meta.Columns[1].DecimalScale).IsEqualTo(3);
+    }
+
+    [Test]
     [DisplayName("CollectMeta после частичного чтения оставляет Success false")]
     public async Task Partial_read_keeps_success_false()
     {

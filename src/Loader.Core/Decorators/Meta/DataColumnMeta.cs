@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 
 namespace Loader.Core.Decorators;
 
@@ -39,9 +40,9 @@ public sealed class DataColumnMeta
 
     public decimal? Max { get; private set; }
 
-    public int? DecimalPrecision { get; }
+    public int? DecimalPrecision { get; private set; }
 
-    public int? DecimalScale { get; }
+    public int? DecimalScale { get; private set; }
 
     internal void CollectValue(object value, long rowCount)
     {
@@ -51,6 +52,7 @@ public sealed class DataColumnMeta
         {
             _nonNullCount++;
             CollectNumericBounds(value);
+            CollectDecimalShape(value);
         }
 
         Density = rowCount == 0
@@ -97,5 +99,23 @@ public sealed class DataColumnMeta
         var numeric = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
         Min = Min is null || numeric < Min.Value ? numeric : Min;
         Max = Max is null || numeric > Max.Value ? numeric : Max;
+    }
+
+    private void CollectDecimalShape(object value)
+    {
+        if (value is not decimal decimalValue)
+        {
+            return;
+        }
+
+        var bits = decimal.GetBits(decimalValue);
+        var scale = (bits[3] >> 16) & 0x7F;
+        var integer = new BigInteger((uint)bits[0])
+            + (new BigInteger((uint)bits[1]) << 32)
+            + (new BigInteger((uint)bits[2]) << 64);
+        var precision = integer.IsZero ? 1 : integer.ToString(CultureInfo.InvariantCulture).Length;
+
+        DecimalScale = DecimalScale is null || scale > DecimalScale.Value ? scale : DecimalScale;
+        DecimalPrecision = DecimalPrecision is null || precision > DecimalPrecision.Value ? precision : DecimalPrecision;
     }
 }
