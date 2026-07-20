@@ -6,7 +6,7 @@ namespace Loader.Lang;
 public readonly record struct ParseResult<T>
 {
     private readonly T? _value;
-    private readonly ExprError? _error;
+    private readonly LangError? _error;
 
     private ParseResult(T value)
     {
@@ -15,7 +15,7 @@ public readonly record struct ParseResult<T>
         IsSuccess = true;
     }
 
-    private ParseResult(ExprError error)
+    private ParseResult(LangError error)
     {
         _value = default;
         _error = error;
@@ -28,7 +28,7 @@ public readonly record struct ParseResult<T>
         ? _value!
         : throw new InvalidOperationException("Parse result does not contain a value.");
 
-    public ExprError Error => !IsSuccess
+    public LangError Error => !IsSuccess
         ? _error!
         : throw new InvalidOperationException("Parse result does not contain an error.");
 
@@ -37,12 +37,12 @@ public readonly record struct ParseResult<T>
         return new ParseResult<T>(value);
     }
 
-    public static ParseResult<T> Failure(ExprError error)
+    public static ParseResult<T> Failure(LangError error)
     {
         return new ParseResult<T>(error);
     }
 
-    public bool TryGetValue(out T? value, out ExprError? error)
+    public bool TryGetValue(out T? value, out LangError? error)
     {
         value = _value;
         error = _error;

@@ -26,7 +26,7 @@ public sealed class ExpressionResolver
         var field = context.Source.Fields.FirstOrDefault(field => field.Name == name.Value);
         if (field is null)
         {
-            context.Errors.Add(new ExprError
+            context.Errors.Add(new LangError
             {
                 Span = name.Span,
                 Message = $"Поле '{name.Value}' не найдено"
@@ -71,7 +71,7 @@ public sealed class ExpressionResolver
         var resolution = context.Functions.Resolve(signature);
         if (resolution is null)
         {
-            context.Errors.Add(new ExprError
+            context.Errors.Add(new LangError
             {
                 Span = function.Span,
                 Message = $"Функция '{function.Name}' с указанными аргументами не найдена"
@@ -106,7 +106,7 @@ public sealed class ExpressionResolver
 
     private static ResolvedExpression? AddError(Expr expression, ResolutionContext context, string message)
     {
-        context.Errors.Add(new ExprError
+        context.Errors.Add(new LangError
         {
             Span = expression.Span,
             Message = message
