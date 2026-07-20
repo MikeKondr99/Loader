@@ -13,36 +13,6 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
         return Visit(context.expr());
     }
 
-    public override Expr VisitFull_statement(LangParser.Full_statementContext context)
-    {
-        return Visit(context.statement());
-    }
-
-    public override Expr VisitStatement(LangParser.StatementContext context)
-    {
-        return Visit(context.load_statement());
-    }
-
-    public override Expr VisitLoad_statement(LangParser.Load_statementContext context)
-    {
-        throw new NotImplementedException("LOAD statement AST is not implemented yet.");
-    }
-
-    public override Expr VisitLoad_fields(LangParser.Load_fieldsContext context)
-    {
-        throw new NotImplementedException("LOAD fields AST is not implemented yet.");
-    }
-
-    public override Expr VisitLoad_all_fields(LangParser.Load_all_fieldsContext context)
-    {
-        throw new NotImplementedException("LOAD * AST is not implemented yet.");
-    }
-
-    public override Expr VisitLoad_field(LangParser.Load_fieldContext context)
-    {
-        throw new NotImplementedException("LOAD field AST is not implemented yet.");
-    }
-
     public override Expr VisitUnary(LangParser.UnaryContext context)
     {
         if (context.children is [TerminalNodeImpl op, LangParser.Term_exprContext expr])
