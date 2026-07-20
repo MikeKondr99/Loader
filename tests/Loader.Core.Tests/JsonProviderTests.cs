@@ -1,5 +1,6 @@
 using Loader.Core.Providers.Json;
 using Loader.Core.Tests.Infrastructure;
+using System.Globalization;
 using System.Text;
 
 namespace Loader.Core.Tests;
@@ -37,6 +38,160 @@ public sealed class JsonProviderTests
                 ("1", "Moscow", "10.50", "true", "2026-01-02"),
                 ("2", "London", "20.00", "false", "2026-02-03")
             ]);
+    }
+
+    [Test]
+    [DisplayName("Json простая схема верхнего уровня использует fast reader")]
+    public async Task Simple_top_level_schema_uses_fast_reader()
+    {
+        var source = new InlineJson("""[{ "id": 1, "name": "Moscow" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "name")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFastProviderDataReader));
+    }
+
+    [Test]
+    [DisplayName("Json fast reader поддерживает nested ArrayPath")]
+    public async Task Simple_schema_with_nested_array_path_uses_fast_reader()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "data": {
+                "items": [
+                  { "id": 1, "city": "Moscow" }
+                ]
+              }
+            }
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = ["data", "items"],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFastProviderDataReader));
+        await Assert.That(await rawReader.ReadAsync()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Json fast reader возвращает top-level object и array как raw JSON")]
+    public async Task Fast_reader_returns_top_level_object_and_array_as_raw_json()
+    {
+        var source = new InlineJson("""[{ "id": 1, "user": { "name": "Mike" }, "tags": ["a", "b"] }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "user", "tags")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFastProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("""{ "name": "Mike" }""");
+        await Assert.That(rawReader.GetValue(2)).IsEqualTo("""["a", "b"]""");
+    }
+
+    [Test]
+    [DisplayName("Json fast reader читает строки через границу батча")]
+    public async Task Fast_reader_reads_across_batch_boundary()
+    {
+        var rows = string.Join(
+            ",",
+            Enumerable.Range(1, 1_050).Select(static value => $$"""{ "id": {{value}} }"""));
+        var source = new InlineJson($"[{rows}]");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFastProviderDataReader));
+
+        var count = 0;
+        while (await rawReader.ReadAsync())
+        {
+            count++;
+            await Assert.That(rawReader.GetValue(0)).IsEqualTo(count.ToString(CultureInfo.InvariantCulture));
+        }
+
+        await Assert.That(count).IsEqualTo(1_050);
+    }
+
+    [Test]
+    [DisplayName("Json dot-path схема остается на совместимом reader")]
+    public async Task Dot_path_schema_uses_compatible_reader()
+    {
+        var source = new InlineJson("""[{ "user": { "name": "Mike" } }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "user.name", Path = "user.name" }
+                    ]
+                }
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("Mike");
+    }
+
+    [Test]
+    [DisplayName("Json duplicate path схема остается на совместимом reader")]
+    public async Task Duplicate_path_schema_uses_compatible_reader()
+    {
+        var source = new InlineJson("""[{ "id": 1 }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "id_a", Path = "id" },
+                        new JsonColumnSchema { Name = "id_b", Path = "id" }
+                    ]
+                }
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("1");
     }
 
     [Test]

@@ -20,6 +20,13 @@ public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
         {
             // 1. Открываем поток и сразу позиционируем streaming-reader на массиве-таблице.
             var stream = source.OpenRead(config.FileName);
+            if (JsonFastProviderDataReader.CanRead(config.Schema))
+            {
+                return await JsonFastProviderDataReader
+                    .CreateAsync(stream, config.FileName, config.ArrayPath, config.Schema, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             return await JsonProviderDataReader
                 .CreateAsync(stream, config.FileName, config.ArrayPath, config.Schema, cancellationToken)
                 .ConfigureAwait(false);
