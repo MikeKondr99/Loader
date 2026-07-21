@@ -6,9 +6,10 @@ using System.Text.Json;
 namespace Loader.Core.Providers.Json;
 
 /// <summary>
-/// DbDataReader для JSON-таблицы.
+/// Совместимый DbDataReader для JSON-таблицы со сложной схемой.
 ///
-/// Reader получает явную схему колонок и потоково читает элементы массива-таблицы.
+/// Он используется для dot-path колонок, whole-row колонок и случаев, где плоский fast reader
+/// не может сохранить контракт схемы.
 /// В памяти держится byte-buffer низкоуровневого reader-а и object[] значений текущей строки.
 /// Строка больше не материализуется как JsonDocument: текущий JSON-элемент парсится напрямую
 /// через Utf8JsonReader в буфер значений.
@@ -18,7 +19,6 @@ internal sealed class JsonProviderDataReader : DbDataReader
     private readonly string _fileName;
     private readonly JsonUtf8StreamRowReader _rows;
     private readonly JsonTableSchema _schema;
-    private readonly JsonColumnBinding[] _columns;
     private object[] _values;
     private object[]? _prefetchedValues;
     private bool _hasPrefetchedRow;
@@ -48,7 +48,7 @@ internal sealed class JsonProviderDataReader : DbDataReader
             // 1. Сохраняем контракт: ошибки первой строки видны уже на OpenReaderAsync.
             reader._prefetchedValues = new object[reader.FieldCount];
             reader._prefetchedRowExists = await reader._rows
-                .ReadNextRowAsync(reader._prefetchedValues, reader._columns, cancellationToken)
+                .ReadNextRowAsync(reader._prefetchedValues, cancellationToken)
                 .ConfigureAwait(false);
             reader._hasPrefetchedRow = true;
             return reader;
@@ -68,9 +68,8 @@ internal sealed class JsonProviderDataReader : DbDataReader
         bool prefetchSynchronously)
     {
         _fileName = fileName;
-        _rows = new JsonUtf8StreamRowReader(stream);
         _schema = schema;
-        _columns = CompileColumns(schema);
+        _rows = new JsonUtf8StreamRowReader(stream, CompileColumns(schema));
         _values = new object[schema.Columns.Count];
 
         try
@@ -88,7 +87,7 @@ internal sealed class JsonProviderDataReader : DbDataReader
         {
             // 2. Sync constructor нужен для полного ADO.NET sync path.
             _prefetchedValues = new object[FieldCount];
-            _prefetchedRowExists = _rows.ReadNextRow(_prefetchedValues, _columns);
+            _prefetchedRowExists = _rows.ReadNextRow(_prefetchedValues);
             _hasPrefetchedRow = true;
         }
     }
@@ -116,7 +115,7 @@ internal sealed class JsonProviderDataReader : DbDataReader
                 return SetCurrentRowFromPrefetch();
             }
 
-            return SetCurrentRow(_rows.ReadNextRow(_values, _columns));
+            return SetCurrentRow(_rows.ReadNextRow(_values));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
@@ -134,7 +133,7 @@ internal sealed class JsonProviderDataReader : DbDataReader
             }
 
             var hasRow = await _rows
-                .ReadNextRowAsync(_values, _columns, cancellationToken)
+                .ReadNextRowAsync(_values, cancellationToken)
                 .ConfigureAwait(false);
             return SetCurrentRow(hasRow);
         }

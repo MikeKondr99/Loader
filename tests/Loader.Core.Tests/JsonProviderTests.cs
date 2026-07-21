@@ -75,6 +75,173 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json top-level схема использует flat reader")]
+    public async Task Top_level_schema_uses_flat_reader()
+    {
+        var source = new InlineJson("""[{ "id": 1, "city": "Moscow" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Json dot-path схема использует совместимый reader")]
+    public async Task Dot_path_schema_uses_compatible_reader()
+    {
+        var source = new InlineJson("""[{ "user": { "name": "Mike" } }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "user.name", Path = "user.name" }
+                    ]
+                }
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("Mike");
+    }
+
+    [Test]
+    [DisplayName("Json whole-row схема использует совместимый reader")]
+    public async Task Whole_row_schema_uses_compatible_reader()
+    {
+        var source = new InlineJson("""[{ "id": 1 }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = new JsonTableSchema
+                {
+                    Columns =
+                    [
+                        new JsonColumnSchema { Name = "value", Path = string.Empty }
+                    ]
+                }
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("""{ "id": 1 }""");
+    }
+
+    [Test]
+    [DisplayName("Json flat reader читает поля в порядке схемы независимо от порядка JSON")]
+    public async Task Flat_reader_reads_values_in_schema_order()
+    {
+        var source = new InlineJson("""[{ "city": "Moscow", "id": 1, "ignored": "skip" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Json flat reader возвращает DBNull для отсутствующего top-level поля")]
+    public async Task Flat_reader_returns_dbnull_for_missing_field()
+    {
+        var source = new InlineJson("""[{ "id": 1 }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo(DBNull.Value);
+    }
+
+    [Test]
+    [DisplayName("Json flat reader поддерживает nested ArrayPath")]
+    public async Task Flat_reader_supports_nested_array_path()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "data": {
+                "items": [
+                  { "id": 1, "city": "Moscow" }
+                ]
+              }
+            }
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = ["data", "items"],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Json flat reader возвращает top-level object и array как JSON строку")]
+    public async Task Flat_reader_returns_top_level_object_and_array_as_json_text()
+    {
+        var source = new InlineJson("""[{ "id": 1, "user": { "name": "Mike" }, "tags": ["a", "b"] }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "user", "tags")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo("""{ "name": "Mike" }""");
+        await Assert.That(rawReader.GetValue(2)).IsEqualTo("""["a", "b"]""");
+    }
+
+    [Test]
     [DisplayName("Json с комплексным ArrayPath читает глубокий массив")]
     public async Task Reads_complex_array_path()
     {
@@ -656,6 +823,56 @@ public sealed class JsonProviderTests
                 }))
             .ThrowsExactly<JsonFileOpenProviderException>()
             .WithMessage("JSON file 'inline.json' could not be opened or parsed.");
+    }
+
+    [Test]
+    [DisplayName("Json duplicate column name в схеме кидает invalid schema exception")]
+    public async Task Duplicate_schema_column_name_throws_invalid_schema_exception()
+    {
+        var source = new InlineJson("""[{ "id": 1 }]""");
+
+        await Assert.That(async () => await Provider.OpenReaderAsync(
+                source,
+                new JsonTableConfig
+                {
+                    FileName = "inline.json",
+                    ArrayPath = [],
+                    Schema = new JsonTableSchema
+                    {
+                        Columns =
+                        [
+                            new JsonColumnSchema { Name = "id", Path = "id" },
+                            new JsonColumnSchema { Name = "id", Path = "other_id" }
+                        ]
+                    }
+                }))
+            .ThrowsExactly<JsonInvalidSchemaProviderException>()
+            .WithMessage("JSON file 'inline.json' has invalid schema: duplicate column name 'id'.");
+    }
+
+    [Test]
+    [DisplayName("Json duplicate column path в схеме кидает invalid schema exception")]
+    public async Task Duplicate_schema_column_path_throws_invalid_schema_exception()
+    {
+        var source = new InlineJson("""[{ "id": 1 }]""");
+
+        await Assert.That(async () => await Provider.OpenReaderAsync(
+                source,
+                new JsonTableConfig
+                {
+                    FileName = "inline.json",
+                    ArrayPath = [],
+                    Schema = new JsonTableSchema
+                    {
+                        Columns =
+                        [
+                            new JsonColumnSchema { Name = "id_a", Path = "id" },
+                            new JsonColumnSchema { Name = "id_b", Path = "id" }
+                        ]
+                    }
+                }))
+            .ThrowsExactly<JsonInvalidSchemaProviderException>()
+            .WithMessage("JSON file 'inline.json' has invalid schema: duplicate column path 'id'.");
     }
 
     private static JsonTableSchema Schema(params string[] names)

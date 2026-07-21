@@ -6,6 +6,8 @@ namespace Loader.Core.Providers.Json;
 
 /// <summary>
 /// Provider чтения JSON-массива как таблицы.
+/// Провайдер сам выбирает реализацию reader-а по схеме: плоские top-level поля идут через fast reader,
+/// dot-path и whole-row поля остаются на совместимом reader-е.
 /// </summary>
 public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
 {
@@ -18,13 +20,25 @@ public sealed class JsonProvider : IProvider<IFileSource, JsonTableConfig>
     {
         try
         {
-            // 1. Открываем поток и сразу позиционируем streaming-reader на массиве-таблице.
+            // 1. Схема должна быть однозначной до открытия файла.
+            JsonTableSchemaValidator.Validate(config.FileName, config.Schema);
+
+            // 2. Открываем поток и сразу позиционируем streaming-reader на массиве-таблице.
             var stream = source.OpenRead(config.FileName);
+            if (JsonFlatProviderDataReader.CanRead(config.Schema))
+            {
+                return await JsonFlatProviderDataReader
+                    .CreateAsync(stream, config.FileName, config.ArrayPath, config.Schema, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             return await JsonProviderDataReader
                 .CreateAsync(stream, config.FileName, config.ArrayPath, config.Schema, cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException and not JsonArrayPathNotFoundProviderException)
+        catch (Exception ex) when (ex is not OperationCanceledException
+                                   and not JsonArrayPathNotFoundProviderException
+                                   and not JsonInvalidSchemaProviderException)
         {
             throw new JsonFileOpenProviderException(config.FileName, ex);
         }

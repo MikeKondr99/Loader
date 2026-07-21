@@ -80,46 +80,6 @@ $env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Da
 dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*WideClickHouseLoadBenchmarks.Json_to_clickhouse_with_schema_analyze"
 ```
 
-## JSON Breakdown
-
-Временный набор для поиска дорогой фазы JSON pipeline:
-
-```powershell
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --list flat --filter "*JsonPipelineBreakdownBenchmarks*"
-```
-
-Все JSON breakdown benchmarks:
-
-```powershell
-$env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Database=loader_bench;Username=loader;Password=loader"
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*JsonPipelineBreakdownBenchmarks*"
-```
-
-Только анализ схемы:
-
-```powershell
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*JsonPipelineBreakdownBenchmarks.Json_analyze_schema_only"
-```
-
-Только чтение JSON по заранее известной схеме:
-
-```powershell
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*JsonPipelineBreakdownBenchmarks.Json_raw_read_known_schema"
-```
-
-Чтение + Normalize + AutoCast без записи в ClickHouse:
-
-```powershell
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*JsonPipelineBreakdownBenchmarks.Json_normalize_autocast_known_schema"
-```
-
-Чтение + Normalize + AutoCast + запись в ClickHouse:
-
-```powershell
-$env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Database=loader_bench;Username=loader;Password=loader"
-dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*JsonPipelineBreakdownBenchmarks.Json_normalize_autocast_write_clickhouse_known_schema"
-```
-
 Excel -> ClickHouse:
 
 ```powershell

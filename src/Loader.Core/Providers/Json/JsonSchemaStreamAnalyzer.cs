@@ -106,32 +106,61 @@ internal static class JsonSchemaStreamAnalyzer
 
     private sealed class StreamingSchemaAnalyzer
     {
-        private readonly IReadOnlyList<string> _arrayPath;
+        private readonly JsonArrayPathNavigator _arrayPathNavigator;
+        private readonly JsonArraySchemaCollector _schemaCollector;
+
+        public StreamingSchemaAnalyzer(IReadOnlyList<string> arrayPath, bool flattenObjects)
+        {
+            _arrayPathNavigator = new JsonArrayPathNavigator(arrayPath);
+            _schemaCollector = new JsonArraySchemaCollector(flattenObjects);
+        }
+
+        public bool FoundArray => _arrayPathNavigator.Found;
+
+        public void ProcessToken(Utf8JsonReader reader)
+        {
+            // 1. До найденного массива занимаемся только навигацией по абсолютному ArrayPath.
+            if (!_arrayPathNavigator.Found)
+            {
+                _arrayPathNavigator.ProcessToken(
+                    reader.TokenType,
+                    reader.CurrentDepth,
+                    reader.TokenType == JsonTokenType.PropertyName ? reader.GetString() ?? string.Empty : null);
+                return;
+            }
+
+            // 2. После найденного массива читаем только его содержимое; абсолютный путь уже не нужен.
+            _schemaCollector.ProcessToken(reader, _arrayPathNavigator.ArrayDepth);
+        }
+
+        public JsonTableSchema ToSchema()
+        {
+            return _schemaCollector.ToSchema();
+        }
+    }
+
+    private sealed class JsonArraySchemaCollector
+    {
         private readonly bool _flattenObjects;
         private readonly List<JsonColumnSchema> _columns = [];
         private readonly HashSet<string> _knownPaths = new(StringComparer.Ordinal);
         private readonly List<KnownFlatColumn> _knownFlatColumns = [];
-        private readonly List<JsonContext> _contexts = [];
+        private readonly List<JsonContext> _rowContexts = [];
         private bool _insideRow;
-        private bool _insideTargetArray;
         private int _rowDepth = -1;
-        private int _targetArrayDepth = -1;
 
-        public StreamingSchemaAnalyzer(IReadOnlyList<string> arrayPath, bool flattenObjects)
+        public JsonArraySchemaCollector(bool flattenObjects)
         {
-            _arrayPath = arrayPath;
             _flattenObjects = flattenObjects;
         }
 
-        public bool FoundArray { get; private set; }
-
-        public void ProcessToken(Utf8JsonReader reader)
+        public void ProcessToken(Utf8JsonReader reader, int arrayDepth)
         {
             // 1. Каждый токен меняет стек JSON-контекстов или добавляет колонку схемы.
             switch (reader.TokenType)
             {
                 case JsonTokenType.StartObject:
-                    HandleStartObject(reader.CurrentDepth);
+                    HandleStartObject(reader.CurrentDepth, arrayDepth);
                     break;
 
                 case JsonTokenType.EndObject:
@@ -139,11 +168,11 @@ internal static class JsonSchemaStreamAnalyzer
                     break;
 
                 case JsonTokenType.StartArray:
-                    HandleStartArray(reader.CurrentDepth);
+                    HandleStartArray();
                     break;
 
                 case JsonTokenType.EndArray:
-                    HandleEndArray(reader.CurrentDepth);
+                    HandleEndArray(reader.CurrentDepth, arrayDepth);
                     break;
 
                 case JsonTokenType.PropertyName:
@@ -176,14 +205,15 @@ internal static class JsonSchemaStreamAnalyzer
             };
         }
 
-        private void HandleStartObject(int depth)
+        private void HandleStartObject(int depth, int arrayDepth)
         {
             // 1. Объект на один уровень ниже найденного массива считаем строкой таблицы.
-            if (_insideTargetArray && !_insideRow && depth == _targetArrayDepth + 1)
+            if (!_insideRow && depth == arrayDepth + 1)
             {
                 _insideRow = true;
                 _rowDepth = depth;
-                _contexts.Add(new JsonContext(null, collectChildren: true, isRowRoot: true));
+                _rowContexts.Clear();
+                _rowContexts.Add(new JsonContext(null, collectChildren: true));
                 return;
             }
 
@@ -195,12 +225,12 @@ internal static class JsonSchemaStreamAnalyzer
                 {
                     if (_flattenObjects)
                     {
-                        _contexts.Add(new JsonContext(propertyName, collectChildren: true, isRowRoot: false));
+                        _rowContexts.Add(new JsonContext(propertyName, collectChildren: true));
                     }
                     else
                     {
                         AddCurrentPathColumn(propertyName);
-                        _contexts.Add(new JsonContext(propertyName, collectChildren: false, isRowRoot: false));
+                        _rowContexts.Add(new JsonContext(propertyName, collectChildren: false));
                     }
 
                     ClearCurrentProperty();
@@ -209,57 +239,48 @@ internal static class JsonSchemaStreamAnalyzer
             }
 
             // 3. Все остальные объекты нужны только как навигационный контекст.
-            _contexts.Add(new JsonContext(CurrentProperty(), collectChildren: false, isRowRoot: false));
+            _rowContexts.Add(new JsonContext(CurrentProperty(), collectChildren: false));
             ClearCurrentProperty();
         }
 
         private void HandleEndObject(int depth)
         {
             // 1. Закрываем текущий объект и, если это была строка таблицы, выходим из row mode.
-            PopContext();
-
             if (_insideRow && depth == _rowDepth)
             {
+                _rowContexts.Clear();
                 _insideRow = false;
                 _rowDepth = -1;
-            }
-        }
-
-        private void HandleStartArray(int depth)
-        {
-            // 1. Проверяем, не является ли текущий массив таблицей по ArrayPath.
-            var propertyName = CurrentProperty();
-            if (!_insideTargetArray && IsArrayPath(BuildDocumentPath(propertyName)))
-            {
-                FoundArray = true;
-                _insideTargetArray = true;
-                _targetArrayDepth = depth;
-                _contexts.Add(new JsonContext(propertyName, collectChildren: false, isRowRoot: false));
-                ClearCurrentProperty();
                 return;
             }
 
-            // 2. Массив внутри строки не раскрываем, а считаем одной JSON-колонкой.
+            PopContext();
+        }
+
+        private void HandleStartArray()
+        {
+            // 1. Массив внутри строки не раскрываем, а считаем одной JSON-колонкой.
+            var propertyName = CurrentProperty();
             if (_insideRow && propertyName is not null && CanCollectCurrentPath())
             {
                 AddCurrentPathColumn(propertyName);
             }
 
-            // 3. Сам массив кладем в стек, чтобы пропустить его вложенные токены как колонки.
-            _contexts.Add(new JsonContext(propertyName, collectChildren: false, isRowRoot: false));
+            // 2. Сам массив кладем в стек, чтобы пропустить его вложенные токены как колонки.
+            _rowContexts.Add(new JsonContext(propertyName, collectChildren: false));
             ClearCurrentProperty();
         }
 
-        private void HandleEndArray(int depth)
+        private void HandleEndArray(int depth, int arrayDepth)
         {
             // 1. Закрываем массив и, если это была таблица, выходим из table mode.
-            PopContext();
-
-            if (_insideTargetArray && depth == _targetArrayDepth)
+            if (depth == arrayDepth)
             {
-                _insideTargetArray = false;
-                _targetArrayDepth = -1;
+                _rowContexts.Clear();
+                return;
             }
+
+            PopContext();
         }
 
         private void HandleValue()
@@ -340,106 +361,72 @@ internal static class JsonSchemaStreamAnalyzer
 
         private bool IsFlatRowPath()
         {
-            return _insideRow && _contexts.Count > 0 && _contexts[^1].IsRowRoot;
+            return _insideRow
+                && _rowContexts.Count == 1
+                && _rowContexts[0].Segment is null
+                && _rowContexts[0].CollectChildren;
         }
 
         private string BuildRowPath(string leaf)
         {
-            var rowRootIndex = RowRootIndex();
-            var segments = _contexts
-                .Skip(rowRootIndex + 1)
-                .Where(static context => !context.IsRowRoot && context.Segment is not null)
+            var segments = _rowContexts
+                .Where(static context => context.Segment is not null)
                 .Select(static context => context.Segment!)
                 .Append(leaf);
 
             return string.Join('.', segments);
         }
 
-        private IReadOnlyList<string> BuildDocumentPath(string? leaf)
-        {
-            var segments = _contexts
-                .Where(static context => context.Segment is not null)
-                .Select(static context => context.Segment!)
-                .ToList();
-
-            if (leaf is not null)
-            {
-                segments.Add(leaf);
-            }
-
-            return segments;
-        }
-
-        private bool IsArrayPath(IReadOnlyList<string> path)
-        {
-            return path.SequenceEqual(_arrayPath, StringComparer.Ordinal);
-        }
-
         private bool CanCollectCurrentPath()
         {
-            var rowRootIndex = RowRootIndex();
-            return rowRootIndex >= 0 && _contexts.Skip(rowRootIndex).All(static context => context.CollectChildren);
-        }
-
-        private int RowRootIndex()
-        {
-            for (var i = _contexts.Count - 1; i >= 0; i--)
-            {
-                if (_contexts[i].IsRowRoot)
-                {
-                    return i;
-                }
-            }
-
-            return -1;
+            return _insideRow
+                && _rowContexts.Count > 0
+                && _rowContexts.All(static context => context.CollectChildren);
         }
 
         private string? CurrentProperty()
         {
-            return _contexts.Count == 0 ? null : _contexts[^1].CurrentProperty;
+            return _rowContexts.Count == 0 ? null : _rowContexts[^1].CurrentProperty;
         }
 
         private void SetCurrentProperty(string name)
         {
-            if (_contexts.Count == 0)
+            if (_rowContexts.Count == 0)
             {
-                _contexts.Add(new JsonContext(null, collectChildren: false, isRowRoot: false));
+                _rowContexts.Add(new JsonContext(null, collectChildren: true));
             }
 
-            _contexts[^1].CurrentProperty = name;
+            _rowContexts[^1].CurrentProperty = name;
         }
 
         private void ClearCurrentProperty()
         {
-            if (_contexts.Count > 0)
+            if (_rowContexts.Count > 0)
             {
-                _contexts[^1].CurrentProperty = null;
+                _rowContexts[^1].CurrentProperty = null;
             }
         }
 
         private void PopContext()
         {
-            if (_contexts.Count > 0)
+            if (_rowContexts.Count > 0)
             {
-                _contexts.RemoveAt(_contexts.Count - 1);
+                _rowContexts.RemoveAt(_rowContexts.Count - 1);
             }
         }
     }
 
     private sealed class JsonContext
     {
-        public JsonContext(string? segment, bool collectChildren, bool isRowRoot)
+        public JsonContext(string? segment, bool collectChildren)
         {
             Segment = segment;
             CollectChildren = collectChildren;
-            IsRowRoot = isRowRoot;
         }
 
         public string? Segment { get; }
 
         public bool CollectChildren { get; }
-
-        public bool IsRowRoot { get; }
 
         public string? CurrentProperty { get; set; }
     }
