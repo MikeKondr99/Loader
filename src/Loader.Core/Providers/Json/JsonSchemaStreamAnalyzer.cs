@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Text;
 using System.Text.Json;
 
 namespace Loader.Core.Providers.Json;
@@ -109,6 +110,7 @@ internal static class JsonSchemaStreamAnalyzer
         private readonly bool _flattenObjects;
         private readonly List<JsonColumnSchema> _columns = [];
         private readonly HashSet<string> _knownPaths = new(StringComparer.Ordinal);
+        private readonly List<KnownFlatColumn> _knownFlatColumns = [];
         private readonly List<JsonContext> _contexts = [];
         private bool _insideRow;
         private bool _insideTargetArray;
@@ -145,13 +147,25 @@ internal static class JsonSchemaStreamAnalyzer
                     break;
 
                 case JsonTokenType.PropertyName:
-                    SetCurrentProperty(reader.GetString() ?? string.Empty);
+                    HandlePropertyName(reader);
                     break;
 
                 default:
                     HandleValue();
                     break;
             }
+        }
+
+        private void HandlePropertyName(Utf8JsonReader reader)
+        {
+            // 1. Для hot path flat JSON-таблицы не создаем string, если имя колонки уже известно.
+            if (TrySetKnownFlatProperty(reader))
+            {
+                return;
+            }
+
+            // 2. Новое или nested имя свойства пока нужно сохранить как string для общей state-machine.
+            SetCurrentProperty(reader.GetString() ?? string.Empty);
         }
 
         public JsonTableSchema ToSchema()
@@ -185,7 +199,7 @@ internal static class JsonSchemaStreamAnalyzer
                     }
                     else
                     {
-                        AddColumn(BuildRowPath(propertyName));
+                        AddCurrentPathColumn(propertyName);
                         _contexts.Add(new JsonContext(propertyName, collectChildren: false, isRowRoot: false));
                     }
 
@@ -228,7 +242,7 @@ internal static class JsonSchemaStreamAnalyzer
             // 2. Массив внутри строки не раскрываем, а считаем одной JSON-колонкой.
             if (_insideRow && propertyName is not null && CanCollectCurrentPath())
             {
-                AddColumn(BuildRowPath(propertyName));
+                AddCurrentPathColumn(propertyName);
             }
 
             // 3. Сам массив кладем в стек, чтобы пропустить его вложенные токены как колонки.
@@ -254,10 +268,36 @@ internal static class JsonSchemaStreamAnalyzer
             var propertyName = CurrentProperty();
             if (_insideRow && propertyName is not null && CanCollectCurrentPath())
             {
-                AddColumn(BuildRowPath(propertyName));
+                AddCurrentPathColumn(propertyName);
             }
 
             ClearCurrentProperty();
+        }
+
+        private void AddCurrentPathColumn(string propertyName)
+        {
+            // 1. Для flat строки не строим dot-path через LINQ/string.Join на каждое значение.
+            if (IsFlatRowPath())
+            {
+                AddFlatColumn(propertyName);
+                return;
+            }
+
+            // 2. Nested path пока остается общим медленным путем.
+            AddColumn(BuildRowPath(propertyName));
+        }
+
+        private void AddFlatColumn(string propertyName)
+        {
+            foreach (var column in _knownFlatColumns)
+            {
+                if (string.Equals(column.Name, propertyName, StringComparison.Ordinal))
+                {
+                    return;
+                }
+            }
+
+            AddColumn(propertyName);
         }
 
         private void AddColumn(string path)
@@ -272,6 +312,35 @@ internal static class JsonSchemaStreamAnalyzer
                 Name = path,
                 Path = path
             });
+
+            if (IsFlatRowPath())
+            {
+                _knownFlatColumns.Add(new KnownFlatColumn(path, Encoding.UTF8.GetBytes(path)));
+            }
+        }
+
+        private bool TrySetKnownFlatProperty(Utf8JsonReader reader)
+        {
+            if (!_insideRow || !IsFlatRowPath())
+            {
+                return false;
+            }
+
+            foreach (var column in _knownFlatColumns)
+            {
+                if (reader.ValueTextEquals(column.Utf8Name))
+                {
+                    SetCurrentProperty(column.Name);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private bool IsFlatRowPath()
+        {
+            return _insideRow && _contexts.Count > 0 && _contexts[^1].IsRowRoot;
         }
 
         private string BuildRowPath(string leaf)
@@ -374,4 +443,6 @@ internal static class JsonSchemaStreamAnalyzer
 
         public string? CurrentProperty { get; set; }
     }
+
+    private sealed record KnownFlatColumn(string Name, byte[] Utf8Name);
 }

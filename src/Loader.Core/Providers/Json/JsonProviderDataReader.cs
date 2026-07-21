@@ -8,20 +8,21 @@ namespace Loader.Core.Providers.Json;
 /// <summary>
 /// DbDataReader для JSON-таблицы.
 ///
-/// Reader получает уже явную схему колонок и потоково читает элементы массива-таблицы.
-/// В памяти держится только текущий элемент массива как JsonDocument, а не весь JSON-файл.
-/// Это компромиссный этап: значения всё еще извлекаются через JsonElement/dot-path, но
-/// основной файл больше не материализуется полностью.
+/// Reader получает явную схему колонок и потоково читает элементы массива-таблицы.
+/// В памяти держится byte-buffer низкоуровневого reader-а и object[] значений текущей строки.
+/// Строка больше не материализуется как JsonDocument: текущий JSON-элемент парсится напрямую
+/// через Utf8JsonReader в буфер значений.
 /// </summary>
 internal sealed class JsonProviderDataReader : DbDataReader
 {
     private readonly string _fileName;
     private readonly JsonUtf8StreamRowReader _rows;
     private readonly JsonTableSchema _schema;
-    private JsonDocument? _currentRowDocument;
-    private JsonDocument? _prefetchedRowDocument;
+    private readonly JsonColumnBinding[] _columns;
     private object[] _values;
+    private object[]? _prefetchedValues;
     private bool _hasPrefetchedRow;
+    private bool _prefetchedRowExists;
     private bool _hasRow;
     private bool _isClosed;
 
@@ -30,26 +31,8 @@ internal sealed class JsonProviderDataReader : DbDataReader
         string fileName,
         IReadOnlyList<string> arrayPath,
         JsonTableSchema schema)
+        : this(stream, fileName, arrayPath, schema, prefetchSynchronously: true)
     {
-        _fileName = fileName;
-        _rows = new JsonUtf8StreamRowReader(stream);
-        _schema = schema;
-        _values = new object[schema.Columns.Count];
-
-        try
-        {
-            // 1. На этапе открытия доходим до массива-таблицы, но не читаем его строки.
-            _rows.MoveToArray(arrayPath);
-        }
-        catch (InvalidOperationException)
-        {
-            _rows.Dispose();
-            throw new JsonArrayPathNotFoundProviderException(fileName, arrayPath);
-        }
-
-        // 2. Сохраняем старый контракт: ошибки первой строки видны уже на OpenReaderAsync.
-        _prefetchedRowDocument = _rows.ReadNextRow();
-        _hasPrefetchedRow = true;
     }
 
     public static async ValueTask<JsonProviderDataReader> CreateAsync(
@@ -62,8 +45,11 @@ internal sealed class JsonProviderDataReader : DbDataReader
         var reader = new JsonProviderDataReader(stream, fileName, arrayPath, schema, prefetchSynchronously: false);
         try
         {
-            // 1. Сохраняем старый контракт ошибок на OpenReaderAsync, но читаем первую запись async.
-            reader._prefetchedRowDocument = await reader._rows.ReadNextRowAsync(cancellationToken).ConfigureAwait(false);
+            // 1. Сохраняем контракт: ошибки первой строки видны уже на OpenReaderAsync.
+            reader._prefetchedValues = new object[reader.FieldCount];
+            reader._prefetchedRowExists = await reader._rows
+                .ReadNextRowAsync(reader._prefetchedValues, reader._columns, cancellationToken)
+                .ConfigureAwait(false);
             reader._hasPrefetchedRow = true;
             return reader;
         }
@@ -84,11 +70,12 @@ internal sealed class JsonProviderDataReader : DbDataReader
         _fileName = fileName;
         _rows = new JsonUtf8StreamRowReader(stream);
         _schema = schema;
+        _columns = CompileColumns(schema);
         _values = new object[schema.Columns.Count];
 
         try
         {
-            // 1. MoveToArray пока остается sync: это минимальный шаг, который договорились оставить.
+            // 1. На этапе открытия доходим до массива-таблицы, но не читаем его строки.
             _rows.MoveToArray(arrayPath);
         }
         catch (InvalidOperationException)
@@ -100,7 +87,8 @@ internal sealed class JsonProviderDataReader : DbDataReader
         if (prefetchSynchronously)
         {
             // 2. Sync constructor нужен для полного ADO.NET sync path.
-            _prefetchedRowDocument = _rows.ReadNextRow();
+            _prefetchedValues = new object[FieldCount];
+            _prefetchedRowExists = _rows.ReadNextRow(_prefetchedValues, _columns);
             _hasPrefetchedRow = true;
         }
     }
@@ -123,7 +111,12 @@ internal sealed class JsonProviderDataReader : DbDataReader
     {
         try
         {
-            return SetCurrentRow(_hasPrefetchedRow ? TakePrefetchedRow() : _rows.ReadNextRow());
+            if (_hasPrefetchedRow)
+            {
+                return SetCurrentRowFromPrefetch();
+            }
+
+            return SetCurrentRow(_rows.ReadNextRow(_values, _columns));
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
@@ -135,11 +128,15 @@ internal sealed class JsonProviderDataReader : DbDataReader
     {
         try
         {
-            var row = _hasPrefetchedRow
-                ? TakePrefetchedRow()
-                : await _rows.ReadNextRowAsync(cancellationToken).ConfigureAwait(false);
+            if (_hasPrefetchedRow)
+            {
+                return SetCurrentRowFromPrefetch();
+            }
 
-            return SetCurrentRow(row);
+            var hasRow = await _rows
+                .ReadNextRowAsync(_values, _columns, cancellationToken)
+                .ConfigureAwait(false);
+            return SetCurrentRow(hasRow);
         }
         catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
@@ -239,8 +236,6 @@ internal sealed class JsonProviderDataReader : DbDataReader
     public override void Close()
     {
         _isClosed = true;
-        _currentRowDocument?.Dispose();
-        _prefetchedRowDocument?.Dispose();
         _rows.Dispose();
     }
 
@@ -254,83 +249,38 @@ internal sealed class JsonProviderDataReader : DbDataReader
         base.Dispose(disposing);
     }
 
-    private JsonDocument? TakePrefetchedRow()
+    private bool SetCurrentRowFromPrefetch()
     {
+        // 1. Prefetch хранит уже разобранные значения первой строки, а не JsonDocument.
         _hasPrefetchedRow = false;
-        var row = _prefetchedRowDocument;
-        _prefetchedRowDocument = null;
-        return row;
+        if (!_prefetchedRowExists)
+        {
+            return SetCurrentRow(false);
+        }
+
+        var prefetched = _prefetchedValues!;
+        if (_values.Length != prefetched.Length)
+        {
+            _values = new object[prefetched.Length];
+        }
+
+        // 2. Копируем в основной буфер, чтобы дальше GetValue всегда работал с одним массивом.
+        Array.Copy(prefetched, _values, prefetched.Length);
+        _prefetchedValues = null;
+        return SetCurrentRow(true);
     }
 
-    private bool SetCurrentRow(JsonDocument? rowDocument)
+    private bool SetCurrentRow(bool hasRow)
     {
-        // 1. Освобождаем материализованную запись прошлого Read()/ReadAsync().
-        _currentRowDocument?.Dispose();
-        _currentRowDocument = rowDocument;
-
-        if (_currentRowDocument is null)
-        {
-            _hasRow = false;
-            return false;
-        }
-
-        // 2. Готовим буфер значений под фиксированную схему.
-        if (_values.Length != FieldCount)
-        {
-            _values = new object[FieldCount];
-        }
-
-        // 3. Извлекаем значения по dot-path из схемы.
-        var row = _currentRowDocument.RootElement;
-        for (var i = 0; i < FieldCount; i++)
-        {
-            _values[i] = ReadValue(row, _schema.Columns[i].Path);
-        }
-
-        _hasRow = true;
-        return true;
+        _hasRow = hasRow;
+        return hasRow;
     }
 
-    private static object ReadValue(JsonElement row, string path)
+    private static JsonColumnBinding[] CompileColumns(JsonTableSchema schema)
     {
-        // 1. Ищем значение в объекте строки по dot-path из схемы.
-        if (!TryGetByPath(row, path, out var value) || value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-        {
-            return DBNull.Value;
-        }
-
-        // 2. Примитивы приводим к строкам; сложные значения оставляем JSON-текстом.
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => value.GetString() ?? string.Empty,
-            JsonValueKind.Number => value.GetRawText(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            JsonValueKind.Object => value.GetRawText(),
-            JsonValueKind.Array => value.GetRawText(),
-            _ => DBNull.Value
-        };
-    }
-
-    private static bool TryGetByPath(JsonElement element, string path, out JsonElement value)
-    {
-        // 1. Пустой path означает весь текущий JSON-элемент.
-        value = element;
-        if (path.Length == 0)
-        {
-            return true;
-        }
-
-        // 2. Каждый сегмент path должен быть свойством объекта.
-        foreach (var segment in path.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(segment, out value))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return schema.Columns
+            .Select(static (column, ordinal) => JsonColumnBinding.FromSchema(ordinal, column))
+            .ToArray();
     }
 
     private void EnsureReadableRow()

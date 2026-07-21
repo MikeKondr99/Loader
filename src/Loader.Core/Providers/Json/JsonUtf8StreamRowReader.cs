@@ -1,29 +1,19 @@
 using System.Buffers;
+using System.Text;
 using System.Text.Json;
 
 namespace Loader.Core.Providers.Json;
 
 /// <summary>
-/// Низкоуровневый reader элементов JSON-массива поверх <see cref="Stream"/>.
+/// Низкоуровневый reader элементов JSON-массива поверх Stream.
 ///
-/// Этот класс решает две разные задачи:
-/// 1. Потоково дойти до массива, который задан <c>ArrayPath</c>.
-/// 2. После этого читать элементы этого массива по одному.
+/// Utf8JsonReader не читает Stream сам: он работает только с уже загруженным span байтов.
+/// Поэтому этот класс держит pooled byte-buffer, дочитывает stream кусками, переносит
+/// непрочитанный хвост в начало buffer-а и хранит JsonReaderState между проходами.
 ///
-/// Почему здесь есть собственный byte-buffer:
-/// <see cref="Utf8JsonReader"/> не умеет сам читать из <see cref="Stream"/>. Он получает span байтов,
-/// парсит то, что уже есть в памяти, и возвращает <see cref="JsonReaderState"/>, который можно передать
-/// в следующий reader для продолжения. Поэтому мы сами:
-/// - читаем bytes из stream;
-/// - расширяем buffer, если один JSON-токен или одна строка таблицы больше текущего buffer-а;
-/// - переносим непрочитанный хвост buffer-а в начало;
-/// - храним JsonReaderState между чтениями.
-///
-/// Почему строка возвращается как JsonDocument:
-/// текущий JsonProviderDataReader уже умеет читать значения по dot-path из <see cref="JsonElement"/>.
-/// Чтобы не смешивать два сложных изменения сразу, этот reader материализует только текущий элемент
-/// массива-таблицы, а не весь файл. Это сохраняет старую семантику GetRawText для объектов/массивов:
-/// форматирование внутри текущего элемента остается таким, каким оно было в JSON.
+/// Важно: строка таблицы больше не превращается в JsonDocument. Мы гарантируем, что текущий
+/// элемент массива целиком находится в byte-buffer, затем вторым Utf8JsonReader-ом разбираем
+/// этот slice сразу в object[] значений текущей строки.
 /// </summary>
 internal sealed class JsonUtf8StreamRowReader : IDisposable
 {
@@ -98,7 +88,7 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
         throw new InvalidOperationException("JSON array path was not found.");
     }
 
-    public JsonDocument? ReadNextRow()
+    public bool ReadNextRow(object[] values, IReadOnlyList<JsonColumnBinding> columns)
     {
         EnsurePositionedOnArray();
 
@@ -109,7 +99,7 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
             {
                 if (_isFinalBlock)
                 {
-                    return null;
+                    return false;
                 }
 
                 ReadMore();
@@ -120,15 +110,18 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
             if (reader.TokenType == JsonTokenType.EndArray && reader.CurrentDepth == _arrayDepth)
             {
                 Consume((int)reader.BytesConsumed, reader.CurrentState);
-                return null;
+                return false;
             }
 
             // 2. Любой другой JSON value внутри массива является строкой таблицы.
-            return ReadCurrentValueAsDocument();
+            return ReadCurrentValueInto(values, columns);
         }
     }
 
-    public async ValueTask<JsonDocument?> ReadNextRowAsync(CancellationToken cancellationToken)
+    public async ValueTask<bool> ReadNextRowAsync(
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        CancellationToken cancellationToken)
     {
         EnsurePositionedOnArray();
 
@@ -139,7 +132,7 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
             {
                 if (_isFinalBlock)
                 {
-                    return null;
+                    return false;
                 }
 
                 await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
@@ -150,11 +143,11 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
             if (reader.TokenType == JsonTokenType.EndArray && reader.CurrentDepth == _arrayDepth)
             {
                 Consume((int)reader.BytesConsumed, reader.CurrentState);
-                return null;
+                return false;
             }
 
             // 2. Любой другой JSON value внутри массива является строкой таблицы.
-            return await ReadCurrentValueAsDocumentAsync(cancellationToken).ConfigureAwait(false);
+            return await ReadCurrentValueIntoAsync(values, columns, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -170,12 +163,12 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
         ArrayPool<byte>.Shared.Return(_buffer);
     }
 
-    private JsonDocument ReadCurrentValueAsDocument()
+    private bool ReadCurrentValueInto(object[] values, IReadOnlyList<JsonColumnBinding> columns)
     {
         while (true)
         {
-            var parentReader = CreateReader();
-            if (!parentReader.Read())
+            var reader = CreateReader();
+            if (!reader.Read())
             {
                 if (_isFinalBlock)
                 {
@@ -186,80 +179,396 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
                 continue;
             }
 
-            var tokenStart = (int)parentReader.TokenStartIndex;
-            var valueReader = new Utf8JsonReader(_buffer.AsSpan(tokenStart, _bytesInBuffer - tokenStart), _isFinalBlock, default);
-
-            try
+            if (TryReadBufferedValue(reader, values, columns, out var consumed, out var state))
             {
-                // 1. Парсим только текущий элемент массива как standalone JSON value.
-                var document = JsonDocument.ParseValue(ref valueReader);
+                Consume(consumed, state);
+                return true;
+            }
 
-                // 2. Отдельным reader-ом продвигаем parent state внутри исходного массива.
-                var advancingReader = CreateReader();
-                advancingReader.Read();
-                if (!advancingReader.TrySkip())
+            // 1. Текущий JSON value не поместился в buffer целиком: дочитываем и пробуем снова.
+            ReadMore();
+        }
+    }
+
+    private async ValueTask<bool> ReadCurrentValueIntoAsync(
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var reader = CreateReader();
+            if (!reader.Read())
+            {
+                if (_isFinalBlock)
                 {
-                    ReadMore();
-                    document.Dispose();
-                    continue;
+                    throw new JsonException("Unexpected end of JSON while reading array item.");
                 }
 
-                // 3. Удаляем из buffer-а байты прочитанного элемента и продолжаем после него.
-                Consume((int)advancingReader.BytesConsumed, advancingReader.CurrentState);
-                return document;
+                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+                continue;
             }
-            catch (JsonException) when (!_isFinalBlock)
+
+            if (TryReadBufferedValue(reader, values, columns, out var consumed, out var state))
             {
-                // 4. Значение не поместилось в текущий buffer: дочитываем и пробуем снова.
-                ReadMore();
+                Consume(consumed, state);
+                return true;
+            }
+
+            // 1. Текущий JSON value не поместился в buffer целиком: дочитываем и пробуем снова.
+            await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private bool TryReadBufferedValue(
+        Utf8JsonReader firstTokenReader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        out int consumed,
+        out JsonReaderState state)
+    {
+        var tokenStart = (int)firstTokenReader.TokenStartIndex;
+        var advancingReader = CreateReader();
+        advancingReader.Read();
+
+        if (advancingReader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+        {
+            if (!advancingReader.TrySkip())
+            {
+                consumed = 0;
+                state = default;
+                return false;
+            }
+        }
+
+        consumed = (int)advancingReader.BytesConsumed;
+        state = advancingReader.CurrentState;
+
+        // 1. Разбираем только slice текущего элемента массива, а не весь оставшийся buffer.
+        var rowBytes = _buffer.AsSpan(tokenStart, consumed - tokenStart);
+        FillValues(rowBytes, values, columns);
+        return true;
+    }
+
+    private static void FillValues(
+        ReadOnlySpan<byte> rowBytes,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns)
+    {
+        Array.Fill(values, DBNull.Value);
+
+        var reader = new Utf8JsonReader(rowBytes, isFinalBlock: true, state: default);
+        if (!reader.Read())
+        {
+            return;
+        }
+
+        // 1. Пустой path означает весь текущий элемент массива.
+        SetWholeRowColumns(rowBytes, reader, values, columns);
+
+        // 2. Обычные dot-path колонки имеют смысл только для объектной строки.
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            return;
+        }
+
+        if (CanUseFlatObjectPath(columns))
+        {
+            ReadFlatObjectColumns(rowBytes, ref reader, values, columns);
+            return;
+        }
+
+        ReadObjectColumns(rowBytes, ref reader, values, columns);
+    }
+
+    private static void ReadFlatObjectColumns(
+        ReadOnlySpan<byte> rowBytes,
+        ref Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns)
+    {
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.EndObject)
+            {
+                return;
+            }
+
+            if (reader.TokenType != JsonTokenType.PropertyName)
+            {
+                continue;
+            }
+
+            // 1. Для flat-схемы сравниваем имя свойства прямо в UTF-8, без string allocation.
+            var column = FindFlatColumn(reader, columns);
+            if (!reader.Read())
+            {
+                throw new JsonException("Unexpected end of JSON while reading property value.");
+            }
+
+            if (column is not null)
+            {
+                values[column.Ordinal] = ReadValue(rowBytes, reader);
+            }
+
+            // 2. Контейнер нужно продвинуть в основном reader-е, даже если ReadValue уже снял raw text через copy.
+            if (reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray)
+            {
+                reader.Skip();
             }
         }
     }
 
-    private async ValueTask<JsonDocument> ReadCurrentValueAsDocumentAsync(CancellationToken cancellationToken)
+    private static void ReadObjectColumns(
+        ReadOnlySpan<byte> rowBytes,
+        ref Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns)
     {
-        while (true)
-        {
-            var parentReader = CreateReader();
-            if (!parentReader.Read())
-            {
-                if (_isFinalBlock)
-                {
-                    throw new JsonException("Unexpected end of JSON while reading array item.");
-                }
+        var stack = new List<string>();
+        string? propertyName = null;
 
-                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+        while (reader.Read())
+        {
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.PropertyName:
+                    propertyName = reader.GetString() ?? string.Empty;
+                    break;
+
+                case JsonTokenType.StartObject:
+                    ReadObjectValue(rowBytes, ref reader, values, columns, stack, ref propertyName);
+                    break;
+
+                case JsonTokenType.StartArray:
+                    ReadArrayValue(rowBytes, ref reader, values, columns, stack, ref propertyName);
+                    break;
+
+                case JsonTokenType.EndObject:
+                    if (stack.Count == 0)
+                    {
+                        return;
+                    }
+
+                    stack.RemoveAt(stack.Count - 1);
+                    break;
+
+                default:
+                    ReadPrimitiveValue(rowBytes, reader, values, columns, stack, propertyName);
+                    propertyName = null;
+                    break;
+            }
+        }
+    }
+
+    private static void ReadObjectValue(
+        ReadOnlySpan<byte> rowBytes,
+        ref Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        List<string> stack,
+        ref string? propertyName)
+    {
+        if (propertyName is null)
+        {
+            return;
+        }
+
+        // 1. Если сама колонка указывает на объект, возвращаем объект JSON-текстом.
+        SetMatchingColumns(rowBytes, reader, values, columns, stack, propertyName);
+
+        // 2. Если есть более глубокие dot-path колонки, продолжаем читать объект.
+        if (HasChildColumns(columns, stack, propertyName))
+        {
+            stack.Add(propertyName);
+            propertyName = null;
+            return;
+        }
+
+        // 3. Иначе объект целиком не нужен: пропускаем его поддерево.
+        reader.Skip();
+        propertyName = null;
+    }
+
+    private static void ReadArrayValue(
+        ReadOnlySpan<byte> rowBytes,
+        ref Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        List<string> stack,
+        ref string? propertyName)
+    {
+        if (propertyName is not null)
+        {
+            // 1. Массивы не flatten-ятся, но могут быть явной JSON-текстовой колонкой.
+            SetMatchingColumns(rowBytes, reader, values, columns, stack, propertyName);
+            propertyName = null;
+        }
+
+        // 2. Путь внутрь массива пока не поддерживаем: пропускаем весь массив.
+        reader.Skip();
+    }
+
+    private static void ReadPrimitiveValue(
+        ReadOnlySpan<byte> rowBytes,
+        Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        List<string> stack,
+        string? propertyName)
+    {
+        if (propertyName is null)
+        {
+            return;
+        }
+
+        SetMatchingColumns(rowBytes, reader, values, columns, stack, propertyName);
+    }
+
+    private static bool CanUseFlatObjectPath(IReadOnlyList<JsonColumnBinding> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (!column.IsFlat)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static JsonColumnBinding? FindFlatColumn(Utf8JsonReader reader, IReadOnlyList<JsonColumnBinding> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (reader.ValueTextEquals(column.FlatUtf8Name!))
+            {
+                return column;
+            }
+        }
+
+        return null;
+    }
+
+    private static void SetWholeRowColumns(
+        ReadOnlySpan<byte> rowBytes,
+        Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (column.IsWholeRow)
+            {
+                values[column.Ordinal] = ReadValue(rowBytes, reader);
+            }
+        }
+    }
+
+    private static void SetMatchingColumns(
+        ReadOnlySpan<byte> rowBytes,
+        Utf8JsonReader reader,
+        object[] values,
+        IReadOnlyList<JsonColumnBinding> columns,
+        IReadOnlyList<string> stack,
+        string propertyName)
+    {
+        foreach (var column in columns)
+        {
+            if (!column.IsWholeRow && IsExactPath(column.Segments, stack, propertyName))
+            {
+                values[column.Ordinal] = ReadValue(rowBytes, reader);
+            }
+        }
+    }
+
+    private static object ReadValue(ReadOnlySpan<byte> rowBytes, Utf8JsonReader reader)
+    {
+        return reader.TokenType switch
+        {
+            JsonTokenType.String => reader.GetString() ?? string.Empty,
+            JsonTokenType.Number => GetRawText(rowBytes, reader),
+            JsonTokenType.True => "true",
+            JsonTokenType.False => "false",
+            JsonTokenType.Null => DBNull.Value,
+            JsonTokenType.StartObject => GetRawContainerText(rowBytes, reader),
+            JsonTokenType.StartArray => GetRawContainerText(rowBytes, reader),
+            _ => DBNull.Value
+        };
+    }
+
+    private static string GetRawContainerText(ReadOnlySpan<byte> rowBytes, Utf8JsonReader reader)
+    {
+        var copy = reader;
+        copy.Skip();
+        return GetRawText(rowBytes, reader, copy.BytesConsumed);
+    }
+
+    private static string GetRawText(ReadOnlySpan<byte> rowBytes, Utf8JsonReader reader)
+    {
+        return GetRawText(rowBytes, reader, reader.BytesConsumed);
+    }
+
+    private static string GetRawText(ReadOnlySpan<byte> rowBytes, Utf8JsonReader reader, long bytesConsumed)
+    {
+        var start = (int)reader.TokenStartIndex;
+        var end = (int)bytesConsumed;
+        return Encoding.UTF8.GetString(rowBytes[start..end]);
+    }
+
+    private static bool IsExactPath(IReadOnlyList<string> columnSegments, IReadOnlyList<string> stack, string propertyName)
+    {
+        if (columnSegments.Count != stack.Count + 1)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < stack.Count; i++)
+        {
+            if (!string.Equals(columnSegments[i], stack[i], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return string.Equals(columnSegments[^1], propertyName, StringComparison.Ordinal);
+    }
+
+    private static bool HasChildColumns(
+        IReadOnlyList<JsonColumnBinding> columns,
+        IReadOnlyList<string> stack,
+        string propertyName)
+    {
+        foreach (var column in columns)
+        {
+            if (column.Segments.Count <= stack.Count + 1)
+            {
                 continue;
             }
 
-            var tokenStart = (int)parentReader.TokenStartIndex;
-            var valueReader = new Utf8JsonReader(_buffer.AsSpan(tokenStart, _bytesInBuffer - tokenStart), _isFinalBlock, default);
-
-            try
+            if (!IsPathPrefix(column.Segments, stack, propertyName))
             {
-                // 1. Парсим только текущий элемент массива как standalone JSON value.
-                var document = JsonDocument.ParseValue(ref valueReader);
-
-                // 2. Отдельным reader-ом продвигаем parent state внутри исходного массива.
-                var advancingReader = CreateReader();
-                advancingReader.Read();
-                if (!advancingReader.TrySkip())
-                {
-                    await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
-                    document.Dispose();
-                    continue;
-                }
-
-                // 3. Удаляем из buffer-а байты прочитанного элемента и продолжаем после него.
-                Consume((int)advancingReader.BytesConsumed, advancingReader.CurrentState);
-                return document;
+                continue;
             }
-            catch (JsonException) when (!_isFinalBlock)
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPathPrefix(IReadOnlyList<string> columnSegments, IReadOnlyList<string> stack, string propertyName)
+    {
+        for (var i = 0; i < stack.Count; i++)
+        {
+            if (!string.Equals(columnSegments[i], stack[i], StringComparison.Ordinal))
             {
-                // 4. Значение не поместилось в текущий buffer: дочитываем и пробуем снова.
-                await ReadMoreAsync(cancellationToken).ConfigureAwait(false);
+                return false;
             }
         }
+
+        return string.Equals(columnSegments[stack.Count], propertyName, StringComparison.Ordinal);
     }
 
     private bool ReadNavigationToken(out JsonTokenSnapshot token)
@@ -295,13 +604,7 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
 
     private void ReadMore()
     {
-        if (_bytesInBuffer == _buffer.Length)
-        {
-            var grown = ArrayPool<byte>.Shared.Rent(_buffer.Length * 2);
-            Buffer.BlockCopy(_buffer, 0, grown, 0, _bytesInBuffer);
-            ArrayPool<byte>.Shared.Return(_buffer);
-            _buffer = grown;
-        }
+        EnsureCapacityForMoreBytes();
 
         var read = _stream.Read(_buffer, _bytesInBuffer, _buffer.Length - _bytesInBuffer);
         _isFinalBlock = read == 0;
@@ -310,19 +613,26 @@ internal sealed class JsonUtf8StreamRowReader : IDisposable
 
     private async ValueTask ReadMoreAsync(CancellationToken cancellationToken)
     {
-        if (_bytesInBuffer == _buffer.Length)
-        {
-            var grown = ArrayPool<byte>.Shared.Rent(_buffer.Length * 2);
-            Buffer.BlockCopy(_buffer, 0, grown, 0, _bytesInBuffer);
-            ArrayPool<byte>.Shared.Return(_buffer);
-            _buffer = grown;
-        }
+        EnsureCapacityForMoreBytes();
 
         var read = await _stream
             .ReadAsync(_buffer.AsMemory(_bytesInBuffer, _buffer.Length - _bytesInBuffer), cancellationToken)
             .ConfigureAwait(false);
         _isFinalBlock = read == 0;
         _bytesInBuffer += read;
+    }
+
+    private void EnsureCapacityForMoreBytes()
+    {
+        if (_bytesInBuffer != _buffer.Length)
+        {
+            return;
+        }
+
+        var grown = ArrayPool<byte>.Shared.Rent(_buffer.Length * 2);
+        Buffer.BlockCopy(_buffer, 0, grown, 0, _bytesInBuffer);
+        ArrayPool<byte>.Shared.Return(_buffer);
+        _buffer = grown;
     }
 
     private void Consume(int consumed, JsonReaderState state)
