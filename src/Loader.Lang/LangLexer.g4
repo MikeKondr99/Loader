@@ -1,7 +1,12 @@
 lexer grammar LangLexer;
 
-AND: [a] [n] [d];
-OR: [o] [r];
+LOAD: [Ll] [Oo] [Aa] [Dd];
+AS: [Aa] [Ss];
+FROM: [Ff] [Rr] [Oo] [Mm];
+
+
+AND: [Aa] [Nn] [Dd];
+OR: [Oo] [Rr];
 LEFT_PARENTHESIS: '(';
 RIGHT_PARENTHESIS: ')';
 HAT: '^';
@@ -17,12 +22,13 @@ EQUAL: '=';
 NOT_EQUAL: '!=';
 DOT: '.';
 COMMA: ',';
+SEMICOLON: ';';
 QUOTE: ['] -> pushMode(IN_STRING);
 CURLY_CLOSE: '}' -> popMode;
 
-BOOLEAN: 'true' | 'false';
+BOOLEAN: [Tt] [Rr] [Uu] [Ee] | [Ff] [Aa] [Ll] [Ss] [Ee];
 
-NULL: 'null';
+NULL: [Nn] [Uu] [Ll] [Ll];
 
 NAME: [a-zA-Zа-яА-Я_][a-zA-Zа-яА-Я_0-9]*;
 

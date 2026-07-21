@@ -185,9 +185,9 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
         };
     }
 
-    private static ExprSpan Span(ParserRuleContext context)
+    private static LangSpan Span(ParserRuleContext context)
     {
-        return new ExprSpan(
+        return new LangSpan(
             (uint)context.Start.Line,
             (uint)context.Start.Column,
             (uint)context.Stop.Line,

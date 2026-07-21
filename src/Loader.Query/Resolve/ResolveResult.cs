@@ -9,7 +9,7 @@ public sealed record ResolveResult<T>
 {
     public required T? Value { get; init; }
 
-    public required IReadOnlyList<ExprError> Errors { get; init; }
+    public required IReadOnlyList<LangError> Errors { get; init; }
 
     public bool IsSuccess => Errors.Count == 0 && Value is not null;
 
@@ -22,7 +22,7 @@ public sealed record ResolveResult<T>
         };
     }
 
-    public static ResolveResult<T> Failure(IReadOnlyList<ExprError> errors)
+    public static ResolveResult<T> Failure(IReadOnlyList<LangError> errors)
     {
         return new ResolveResult<T>
         {

@@ -4,6 +4,53 @@ options { tokenVocab=LangLexer; }
 start:
     expr EOF;
 
+full_statement:
+    statement EOF;
+
+
+statement
+    : load_statement;
+
+load_statement
+    : LOAD load_fields
+    FROM BLOCKED_NAME source_options?
+    SEMICOLON
+    ;
+
+source_options
+    : LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+    ;
+
+option_list
+    : load_option (COMMA load_option)* COMMA?
+    ;
+
+load_option
+    : NAME
+    | NAME EQUAL option_literal
+    ;
+
+option_literal
+    : string
+    | integer
+    | number
+    | boolean
+    ;
+
+load_fields
+    : load_all_fields
+    | load_field (COMMA load_field)* COMMA?
+    ;
+
+load_all_fields
+    : MUL
+    ;
+
+load_field
+    : expr AS name
+    | name
+    ;
+
 expr
     : MINUS expr #unary
     | <assoc=right> expr (HAT) expr #binary

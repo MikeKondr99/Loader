@@ -8,7 +8,7 @@ public abstract record Expr
     private static readonly ActivitySource ActivitySource = new("Loader.Lang");
     private int? _hash;
 
-    public ExprSpan Span { get; init; }
+    public LangSpan Span { get; init; }
 
     public int Hash => _hash ??= GetHashCode();
 
@@ -23,7 +23,7 @@ public abstract record Expr
             var expr = new ExpressionParser().VisitStart(parser.start());
             return ParseResult<Expr>.Success(expr);
         }
-        catch (ExprErrorException ex)
+        catch (LangErrorException ex)
         {
             activity?.SetStatus(ActivityStatusCode.Error);
             activity?.AddException(ex);
@@ -33,9 +33,9 @@ public abstract record Expr
         {
             activity?.SetStatus(ActivityStatusCode.Error);
             activity?.AddException(ex);
-            return ParseResult<Expr>.Failure(new ExprError
+            return ParseResult<Expr>.Failure(new LangError
             {
-                Span = new ExprSpan(1, 1, 100, 100),
+                Span = new LangSpan(1, 1, 100, 100),
                 Message = ex.Message
             });
         }

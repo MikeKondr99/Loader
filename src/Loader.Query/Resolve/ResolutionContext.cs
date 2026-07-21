@@ -12,5 +12,5 @@ public sealed record ResolutionContext
 
     public required IFunctionResolver Functions { get; init; }
 
-    public required List<ExprError> Errors { get; init; }
+    public required List<LangError> Errors { get; init; }
 }

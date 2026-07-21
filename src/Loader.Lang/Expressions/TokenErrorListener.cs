@@ -13,11 +13,11 @@ internal sealed class TokenErrorListener : IAntlrErrorListener<int>
         string msg,
         RecognitionException e)
     {
-        throw new ExprErrorException(e)
+        throw new LangErrorException(e)
         {
-            Error = new ExprError
+            Error = new LangError
             {
-                Span = new ExprSpan((uint)line, (uint)charPositionInLine, 1000, 1000),
+                Span = new LangSpan((uint)line, (uint)charPositionInLine, 1000, 1000),
                 Message = msg
             }
         };
