@@ -187,6 +187,52 @@ public sealed class JsonProviderTests
         await Assert.That(rawReader.Read()).IsTrue();
         await Assert.That(rawReader.GetValue(0)).IsEqualTo("1");
         await Assert.That(rawReader.GetValue(1)).IsEqualTo(DBNull.Value);
+        await Assert.That(rawReader.IsDBNull(1)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Json flat reader отдает строки через GetString и GetFieldValue без GetValue path")]
+    public async Task Flat_reader_returns_string_through_typed_string_accessors()
+    {
+        var source = new InlineJson("""[{ "id": 1, "city": "Moscow" }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetString(0)).IsEqualTo("1");
+        await Assert.That(rawReader.GetFieldValue<string>(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Json flat reader на DBNull в строковом accessor кидает InvalidCastException")]
+    public async Task Flat_reader_string_accessor_throws_for_dbnull()
+    {
+        var source = new InlineJson("""[{ "id": 1, "city": null }]""");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = [],
+                Schema = Schema("id", "city")
+            });
+
+        await Assert.That(rawReader.GetType()).IsEqualTo(typeof(JsonFlatProviderDataReader));
+        await Assert.That(rawReader.Read()).IsTrue();
+        await Assert.That(rawReader.GetValue(1)).IsEqualTo(DBNull.Value);
+        await Assert.That(() => rawReader.GetString(1))
+            .ThrowsExactly<InvalidCastException>();
+        await Assert.That(() => rawReader.GetFieldValue<string>(1))
+            .ThrowsExactly<InvalidCastException>();
     }
 
     [Test]

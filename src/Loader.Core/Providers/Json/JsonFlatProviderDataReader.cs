@@ -13,16 +13,18 @@ namespace Loader.Core.Providers.Json;
 /// Reader применяется только когда каждый column path непустой и не содержит dot-path.
 /// В отличие от совместимого JSON reader-а, он не создает второй Utf8JsonReader на slice строки,
 /// а читает свойства объекта напрямую основным stream reader-ом и складывает строки батчами.
+/// Внутри батча значения хранятся как string?: null означает DBNull, а object создается только
+/// на общем GetValue/GetValues path.
 /// </summary>
 internal sealed class JsonFlatProviderDataReader : DbDataReader
 {
-    private const int BatchSize = 1024;
+    private const int BatchSize = 1;
 
     private readonly string _fileName;
     private readonly JsonUtf8FlatObjectStreamReader _rows;
     private readonly JsonTableSchema _schema;
     private readonly JsonColumnBinding[] _columns;
-    private readonly object[] _batchValues;
+    private readonly string?[] _batchValues;
     private int _batchRowCount;
     private int _batchRowIndex = -1;
     private bool _endOfRows;
@@ -39,7 +41,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
         _rows = new JsonUtf8FlatObjectStreamReader(stream);
         _schema = schema;
         _columns = CompileColumns(schema);
-        _batchValues = CreateEmptyValues(schema.Columns.Count * BatchSize);
+        _batchValues = new string?[schema.Columns.Count * BatchSize];
 
         try
         {
@@ -78,7 +80,12 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
         {
             // 1. Сохраняем контракт: первая ошибка чтения видна уже на OpenReaderAsync.
             if (await reader._rows
-                    .ReadNextRowAsync(reader._columns, reader._batchValues, 0, reader.FieldCount, cancellationToken)
+                    .ReadNextRowAsync(
+                        reader._columns,
+                        reader._batchValues,
+                        0,
+                        reader.FieldCount,
+                        cancellationToken)
                     .ConfigureAwait(false))
             {
                 reader._batchRowCount = 1;
@@ -148,7 +155,9 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
     {
         EnsureReadableRow();
         EnsureOrdinal(ordinal);
-        return _batchValues[CurrentBatchOffset() + ordinal];
+        var offset = CurrentBatchOffset() + ordinal;
+        var value = _batchValues[offset];
+        return value is null ? DBNull.Value : value;
     }
 
     public override int GetValues(object[] values)
@@ -193,7 +202,12 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
         return typeof(string);
     }
 
-    public override bool IsDBNull(int ordinal) => GetValue(ordinal) == DBNull.Value;
+    public override bool IsDBNull(int ordinal)
+    {
+        EnsureReadableRow();
+        EnsureOrdinal(ordinal);
+        return _batchValues[CurrentBatchOffset() + ordinal] is null;
+    }
 
     public override IEnumerator GetEnumerator()
     {
@@ -203,33 +217,61 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
         }
     }
 
-    public override bool GetBoolean(int ordinal) => bool.Parse((string)GetValue(ordinal));
+    public override bool GetBoolean(int ordinal) => bool.Parse(GetString(ordinal));
 
-    public override byte GetByte(int ordinal) => byte.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override byte GetByte(int ordinal) => byte.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
     public override long GetBytes(int ordinal, long dataOffset, byte[]? buffer, int bufferOffset, int length) => throw new NotSupportedException();
 
-    public override char GetChar(int ordinal) => ((string)GetValue(ordinal))[0];
+    public override char GetChar(int ordinal) => GetString(ordinal)[0];
 
     public override long GetChars(int ordinal, long dataOffset, char[]? buffer, int bufferOffset, int length) => throw new NotSupportedException();
 
-    public override DateTime GetDateTime(int ordinal) => DateTime.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override DateTime GetDateTime(int ordinal) => DateTime.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override decimal GetDecimal(int ordinal) => decimal.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override decimal GetDecimal(int ordinal) => decimal.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override double GetDouble(int ordinal) => double.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override double GetDouble(int ordinal) => double.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override float GetFloat(int ordinal) => float.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override float GetFloat(int ordinal) => float.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override Guid GetGuid(int ordinal) => Guid.Parse((string)GetValue(ordinal));
+    public override Guid GetGuid(int ordinal) => Guid.Parse(GetString(ordinal));
 
-    public override short GetInt16(int ordinal) => short.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override short GetInt16(int ordinal) => short.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override int GetInt32(int ordinal) => int.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override int GetInt32(int ordinal) => int.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override long GetInt64(int ordinal) => long.Parse((string)GetValue(ordinal), CultureInfo.InvariantCulture);
+    public override long GetInt64(int ordinal) => long.Parse(GetString(ordinal), CultureInfo.InvariantCulture);
 
-    public override string GetString(int ordinal) => (string)GetValue(ordinal);
+    public override string GetString(int ordinal)
+    {
+        EnsureReadableRow();
+        EnsureOrdinal(ordinal);
+
+        var offset = CurrentBatchOffset() + ordinal;
+        var value = _batchValues[offset];
+        if (value is null)
+        {
+            throw new InvalidCastException($"Column '{GetName(ordinal)}' contains DBNull.");
+        }
+
+        return value;
+    }
+
+    public override T GetFieldValue<T>(int ordinal)
+    {
+        if (typeof(T) == typeof(string))
+        {
+            return (T)(object)GetString(ordinal);
+        }
+
+        if (typeof(T) == typeof(object))
+        {
+            return (T)GetValue(ordinal);
+        }
+
+        return base.GetFieldValue<T>(ordinal);
+    }
 
     public override void Close()
     {
@@ -302,20 +344,13 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
 
     private void ResetBatch()
     {
-        Array.Fill(_batchValues, DBNull.Value);
+        Array.Fill(_batchValues, null);
         _batchRowCount = 0;
         _batchRowIndex = -1;
         _hasRow = false;
     }
 
     private int CurrentBatchOffset() => _batchRowIndex * FieldCount;
-
-    private static object[] CreateEmptyValues(int count)
-    {
-        var values = new object[count];
-        Array.Fill(values, DBNull.Value);
-        return values;
-    }
 
     private static JsonColumnBinding[] CompileColumns(JsonTableSchema schema)
     {
@@ -378,7 +413,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
 
         public bool ReadNextRow(
             IReadOnlyList<JsonColumnBinding> columns,
-            object[] values,
+            string?[] values,
             int valueOffset,
             int fieldCount)
         {
@@ -415,7 +450,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
 
         public async ValueTask<bool> ReadNextRowAsync(
             IReadOnlyList<JsonColumnBinding> columns,
-            object[] values,
+            string?[] values,
             int valueOffset,
             int fieldCount,
             CancellationToken cancellationToken)
@@ -463,7 +498,10 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
             ArrayPool<byte>.Shared.Return(_buffer);
         }
 
-        private bool ReadObjectRow(IReadOnlyList<JsonColumnBinding> columns, object[] values, int valueOffset)
+        private bool ReadObjectRow(
+            IReadOnlyList<JsonColumnBinding> columns,
+            string?[] values,
+            int valueOffset)
         {
             while (true)
             {
@@ -524,7 +562,8 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                             break;
                         }
 
-                        values[valueOffset + column.Ordinal] = value;
+                        var offset = valueOffset + column.Ordinal;
+                        values[offset] = value;
                         continue;
                     }
 
@@ -539,7 +578,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
 
         private async ValueTask<bool> ReadObjectRowAsync(
             IReadOnlyList<JsonColumnBinding> columns,
-            object[] values,
+            string?[] values,
             int valueOffset,
             CancellationToken cancellationToken)
         {
@@ -602,7 +641,8 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                             break;
                         }
 
-                        values[valueOffset + column.Ordinal] = value;
+                        var offset = valueOffset + column.Ordinal;
+                        values[offset] = value;
                         continue;
                     }
 
@@ -615,7 +655,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
             }
         }
 
-        private bool ReadNonObjectRow(object[] values, int valueOffset, int fieldCount)
+        private bool ReadNonObjectRow(string?[] values, int valueOffset, int fieldCount)
         {
             while (true)
             {
@@ -638,13 +678,13 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                 }
 
                 Consume((int)reader.BytesConsumed, reader.CurrentState);
-                Array.Fill(values, DBNull.Value, valueOffset, fieldCount);
+                Array.Fill(values, null, valueOffset, fieldCount);
                 return true;
             }
         }
 
         private async ValueTask<bool> ReadNonObjectRowAsync(
-            object[] values,
+            string?[] values,
             int valueOffset,
             int fieldCount,
             CancellationToken cancellationToken)
@@ -670,17 +710,17 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                 }
 
                 Consume((int)reader.BytesConsumed, reader.CurrentState);
-                Array.Fill(values, DBNull.Value, valueOffset, fieldCount);
+                Array.Fill(values, null, valueOffset, fieldCount);
                 return true;
             }
         }
 
-        private bool TryReadValue(ref Utf8JsonReader reader, out object value)
+        private bool TryReadValue(ref Utf8JsonReader reader, out string? value)
         {
             switch (reader.TokenType)
             {
                 case JsonTokenType.Null:
-                    value = DBNull.Value;
+                    value = null;
                     return true;
 
                 case JsonTokenType.String:
@@ -707,7 +747,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                     var tokenStart = (int)reader.TokenStartIndex;
                     if (!reader.TrySkip())
                     {
-                        value = DBNull.Value;
+                        value = null;
                         return false;
                     }
 
@@ -715,7 +755,7 @@ internal sealed class JsonFlatProviderDataReader : DbDataReader
                     return true;
 
                 default:
-                    value = DBNull.Value;
+                    value = null;
                     return true;
             }
         }
