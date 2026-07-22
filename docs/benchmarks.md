@@ -80,6 +80,13 @@ $env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Da
 dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*WideClickHouseLoadBenchmarks.Json_to_clickhouse_with_schema_analyze"
 ```
 
+XML -> ClickHouse с анализом схемы:
+
+```powershell
+$env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Database=loader_bench;Username=loader;Password=loader"
+dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*WideClickHouseLoadBenchmarks.Xml_to_clickhouse_with_schema_analyze"
+```
+
 Excel -> ClickHouse:
 
 ```powershell
@@ -95,7 +102,7 @@ $env:LOADER_BENCH_CLICKHOUSE_SOURCE = $env:LOADER_BENCH_CLICKHOUSE_TARGET
 dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter "*WideClickHouseLoadBenchmarks.ClickHouse_to_clickhouse"
 ```
 
-CSV + JSON + Excel + ClickHouse одним запуском:
+CSV + JSON + XML + Excel + ClickHouse одним запуском:
 
 ```powershell
 $env:LOADER_BENCH_CLICKHOUSE_TARGET = "Host=localhost;Port=8123;Protocol=http;Database=loader_bench;Username=loader;Password=loader"
@@ -103,6 +110,7 @@ $env:LOADER_BENCH_CLICKHOUSE_SOURCE = $env:LOADER_BENCH_CLICKHOUSE_TARGET
 dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --filter `
   "*WideClickHouseLoadBenchmarks.Csv_to_clickhouse" `
   "*WideClickHouseLoadBenchmarks.Json_to_clickhouse_with_schema_analyze" `
+  "*WideClickHouseLoadBenchmarks.Xml_to_clickhouse_with_schema_analyze" `
   "*WideClickHouseLoadBenchmarks.Excel_to_clickhouse" `
   "*WideClickHouseLoadBenchmarks.ClickHouse_to_clickhouse"
 ```
@@ -167,4 +175,4 @@ BenchmarkDotNet пишет отчеты в:
 benchmarks/Loader.Benchmarks/BenchmarkDotNet.Artifacts/results
 ```
 
-Первый запуск `WideClickHouseLoadBenchmarks` генерирует fixture-файлы для CSV/JSON/Excel в папке benchmark-проекта. Это может занять заметное время, следующие запуски используют уже созданные файлы.
+Первый запуск `WideClickHouseLoadBenchmarks` генерирует fixture-файлы для CSV/JSON/XML/Excel в папке benchmark-проекта. Это может занять заметное время, следующие запуски используют уже созданные файлы.

@@ -14,7 +14,7 @@
 - [x] Excel
 - [x] CSV
 - [x] QVD
-- [ ] XML
+- [x] XML
 - [x] JSON
 
 ## Источники

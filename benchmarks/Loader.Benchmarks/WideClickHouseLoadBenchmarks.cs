@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Xml;
 using BenchmarkDotNet.Attributes;
 using ClickHouse.Client.ADO;
 using Loader.Core.Providers.ClickHouse;
@@ -12,6 +13,7 @@ using Loader.Core.Providers.Json;
 using Loader.Core.Providers.Postgres;
 using Loader.Core.Providers.Sql;
 using Loader.Core.Providers.SqlServer;
+using Loader.Core.Providers.Xml;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Sylvan.Data.Excel;
@@ -29,6 +31,7 @@ public class WideClickHouseLoadBenchmarks
     private static readonly CsvProvider CsvProvider = new();
     private static readonly ExcelProvider ExcelProvider = new();
     private static readonly JsonProvider JsonProvider = new();
+    private static readonly XmlProvider XmlProvider = new();
     private static readonly PostgresProvider PostgresProvider = new();
     private static readonly SqlServerProvider SqlServerProvider = new();
     private static readonly ClickHouseProvider ClickHouseProvider = new();
@@ -130,6 +133,31 @@ public class WideClickHouseLoadBenchmarks
                 await using var reader = raw.Normalize().AutoCast(_autoCastSchema);
 
                 await WriteAsync(reader, TargetTables.Json).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+    }
+
+    [Benchmark]
+    public async Task Xml_to_clickhouse_with_schema_analyze()
+    {
+        await MeasureAsync(
+            nameof(Xml_to_clickhouse_with_schema_analyze),
+            async () =>
+            {
+                var schema = await XmlProvider.AnalyzeSchemaAsync(
+                    _fixtures.FileSource,
+                    _fixtures.XmlFileName,
+                    "row").ConfigureAwait(false);
+                await using var raw = await XmlProvider.OpenReaderAsync(
+                    _fixtures.FileSource,
+                    new XmlTableConfig
+                    {
+                        FileName = _fixtures.XmlFileName,
+                        TableName = "row",
+                        Schema = schema
+                    }).ConfigureAwait(false);
+                await using var reader = raw.Normalize().AutoCast(_autoCastSchema);
+
+                await WriteAsync(reader, TargetTables.Xml).ConfigureAwait(false);
             }).ConfigureAwait(false);
     }
 
@@ -257,6 +285,7 @@ public class WideClickHouseLoadBenchmarks
         public static readonly ClickHouseTableName Csv = new() { Table = "bench_load_csv" };
         public static readonly ClickHouseTableName Excel = new() { Table = "bench_load_excel" };
         public static readonly ClickHouseTableName Json = new() { Table = "bench_load_json" };
+        public static readonly ClickHouseTableName Xml = new() { Table = "bench_load_xml" };
         public static readonly ClickHouseTableName Postgres = new() { Table = "bench_load_postgres" };
         public static readonly ClickHouseTableName SqlServer = new() { Table = "bench_load_sqlserver" };
         public static readonly ClickHouseTableName ClickHouse = new() { Table = "bench_load_clickhouse" };
@@ -266,6 +295,7 @@ public class WideClickHouseLoadBenchmarks
             Csv,
             Excel,
             Json,
+            Xml,
             Postgres,
             SqlServer,
             ClickHouse
@@ -277,6 +307,7 @@ internal sealed record WideBenchmarkFixtures(
     FileSystemSource FileSource,
     string CsvFileName,
     string JsonFileName,
+    string XmlFileName,
     string ExcelFileName)
 {
     public static async Task<WideBenchmarkFixtures> EnsureAsync(int rowCount)
@@ -286,16 +317,19 @@ internal sealed record WideBenchmarkFixtures(
 
         var csvFileName = $"wide-v2-{rowCount.ToString(CultureInfo.InvariantCulture)}.csv";
         var jsonFileName = $"wide-v2-{rowCount.ToString(CultureInfo.InvariantCulture)}.json";
+        var xmlFileName = $"wide-v2-{rowCount.ToString(CultureInfo.InvariantCulture)}.xml";
         var excelFileName = $"wide-v2-{rowCount.ToString(CultureInfo.InvariantCulture)}.xlsx";
 
         await EnsureCsvAsync(Path.Combine(directory, csvFileName), rowCount).ConfigureAwait(false);
         await EnsureJsonAsync(Path.Combine(directory, jsonFileName), rowCount).ConfigureAwait(false);
+        EnsureXml(Path.Combine(directory, xmlFileName), rowCount);
         await EnsureExcelAsync(Path.Combine(directory, excelFileName), rowCount).ConfigureAwait(false);
 
         return new WideBenchmarkFixtures(
             new FileSystemSource(directory),
             csvFileName,
             jsonFileName,
+            xmlFileName,
             excelFileName);
     }
 
@@ -351,6 +385,36 @@ internal sealed record WideBenchmarkFixtures(
 
             writer.WriteEndArray();
             await writer.FlushAsync().ConfigureAwait(false);
+        }
+
+        File.Move(tempPath, path, overwrite: true);
+    }
+
+    private static void EnsureXml(string path, int rowCount)
+    {
+        if (File.Exists(path))
+        {
+            return;
+        }
+
+        var tempPath = path + ".tmp";
+        using (var writer = XmlWriter.Create(
+                   tempPath,
+                   new XmlWriterSettings
+                   {
+                       Encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                       Indent = false
+                   }))
+        {
+            writer.WriteStartDocument();
+            writer.WriteStartElement("rows");
+            for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+            {
+                WideBenchmarkDataSet.WriteXmlRow(writer, rowIndex);
+            }
+
+            writer.WriteEndElement();
+            writer.WriteEndDocument();
         }
 
         File.Move(tempPath, path, overwrite: true);
@@ -470,6 +534,23 @@ internal static class WideBenchmarkDataSet
         }
 
         writer.WriteEndObject();
+    }
+
+    public static void WriteXmlRow(XmlWriter writer, int rowIndex)
+    {
+        writer.WriteStartElement("row");
+        for (var ordinal = 0; ordinal < Columns.Length; ordinal++)
+        {
+            var value = GetTextValue(rowIndex, ordinal);
+            if (value == DBNull.Value)
+            {
+                continue;
+            }
+
+            writer.WriteElementString(Columns[ordinal], (string)value);
+        }
+
+        writer.WriteEndElement();
     }
 
     public static object GetTypedValue(int rowIndex, int ordinal)

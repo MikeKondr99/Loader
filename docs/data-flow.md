@@ -24,7 +24,7 @@ sequenceDiagram
 
 Источник описывает место и способ доступа:
 
-- `FileSystemSource` для файловых провайдеров CSV и Excel.
+- `FileSystemSource` для файловых провайдеров CSV, Excel, JSON, XML и QVD.
 - `ConnectionStringSource` для DB-провайдеров Postgres, ClickHouse, Microsoft SQL Server и Oracle.
 
 Позже можно добавлять новые источники, не меняя смысл провайдера:
