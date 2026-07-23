@@ -1,3 +1,5 @@
+using Loader.Lang.Expressions;
+
 namespace Loader.Lang.Statements;
 
 /// <summary>
@@ -21,4 +23,9 @@ public sealed record LoadStatement : Statement
     /// Provider/source options из части <c>(csv, delimiter=',')</c>.
     /// </summary>
     public required List<LoadOption> Options { get; init; }
+
+    /// <summary>
+    /// Необязательный фильтр строк из части <c>WHERE expr</c>.
+    /// </summary>
+    public Expr? Where { get; init; }
 }

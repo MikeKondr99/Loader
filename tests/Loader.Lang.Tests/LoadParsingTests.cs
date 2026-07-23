@@ -14,6 +14,7 @@ public sealed class LoadParsingTests
         await Assert.That(load.Fields).IsNull();
         await Assert.That(load.Source).IsEqualTo("orders.csv");
         await Assert.That(load.Options).IsEmpty();
+        await Assert.That(load.Where).IsNull();
     }
 
     [Test]
@@ -193,6 +194,32 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [Arguments("WHERE amount > 100", ">")]
+    [Arguments("where amount > 100 and active", "and")]
+    [Arguments("WhErE city = 'Moscow' or city = 'London'", "or")]
+    [DisplayName("LOAD WHERE разбирает expression после source")]
+    public async Task Load_where_parses_expression(string where, string rootFunction)
+    {
+        var load = ParseLoad($"LOAD id FROM [orders.csv] {where};");
+
+        await Assert.That(load.Where).IsNotNull();
+        await Assert.That(load.Where).IsTypeOf<FuncExpr>();
+        await Assert.That(((FuncExpr)load.Where!).Name).IsEqualTo(rootFunction);
+    }
+
+    [Test]
+    [DisplayName("LOAD WHERE работает после source options")]
+    public async Task Load_where_after_source_options()
+    {
+        var load = ParseLoad("LOAD id FROM [orders.csv] (csv, header=true) WHERE active = true;");
+
+        await Assert.That(load.Options).Count().IsEqualTo(2);
+        await Assert.That(load.Where).IsNotNull();
+        await Assert.That(load.Where).IsTypeOf<FuncExpr>();
+        await Assert.That(((FuncExpr)load.Where!).Name).IsEqualTo("=");
+    }
+
+    [Test]
     [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=name);")]
     [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=null);")]
     [Arguments("LOAD id AS id FROM [orders.csv] (csv delimiter=',');")]
@@ -224,6 +251,10 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=null);")]
     [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=name);")]
     [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=',',); extra")]
+    [Arguments("LOAD id WHERE active FROM [orders.csv];")]
+    [Arguments("LOAD id FROM [orders.csv] WHERE;")]
+    [Arguments("LOAD id FROM [orders.csv] WHERE amount > 10 WHERE active;")]
+    [Arguments("LOAD id FROM [orders.csv] WHERE amount > 10 (csv);")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

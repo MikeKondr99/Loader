@@ -67,11 +67,15 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 3. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
         var options = VisitSourceOptions(context.source_options());
 
+        // 4. WHERE необязателен и хранится как обычное expression tree.
+        var where = VisitLoadWhere(context.load_where());
+
         return new LoadStatement
         {
             Fields = fields,
             Source = source,
-            Options = options
+            Options = options,
+            Where = where
         };
     }
 
@@ -138,6 +142,22 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         // 2. Options сохраняем в исходном порядке, чтобы provider resolver мог читать marker первым.
         return context.option_list().load_option().Select(VisitLoadOption).ToList();
+    }
+
+    /// <summary>
+    /// Optional WHERE part of LOAD.
+    /// Пример: <c>WHERE amount &gt; 0 AND active</c>.
+    /// </summary>
+    private Expr? VisitLoadWhere(LangParser.Load_whereContext? context)
+    {
+        // 1. WHERE отсутствует: LOAD читает все строки source.
+        if (context is null)
+        {
+            return null;
+        }
+
+        // 2. WHERE expression разбирается тем же expression visitor, что и поля LOAD.
+        return expressionParser.Visit(context.expr());
     }
 
     /// <summary>

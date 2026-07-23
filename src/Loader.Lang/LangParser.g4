@@ -17,7 +17,12 @@ statement
 load_statement
     : LOAD load_fields
     FROM BLOCKED_NAME source_options?
+    load_where?
     SEMICOLON
+    ;
+
+load_where
+    : WHERE expr
     ;
 
 source_options

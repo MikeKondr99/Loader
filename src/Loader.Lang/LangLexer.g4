@@ -3,6 +3,7 @@ lexer grammar LangLexer;
 LOAD: [Ll] [Oo] [Aa] [Dd];
 AS: [Aa] [Ss];
 FROM: [Ff] [Rr] [Oo] [Mm];
+WHERE: [Ww] [Hh] [Ee] [Rr] [Ee];
 
 
 AND: [Aa] [Nn] [Dd];
