@@ -1,4 +1,5 @@
 using Loader.Core.Sources;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
 
@@ -11,11 +12,13 @@ public sealed class ScriptContextTests
         var context = new ScriptContext
         {
             FileStorage = fileStorage,
-            TargetConnectionString = "Host=localhost;Database=loader"
+            TargetConnectionString = "Host=localhost;Database=loader",
+            Logger = NullLogger.Instance
         };
 
         await Assert.That(context.FileStorage).IsSameReferenceAs(fileStorage);
         await Assert.That(context.TargetConnectionString).IsEqualTo("Host=localhost;Database=loader");
+        await Assert.That(context.Logger).IsSameReferenceAs(NullLogger.Instance);
         await Assert.That(context.LoadedTables).IsEmpty();
     }
 
@@ -47,7 +50,8 @@ public sealed class ScriptContextTests
         return new ScriptContext
         {
             FileStorage = new StubFileSource(),
-            TargetConnectionString = "Host=localhost"
+            TargetConnectionString = "Host=localhost",
+            Logger = NullLogger.Instance
         };
     }
 

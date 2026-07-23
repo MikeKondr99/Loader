@@ -1,4 +1,5 @@
 using Loader.Core.Sources;
+using Microsoft.Extensions.Logging;
 
 namespace Loader.Script;
 
@@ -21,6 +22,11 @@ public sealed class ScriptContext
     /// ClickHouse connection string, куда выполнение script пишет финальные таблицы.
     /// </summary>
     public required string TargetConnectionString { get; init; }
+
+    /// <summary>
+    /// Logger выполнения script.
+    /// </summary>
+    public required ILogger Logger { get; init; }
 
     /// <summary>
     /// Финальные таблицы, которые script execution уже успешно создал.
