@@ -179,12 +179,12 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// Optional GROUP BY part of LOAD.
     /// Пример: <c>GROUP BY city, created.Date()</c>.
     /// </summary>
-    private List<Expr> VisitLoadGroupBy(LangParser.Load_group_byContext? context)
+    private List<Expr>? VisitLoadGroupBy(LangParser.Load_group_byContext? context)
     {
         // 1. GROUP BY отсутствует: LOAD не выполняет группировку.
         if (context is null)
         {
-            return [];
+            return null;
         }
 
         // 2. Expressions группировки сохраняются в исходном порядке.
@@ -195,12 +195,12 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// Optional ORDER BY part of LOAD.
     /// Пример: <c>ORDER BY amount DESC, city ASC</c>.
     /// </summary>
-    private List<LoadOrderField> VisitLoadOrderBy(LangParser.Load_order_byContext? context)
+    private List<LoadOrderField>? VisitLoadOrderBy(LangParser.Load_order_byContext? context)
     {
         // 1. ORDER BY отсутствует: порядок строк остается provider/source-native.
         if (context is null)
         {
-            return [];
+            return null;
         }
 
         // 2. Поля сортировки сохраняются в исходном порядке.

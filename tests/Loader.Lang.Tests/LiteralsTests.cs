@@ -17,10 +17,32 @@ public sealed class LiteralsTests
     [Arguments("[true]", "true")]
     [Arguments("[false]", "false")]
     [Arguments("[and]", "and")]
+    [Arguments("[where]", "where")]
+    [Arguments("[limit]", "limit")]
     public async Task NameLiteral(string expr, string expected)
     {
         var e = Parse(expr);
         await Assert.That(e.Equivalent(new NameExpr(expected))).IsTrue();
+    }
+
+    [Test]
+    [Arguments("load")]
+    [Arguments("as")]
+    [Arguments("from")]
+    [Arguments("where")]
+    [Arguments("group")]
+    [Arguments("order")]
+    [Arguments("by")]
+    [Arguments("asc")]
+    [Arguments("desc")]
+    [Arguments("limit")]
+    [Arguments("offset")]
+    [DisplayName("Expression keyword без квадратных скобок не парсится как имя")]
+    public async Task Keyword_is_not_name_literal_without_blocked_name(string input)
+    {
+        var result = Expr.Parse(input);
+
+        await Assert.That(result.IsSuccess).IsFalse();
     }
 
     [Test]

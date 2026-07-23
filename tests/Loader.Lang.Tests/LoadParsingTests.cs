@@ -15,8 +15,8 @@ public sealed class LoadParsingTests
         await Assert.That(load.Source).IsEqualTo("orders.csv");
         await Assert.That(load.Options).IsEmpty();
         await Assert.That(load.Where).IsNull();
-        await Assert.That(load.GroupBy).IsEmpty();
-        await Assert.That(load.OrderBy).IsEmpty();
+        await Assert.That(load.GroupBy).IsNull();
+        await Assert.That(load.OrderBy).IsNull();
         await Assert.That(load.Limit).IsNull();
         await Assert.That(load.Offset).IsNull();
     }
@@ -232,9 +232,9 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad($"LOAD city FROM [orders.csv] {groupBy};");
 
-        await Assert.That(load.GroupBy).Count().IsEqualTo(expectedCount);
-        await Assert.That(load.GroupBy[0]).IsTypeOf<NameExpr>();
-        await Assert.That(((NameExpr)load.GroupBy[0]).Value).IsEqualTo("city");
+        await Assert.That(load.GroupBy!).Count().IsEqualTo(expectedCount);
+        await Assert.That(load.GroupBy![0]).IsTypeOf<NameExpr>();
+        await Assert.That(((NameExpr)load.GroupBy![0]).Value).IsEqualTo("city");
     }
 
     [Test]
@@ -244,10 +244,10 @@ public sealed class LoadParsingTests
         var load = ParseLoad("LOAD city FROM [orders.csv] WHERE active = true GROUP BY city ORDER BY city DESC;");
 
         await Assert.That(load.Where).IsNotNull();
-        await Assert.That(load.GroupBy).Count().IsEqualTo(1);
-        await Assert.That(((NameExpr)load.GroupBy[0]).Value).IsEqualTo("city");
-        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
-        await Assert.That(load.OrderBy[0].Direction).IsEqualTo(LoadOrderDirection.Descending);
+        await Assert.That(load.GroupBy!).Count().IsEqualTo(1);
+        await Assert.That(((NameExpr)load.GroupBy![0]).Value).IsEqualTo("city");
+        await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy![0].Direction).IsEqualTo(LoadOrderDirection.Descending);
     }
 
     [Test]
@@ -261,10 +261,10 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad($"LOAD id FROM [orders.csv] {orderBy};");
 
-        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
-        await Assert.That(load.OrderBy[0].Direction).IsEqualTo(expectedDirection);
-        await Assert.That(load.OrderBy[0].Expression).IsTypeOf<NameExpr>();
-        await Assert.That(((NameExpr)load.OrderBy[0].Expression).Value).IsEqualTo("amount");
+        await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy![0].Direction).IsEqualTo(expectedDirection);
+        await Assert.That(load.OrderBy![0].Expression).IsTypeOf<NameExpr>();
+        await Assert.That(((NameExpr)load.OrderBy![0].Expression).Value).IsEqualTo("amount");
     }
 
     [Test]
@@ -273,13 +273,13 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad("LOAD id FROM [orders.csv] ORDER BY city ASC, amount * 2 DESC, id,;");
 
-        await Assert.That(load.OrderBy).Count().IsEqualTo(3);
-        await Assert.That(((NameExpr)load.OrderBy[0].Expression).Value).IsEqualTo("city");
-        await Assert.That(load.OrderBy[0].Direction).IsEqualTo(LoadOrderDirection.Ascending);
-        await Assert.That(load.OrderBy[1].Expression).IsTypeOf<FuncExpr>();
-        await Assert.That(load.OrderBy[1].Direction).IsEqualTo(LoadOrderDirection.Descending);
-        await Assert.That(((NameExpr)load.OrderBy[2].Expression).Value).IsEqualTo("id");
-        await Assert.That(load.OrderBy[2].Direction).IsEqualTo(LoadOrderDirection.Ascending);
+        await Assert.That(load.OrderBy!).Count().IsEqualTo(3);
+        await Assert.That(((NameExpr)load.OrderBy![0].Expression).Value).IsEqualTo("city");
+        await Assert.That(load.OrderBy![0].Direction).IsEqualTo(LoadOrderDirection.Ascending);
+        await Assert.That(load.OrderBy![1].Expression).IsTypeOf<FuncExpr>();
+        await Assert.That(load.OrderBy![1].Direction).IsEqualTo(LoadOrderDirection.Descending);
+        await Assert.That(((NameExpr)load.OrderBy![2].Expression).Value).IsEqualTo("id");
+        await Assert.That(load.OrderBy![2].Direction).IsEqualTo(LoadOrderDirection.Ascending);
     }
 
     [Test]
@@ -289,8 +289,8 @@ public sealed class LoadParsingTests
         var load = ParseLoad("LOAD id FROM [orders.csv] WHERE active = true ORDER BY amount DESC;");
 
         await Assert.That(load.Where).IsNotNull();
-        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
-        await Assert.That(load.OrderBy[0].Direction).IsEqualTo(LoadOrderDirection.Descending);
+        await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy![0].Direction).IsEqualTo(LoadOrderDirection.Descending);
     }
 
     [Test]
@@ -323,8 +323,8 @@ public sealed class LoadParsingTests
             """);
 
         await Assert.That(load.Where).IsNotNull();
-        await Assert.That(load.GroupBy).Count().IsEqualTo(1);
-        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
+        await Assert.That(load.GroupBy!).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
         await Assert.That(load.Limit).IsEqualTo(10);
         await Assert.That(load.Offset).IsEqualTo(20);
     }

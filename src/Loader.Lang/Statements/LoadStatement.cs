@@ -30,14 +30,14 @@ public sealed record LoadStatement : Statement
     public Expr? Where { get; init; }
 
     /// <summary>
-    /// Поля группировки из части <c>GROUP BY</c>. Пустой список означает отсутствие группировки.
+    /// Поля группировки из части <c>GROUP BY</c>. <c>null</c> означает отсутствие группировки.
     /// </summary>
-    public required List<Expr> GroupBy { get; init; }
+    public required List<Expr>? GroupBy { get; init; }
 
     /// <summary>
-    /// Поля сортировки из части <c>ORDER BY</c>. Пустой список означает отсутствие сортировки.
+    /// Поля сортировки из части <c>ORDER BY</c>. <c>null</c> означает отсутствие сортировки.
     /// </summary>
-    public required List<LoadOrderField> OrderBy { get; init; }
+    public required List<LoadOrderField>? OrderBy { get; init; }
 
     /// <summary>
     /// Ограничение количества строк из части <c>LIMIT 100</c>. <c>null</c> означает отсутствие ограничения.
