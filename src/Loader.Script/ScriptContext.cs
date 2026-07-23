@@ -9,7 +9,7 @@ namespace Loader.Script;
 /// </summary>
 public sealed class ScriptContext
 {
-    private readonly List<string> _loadedTables = [];
+    private readonly List<LoadedTable> _loadedTables = [];
 
     /// <summary>
     /// Файловая абстракция, через которую file providers будут открывать источники из script.
@@ -23,17 +23,12 @@ public sealed class ScriptContext
     public required string TargetConnectionString { get; init; }
 
     /// <summary>
-    /// Имена финальных таблиц, которые script execution уже успешно создал.
+    /// Финальные таблицы, которые script execution уже успешно создал.
     /// </summary>
-    public IReadOnlyList<string> LoadedTables => _loadedTables;
+    public IReadOnlyList<LoadedTable> LoadedTables => _loadedTables;
 
-    public void AddLoadedTable(string tableName)
+    public void AddLoadedTable(LoadedTable table)
     {
-        if (tableName.Trim().Length == 0)
-        {
-            throw new ArgumentException("Table name must not be empty.", nameof(tableName));
-        }
-
-        _loadedTables.Add(tableName);
+        _loadedTables.Add(table);
     }
 }

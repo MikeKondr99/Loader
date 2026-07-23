@@ -20,27 +20,26 @@ public sealed class ScriptContextTests
     }
 
     [Test]
-    public async Task Context_accumulates_loaded_table_names_in_order()
+    public async Task Context_accumulates_loaded_tables_in_order()
     {
         var context = CreateContext();
 
-        context.AddLoadedTable("orders");
-        context.AddLoadedTable("customers");
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = "orders",
+            RowCount = 10,
+            Fields = []
+        });
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = null,
+            Fields = []
+        });
 
         await Assert.That(context.LoadedTables).Count().IsEqualTo(2);
-        await Assert.That(context.LoadedTables[0]).IsEqualTo("orders");
-        await Assert.That(context.LoadedTables[1]).IsEqualTo("customers");
-    }
-
-    [Test]
-    [Arguments("")]
-    [Arguments("   ")]
-    public async Task Context_rejects_empty_loaded_table_name(string tableName)
-    {
-        var context = CreateContext();
-
-        await Assert.That(() => context.AddLoadedTable(tableName))
-            .ThrowsExactly<ArgumentException>();
+        await Assert.That(context.LoadedTables[0].Name).IsEqualTo("orders");
+        await Assert.That(context.LoadedTables[0].RowCount).IsEqualTo(10);
+        await Assert.That(context.LoadedTables[1].Name).IsNull();
     }
 
     private static ScriptContext CreateContext()
