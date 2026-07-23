@@ -4,6 +4,7 @@ LOAD: [Ll] [Oo] [Aa] [Dd];
 AS: [Aa] [Ss];
 FROM: [Ff] [Rr] [Oo] [Mm];
 WHERE: [Ww] [Hh] [Ee] [Rr] [Ee];
+GROUP: [Gg] [Rr] [Oo] [Uu] [Pp];
 ORDER: [Oo] [Rr] [Dd] [Ee] [Rr];
 BY: [Bb] [Yy];
 ASC: [Aa] [Ss] [Cc];

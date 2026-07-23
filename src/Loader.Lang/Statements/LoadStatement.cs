@@ -30,6 +30,11 @@ public sealed record LoadStatement : Statement
     public Expr? Where { get; init; }
 
     /// <summary>
+    /// Поля группировки из части <c>GROUP BY</c>. Пустой список означает отсутствие группировки.
+    /// </summary>
+    public required List<Expr> GroupBy { get; init; }
+
+    /// <summary>
     /// Поля сортировки из части <c>ORDER BY</c>. Пустой список означает отсутствие сортировки.
     /// </summary>
     public required List<LoadOrderField> OrderBy { get; init; }

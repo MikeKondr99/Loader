@@ -15,6 +15,7 @@ public sealed class LoadParsingTests
         await Assert.That(load.Source).IsEqualTo("orders.csv");
         await Assert.That(load.Options).IsEmpty();
         await Assert.That(load.Where).IsNull();
+        await Assert.That(load.GroupBy).IsEmpty();
         await Assert.That(load.OrderBy).IsEmpty();
     }
 
@@ -221,6 +222,33 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [Arguments("GROUP BY city", 1)]
+    [Arguments("group by city, amount", 2)]
+    [Arguments("GrOuP By city, created.Date(),", 2)]
+    [DisplayName("LOAD GROUP BY разбирает список expressions после source или WHERE")]
+    public async Task Load_group_by_parses_expression_list(string groupBy, int expectedCount)
+    {
+        var load = ParseLoad($"LOAD city FROM [orders.csv] {groupBy};");
+
+        await Assert.That(load.GroupBy).Count().IsEqualTo(expectedCount);
+        await Assert.That(load.GroupBy[0]).IsTypeOf<NameExpr>();
+        await Assert.That(((NameExpr)load.GroupBy[0]).Value).IsEqualTo("city");
+    }
+
+    [Test]
+    [DisplayName("LOAD GROUP BY работает после WHERE и перед ORDER BY")]
+    public async Task Load_group_by_after_where_and_before_order_by()
+    {
+        var load = ParseLoad("LOAD city FROM [orders.csv] WHERE active = true GROUP BY city ORDER BY city DESC;");
+
+        await Assert.That(load.Where).IsNotNull();
+        await Assert.That(load.GroupBy).Count().IsEqualTo(1);
+        await Assert.That(((NameExpr)load.GroupBy[0]).Value).IsEqualTo("city");
+        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy[0].Direction).IsEqualTo(LoadOrderDirection.Descending);
+    }
+
+    [Test]
     [Arguments("ORDER BY amount", LoadOrderDirection.Ascending)]
     [Arguments("ORDER BY amount ASC", LoadOrderDirection.Ascending)]
     [Arguments("ORDER BY amount asc", LoadOrderDirection.Ascending)]
@@ -304,6 +332,11 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM [orders.csv] ORDER BY id,, name;")]
     [Arguments("LOAD id FROM [orders.csv] ORDER BY id WHERE active;")]
     [Arguments("LOAD id FROM [orders.csv] ORDER id;")]
+    [Arguments("LOAD id FROM [orders.csv] GROUP;")]
+    [Arguments("LOAD id FROM [orders.csv] GROUP BY;")]
+    [Arguments("LOAD id FROM [orders.csv] GROUP BY id,, name;")]
+    [Arguments("LOAD id FROM [orders.csv] GROUP BY id WHERE active;")]
+    [Arguments("LOAD id FROM [orders.csv] ORDER BY id GROUP BY id;")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

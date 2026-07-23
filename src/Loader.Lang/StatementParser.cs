@@ -70,7 +70,10 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 4. WHERE необязателен и хранится как обычное expression tree.
         var where = VisitLoadWhere(context.load_where());
 
-        // 5. ORDER BY необязателен и хранит список expression с направлением сортировки.
+        // 5. GROUP BY необязателен и хранит список expression группировки.
+        var groupBy = VisitLoadGroupBy(context.load_group_by());
+
+        // 6. ORDER BY необязателен и хранит список expression с направлением сортировки.
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
         return new LoadStatement
@@ -79,6 +82,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Source = source,
             Options = options,
             Where = where,
+            GroupBy = groupBy,
             OrderBy = orderBy
         };
     }
@@ -162,6 +166,22 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         // 2. WHERE expression разбирается тем же expression visitor, что и поля LOAD.
         return expressionParser.Visit(context.expr());
+    }
+
+    /// <summary>
+    /// Optional GROUP BY part of LOAD.
+    /// Пример: <c>GROUP BY city, created.Date()</c>.
+    /// </summary>
+    private List<Expr> VisitLoadGroupBy(LangParser.Load_group_byContext? context)
+    {
+        // 1. GROUP BY отсутствует: LOAD не выполняет группировку.
+        if (context is null)
+        {
+            return [];
+        }
+
+        // 2. Expressions группировки сохраняются в исходном порядке.
+        return context.expr().Select(expressionParser.Visit).ToList();
     }
 
     /// <summary>

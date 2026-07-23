@@ -18,12 +18,17 @@ load_statement
     : LOAD load_fields
     FROM BLOCKED_NAME source_options?
     load_where?
+    load_group_by?
     load_order_by?
     SEMICOLON
     ;
 
 load_where
     : WHERE expr
+    ;
+
+load_group_by
+    : GROUP BY expr (COMMA expr)* COMMA?
     ;
 
 load_order_by
