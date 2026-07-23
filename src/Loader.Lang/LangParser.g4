@@ -20,6 +20,7 @@ load_statement
     load_where?
     load_group_by?
     load_order_by?
+    load_limit?
     SEMICOLON
     ;
 
@@ -42,6 +43,14 @@ order_by_field
 order_direction
     : ASC
     | DESC
+    ;
+
+load_limit
+    : LIMIT INTEGER load_offset?
+    ;
+
+load_offset
+    : OFFSET INTEGER
     ;
 
 source_options

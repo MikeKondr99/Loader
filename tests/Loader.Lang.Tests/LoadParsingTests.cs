@@ -17,6 +17,8 @@ public sealed class LoadParsingTests
         await Assert.That(load.Where).IsNull();
         await Assert.That(load.GroupBy).IsEmpty();
         await Assert.That(load.OrderBy).IsEmpty();
+        await Assert.That(load.Limit).IsNull();
+        await Assert.That(load.Offset).IsNull();
     }
 
     [Test]
@@ -292,6 +294,42 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [Arguments("LIMIT 10", 10L, null)]
+    [Arguments("limit 10", 10L, null)]
+    [Arguments("LIMIT 10 OFFSET 20", 10L, 20L)]
+    [Arguments("LiMiT 10 OfFsEt 20", 10L, 20L)]
+    [DisplayName("LOAD LIMIT OFFSET разбирается после source clauses")]
+    public async Task Load_limit_offset_parses_integer_values(string clause, long expectedLimit, long? expectedOffset)
+    {
+        var load = ParseLoad($"LOAD id FROM [orders.csv] {clause};");
+
+        await Assert.That(load.Limit).IsEqualTo(expectedLimit);
+        await Assert.That(load.Offset).IsEqualTo(expectedOffset);
+    }
+
+    [Test]
+    [DisplayName("LOAD LIMIT OFFSET работает после WHERE GROUP BY ORDER BY")]
+    public async Task Load_limit_offset_after_where_group_by_order_by()
+    {
+        var load = ParseLoad(
+            """
+            LOAD city
+            FROM [orders.csv]
+            WHERE active = true
+            GROUP BY city
+            ORDER BY city DESC
+            LIMIT 10
+            OFFSET 20;
+            """);
+
+        await Assert.That(load.Where).IsNotNull();
+        await Assert.That(load.GroupBy).Count().IsEqualTo(1);
+        await Assert.That(load.OrderBy).Count().IsEqualTo(1);
+        await Assert.That(load.Limit).IsEqualTo(10);
+        await Assert.That(load.Offset).IsEqualTo(20);
+    }
+
+    [Test]
     [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=name);")]
     [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=null);")]
     [Arguments("LOAD id AS id FROM [orders.csv] (csv delimiter=',');")]
@@ -337,6 +375,15 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM [orders.csv] GROUP BY id,, name;")]
     [Arguments("LOAD id FROM [orders.csv] GROUP BY id WHERE active;")]
     [Arguments("LOAD id FROM [orders.csv] ORDER BY id GROUP BY id;")]
+    [Arguments("LOAD id FROM [orders.csv] OFFSET 10;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10.5;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT -1;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 OFFSET;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 OFFSET 2.5;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 LIMIT 20;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 WHERE active;")]
+    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 ORDER BY id;")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

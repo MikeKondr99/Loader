@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
@@ -76,6 +77,10 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 6. ORDER BY необязателен и хранит список expression с направлением сортировки.
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
+        // 7. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
+        var limit = VisitLoadLimit(context.load_limit());
+        var offset = VisitLoadOffset(context.load_limit()?.load_offset());
+
         return new LoadStatement
         {
             Fields = fields,
@@ -83,7 +88,9 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Options = options,
             Where = where,
             GroupBy = groupBy,
-            OrderBy = orderBy
+            OrderBy = orderBy,
+            Limit = limit,
+            Offset = offset
         };
     }
 
@@ -215,6 +222,38 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Expression = expressionParser.Visit(context.expr()),
             Direction = direction
         };
+    }
+
+    /// <summary>
+    /// Optional LIMIT part of LOAD.
+    /// Пример: <c>LIMIT 100</c>.
+    /// </summary>
+    private static long? VisitLoadLimit(LangParser.Load_limitContext? context)
+    {
+        // 1. LIMIT отсутствует: ограничение количества строк не задано.
+        if (context is null)
+        {
+            return null;
+        }
+
+        // 2. LIMIT принимает только INTEGER, без expression, чтобы не смешивать синтаксис с вычислениями.
+        return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// Optional OFFSET part of LOAD.
+    /// Пример: <c>OFFSET 100</c>.
+    /// </summary>
+    private static long? VisitLoadOffset(LangParser.Load_offsetContext? context)
+    {
+        // 1. OFFSET отсутствует: чтение начинается с первой строки результата.
+        if (context is null)
+        {
+            return null;
+        }
+
+        // 2. OFFSET принимает только INTEGER и по грамматике разрешен только после LIMIT.
+        return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
     }
 
     /// <summary>

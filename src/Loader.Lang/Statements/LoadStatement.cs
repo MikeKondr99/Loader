@@ -38,4 +38,14 @@ public sealed record LoadStatement : Statement
     /// Поля сортировки из части <c>ORDER BY</c>. Пустой список означает отсутствие сортировки.
     /// </summary>
     public required List<LoadOrderField> OrderBy { get; init; }
+
+    /// <summary>
+    /// Ограничение количества строк из части <c>LIMIT 100</c>. <c>null</c> означает отсутствие ограничения.
+    /// </summary>
+    public long? Limit { get; init; }
+
+    /// <summary>
+    /// Смещение строк из части <c>OFFSET 100</c>. Допускается только после <c>LIMIT</c>.
+    /// </summary>
+    public long? Offset { get; init; }
 }

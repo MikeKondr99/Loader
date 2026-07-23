@@ -9,6 +9,8 @@ ORDER: [Oo] [Rr] [Dd] [Ee] [Rr];
 BY: [Bb] [Yy];
 ASC: [Aa] [Ss] [Cc];
 DESC: [Dd] [Ee] [Ss] [Cc];
+LIMIT: [Ll] [Ii] [Mm] [Ii] [Tt];
+OFFSET: [Oo] [Ff] [Ff] [Ss] [Ee] [Tt];
 
 
 AND: [Aa] [Nn] [Dd];
