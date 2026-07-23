@@ -18,11 +18,25 @@ load_statement
     : LOAD load_fields
     FROM BLOCKED_NAME source_options?
     load_where?
+    load_order_by?
     SEMICOLON
     ;
 
 load_where
     : WHERE expr
+    ;
+
+load_order_by
+    : ORDER BY order_by_field (COMMA order_by_field)* COMMA?
+    ;
+
+order_by_field
+    : expr order_direction?
+    ;
+
+order_direction
+    : ASC
+    | DESC
     ;
 
 source_options

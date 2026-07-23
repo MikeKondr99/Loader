@@ -28,4 +28,9 @@ public sealed record LoadStatement : Statement
     /// Необязательный фильтр строк из части <c>WHERE expr</c>.
     /// </summary>
     public Expr? Where { get; init; }
+
+    /// <summary>
+    /// Поля сортировки из части <c>ORDER BY</c>. Пустой список означает отсутствие сортировки.
+    /// </summary>
+    public required List<LoadOrderField> OrderBy { get; init; }
 }

@@ -70,12 +70,16 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 4. WHERE необязателен и хранится как обычное expression tree.
         var where = VisitLoadWhere(context.load_where());
 
+        // 5. ORDER BY необязателен и хранит список expression с направлением сортировки.
+        var orderBy = VisitLoadOrderBy(context.load_order_by());
+
         return new LoadStatement
         {
             Fields = fields,
             Source = source,
             Options = options,
-            Where = where
+            Where = where,
+            OrderBy = orderBy
         };
     }
 
@@ -158,6 +162,39 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         // 2. WHERE expression разбирается тем же expression visitor, что и поля LOAD.
         return expressionParser.Visit(context.expr());
+    }
+
+    /// <summary>
+    /// Optional ORDER BY part of LOAD.
+    /// Пример: <c>ORDER BY amount DESC, city ASC</c>.
+    /// </summary>
+    private List<LoadOrderField> VisitLoadOrderBy(LangParser.Load_order_byContext? context)
+    {
+        // 1. ORDER BY отсутствует: порядок строк остается provider/source-native.
+        if (context is null)
+        {
+            return [];
+        }
+
+        // 2. Поля сортировки сохраняются в исходном порядке.
+        return context.order_by_field().Select(VisitOrderByField).ToList();
+    }
+
+    /// <summary>
+    /// Одно поле ORDER BY.
+    /// Примеры: <c>amount</c>, <c>amount DESC</c>.
+    /// </summary>
+    private LoadOrderField VisitOrderByField(LangParser.Order_by_fieldContext context)
+    {
+        var direction = context.order_direction()?.DESC() is not null
+            ? LoadOrderDirection.Descending
+            : LoadOrderDirection.Ascending;
+
+        return new LoadOrderField
+        {
+            Expression = expressionParser.Visit(context.expr()),
+            Direction = direction
+        };
     }
 
     /// <summary>
