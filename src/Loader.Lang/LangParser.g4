@@ -7,6 +7,9 @@ start:
 full_statement:
     statement EOF;
 
+full_script:
+    statement+ EOF;
+
 
 statement
     : load_statement;

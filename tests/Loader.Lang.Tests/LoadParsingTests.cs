@@ -3,7 +3,7 @@ using Loader.Lang.Statements;
 
 namespace Loader.Lang.Tests;
 
-public sealed class StatementParsingTests
+public sealed class LoadParsingTests
 {
     [Test]
     [DisplayName("LOAD * создает statement со всеми полями")]
