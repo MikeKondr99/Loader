@@ -9,14 +9,21 @@
 // FROM [iris.csv]();
 
 
-LOAD 
-  If(active = 'true', 'Активен', 'Не активен') as active,
-  city_low_card as city,
-  city_low_card.Substring(city_low_card.Index('_') + 1) as city_id 
-FROM 
-[.\benchmarks\Loader.Benchmarks\Fixtures\Generated\wide-v2-1000000.csv]
-;
+// LOAD 
+//   *
+// FROM 
+// [.\benchmarks\Loader.Benchmarks\Fixtures\Generated\src_brd_data_qpr_testoutmem.qvd];
 
+// LOAD 
+//   *
+// FROM 
+// [.\benchmarks\Loader.Benchmarks\Fixtures\Generated\wide-v2-1000000.csv];
+
+LOAD 
+  *
+FROM 
+[.\benchmarks\Loader.Benchmarks\Fixtures\Generated\wide-v2-1000000.xml]
+(table='row');
 
 // LOAD
 //     database,

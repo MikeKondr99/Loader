@@ -30,7 +30,15 @@ public sealed class ClickHouseWriter
             await using var command = connection.CreateCommand();
             command.CommandText = createSql;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new DbExecutionException("clickhouse", createSql, ex);
+        }
 
+        var insertSql = BuildInsertContextSql(reader, options);
+        try
+        {
             // 2. Передаем поток строк в ClickHouseBulkCopy, который пишет через binary protocol.
             using var bulkCopy = new ClickHouseBulkCopy(connection)
             {
@@ -45,7 +53,7 @@ public sealed class ClickHouseWriter
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw new DbExecutionException("clickhouse", createSql, ex);
+            throw new DbExecutionException("clickhouse", insertSql, ex);
         }
     }
 
@@ -56,5 +64,11 @@ public sealed class ClickHouseWriter
     {
         var typeResolver = new ClickHouseColumnTypeResolver(options);
         return ClickHouseSql.CreateTable(reader.DataSchema, meta, options, typeResolver);
+    }
+
+    private static string BuildInsertContextSql(DomainDataReader reader, ClickHouseWriteOptions options)
+    {
+        var columns = string.Join(", ", reader.DataSchema.Fields.Select(static field => $"`{field.Name}`"));
+        return $"INSERT INTO {options.TableName.ToSql()} ({columns})";
     }
 }

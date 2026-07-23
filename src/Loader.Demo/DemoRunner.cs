@@ -12,6 +12,9 @@ namespace Loader.Demo;
 
 internal sealed partial class DemoRunner
 {
+    private const long ProgressInterval = 100_000;
+    private const int DebugExportLimit = 1_000;
+
     private readonly ClickHouseSettings _settings;
     private readonly DemoLog _log;
     private readonly ConnectionStringSource _clickHouseSource;
@@ -78,17 +81,35 @@ internal sealed partial class DemoRunner
             var rawReader = await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);
             var physicalReader = new PhysicalColumnDataReader(rawReader);
             var originalNames = physicalReader.OriginalNames.ToArray();
-            await using var stageReader = physicalReader.Normalize(
+            await using var normalizedStageReader = physicalReader.Normalize(
                 new NormalizeOptions { Buffer = source.RequiresBuffer });
+            await using var stageReader = new ObservedDomainDataReader(
+                normalizedStageReader,
+                _log,
+                "Загрузка во временную таблицу",
+                ProgressInterval);
             var stageSchema = stageReader.DataSchema;
 
             stageCreated = true;
-            await _writer.WriteAsync(
-                _clickHouseSource,
-                stageReader,
-                new ClickHouseWriteOptions { TableName = stageTable },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            stagingOperation.Complete("Данные загружены во временную таблицу");
+            try
+            {
+                await _writer.WriteAsync(
+                    _clickHouseSource,
+                    stageReader,
+                    new ClickHouseWriteOptions { TableName = stageTable },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                var memory = stageReader.CaptureMemory();
+                _log.Error(
+                    $"Загрузка во временную таблицу остановилась. Строк прочитано: {stageReader.RowsRead:N0}. Память: {memory.ToLogString()}");
+                throw;
+            }
+
+            var stageMemory = stageReader.CaptureMemory();
+            stagingOperation.Complete(
+                $"Данные загружены во временную таблицу. Строк: {stageReader.RowsRead:N0}. Память: {stageMemory.ToLogString()}");
 
             // 3. LOAD fields становятся SELECT над staging, а его reader записывается в final table.
             var loadOperation = _log.Begin("Применяю LOAD и сохраняю итоговую таблицу");
@@ -97,13 +118,31 @@ internal sealed partial class DemoRunner
                 _clickHouseSource,
                 new SqlTableConfig { Sql = query.Sql },
                 cancellationToken).ConfigureAwait(false);
-            await using var finalReader = queryRawReader.Normalize();
-            await _writer.WriteAsync(
-                _clickHouseSource,
-                finalReader,
-                new ClickHouseWriteOptions { TableName = finalTable },
-                cancellationToken: cancellationToken).ConfigureAwait(false);
-            loadOperation.Complete("LOAD применен, итоговая таблица сохранена");
+            await using var normalizedFinalReader = queryRawReader.Normalize();
+            await using var finalReader = new ObservedDomainDataReader(
+                normalizedFinalReader,
+                _log,
+                "Загрузка в итоговую таблицу",
+                ProgressInterval);
+            try
+            {
+                await _writer.WriteAsync(
+                    _clickHouseSource,
+                    finalReader,
+                    new ClickHouseWriteOptions { TableName = finalTable },
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                var memory = finalReader.CaptureMemory();
+                _log.Error(
+                    $"Загрузка в итоговую таблицу остановилась. Строк прочитано: {finalReader.RowsRead:N0}. Память: {memory.ToLogString()}");
+                throw;
+            }
+
+            var finalMemory = finalReader.CaptureMemory();
+            loadOperation.Complete(
+                $"LOAD применен, итоговая таблица сохранена. Строк: {finalReader.RowsRead:N0}. Память: {finalMemory.ToLogString()}");
 
             _log.Info($"Итоговая таблица: {finalTable.ToSql()}");
             for (var ordinal = 0; ordinal < query.LogicalNames.Count; ordinal++)
@@ -118,9 +157,9 @@ internal sealed partial class DemoRunner
             var csvPath = Path.Combine(
                 Path.GetDirectoryName(scriptPath) ?? Environment.CurrentDirectory,
                 $"{Path.GetFileNameWithoutExtension(scriptPath)}.result.csv");
-            var csvOperation = _log.Begin($"Экспортирую итоговую таблицу в CSV '{csvPath}'");
+            var csvOperation = _log.Begin($"Экспортирую первые {DebugExportLimit:N0} строк итоговой таблицы в CSV '{csvPath}'");
             await ExportCsvAsync(finalTable, csvPath, cancellationToken).ConfigureAwait(false);
-            csvOperation.Complete("Итоговая таблица экспортирована в CSV");
+            csvOperation.Complete("Первые строки итоговой таблицы экспортированы в CSV");
         }
         finally
         {
@@ -159,7 +198,7 @@ internal sealed partial class DemoRunner
     {
         await using var rawReader = await new ClickHouseProvider().OpenReaderAsync(
             _clickHouseSource,
-            new SqlTableConfig { Sql = $"SELECT * FROM {table.ToSql()}" },
+            new SqlTableConfig { Sql = $"SELECT * FROM {table.ToSql()} LIMIT {DebugExportLimit}" },
             cancellationToken).ConfigureAwait(false);
         await using var reader = rawReader.Normalize();
         await using var output = File.Create(outputPath);

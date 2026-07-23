@@ -19,5 +19,16 @@ try
 catch (Exception ex)
 {
     log.Error($"Ошибка: {ex.Message}");
+    LogInnerErrors(log, ex);
     return 1;
+}
+
+static void LogInnerErrors(DemoLog log, Exception exception)
+{
+    var level = 1;
+    for (var inner = exception.InnerException; inner is not null; inner = inner.InnerException)
+    {
+        log.Error($"Причина {level}: {inner.GetType().Name}: {inner.Message}");
+        level++;
+    }
 }
