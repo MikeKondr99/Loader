@@ -15,13 +15,18 @@ statement
     : load_statement;
 
 load_statement
-    : LOAD load_fields
+    : load_table_name?
+    LOAD load_fields
     FROM BLOCKED_NAME source_options?
     load_where?
     load_group_by?
     load_order_by?
     load_limit?
     SEMICOLON
+    ;
+
+load_table_name
+    : NAME COLON
     ;
 
 load_where

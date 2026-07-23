@@ -9,6 +9,12 @@ namespace Loader.Lang.Statements;
 public sealed record LoadStatement : Statement
 {
     /// <summary>
+    /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.
+    /// <c>null</c> означает, что script execution должен выбрать имя сам.
+    /// </summary>
+    public string? TableName { get; init; }
+
+    /// <summary>
     /// Явно перечисленные поля формы <c>expr AS name</c>.
     /// Если значение <c>null</c>, это форма <c>LOAD *</c>.
     /// </summary>

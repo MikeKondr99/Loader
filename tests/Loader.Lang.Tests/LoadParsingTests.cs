@@ -11,6 +11,7 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad("LOAD * FROM [orders.csv];");
 
+        await Assert.That(load.TableName).IsNull();
         await Assert.That(load.Fields).IsNull();
         await Assert.That(load.Source).IsEqualTo("orders.csv");
         await Assert.That(load.Options).IsEmpty();
@@ -33,6 +34,21 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad(text);
 
+        await Assert.That(load.Fields).IsNull();
+        await Assert.That(load.Source).IsEqualTo("orders.csv");
+    }
+
+    [Test]
+    [Arguments("orders: LOAD * FROM [orders.csv];", "orders")]
+    [Arguments("orders_2026: LOAD * FROM [orders.csv];", "orders_2026")]
+    [Arguments("_orders: LOAD * FROM [orders.csv];", "_orders")]
+    [Arguments("orders : LOAD * FROM [orders.csv];", "orders")]
+    [DisplayName("LOAD table name prefix задает имя результирующей таблицы")]
+    public async Task Load_table_name_prefix_parses_name_before_load(string text, string expectedTableName)
+    {
+        var load = ParseLoad(text);
+
+        await Assert.That(load.TableName).IsEqualTo(expectedTableName);
         await Assert.That(load.Fields).IsNull();
         await Assert.That(load.Source).IsEqualTo("orders.csv");
     }
@@ -384,6 +400,12 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM [orders.csv] LIMIT 10 LIMIT 20;")]
     [Arguments("LOAD id FROM [orders.csv] LIMIT 10 WHERE active;")]
     [Arguments("LOAD id FROM [orders.csv] LIMIT 10 ORDER BY id;")]
+    [Arguments("[orders]: LOAD id FROM [orders.csv];")]
+    [Arguments("where: LOAD id FROM [orders.csv];")]
+    [Arguments("123orders: LOAD id FROM [orders.csv];")]
+    [Arguments("orders-table: LOAD id FROM [orders.csv];")]
+    [Arguments("orders.table: LOAD id FROM [orders.csv];")]
+    [Arguments("orders LOAD id FROM [orders.csv];")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

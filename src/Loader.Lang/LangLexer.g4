@@ -31,6 +31,7 @@ NOT_EQUAL: '!=';
 DOT: '.';
 COMMA: ',';
 SEMICOLON: ';';
+COLON: ':';
 QUOTE: ['] -> pushMode(IN_STRING);
 CURLY_CLOSE: '}' -> popMode;
 

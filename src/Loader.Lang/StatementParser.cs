@@ -59,30 +59,34 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     public override Statement VisitLoad_statement(LangParser.Load_statementContext context)
     {
-        // 1. Разбираем поля LOAD: либо "*", либо список полей.
+        // 1. Table name необязателен и задается только обычным NAME перед LOAD: "orders: LOAD ...".
+        var tableName = VisitLoadTableName(context.load_table_name());
+
+        // 2. Разбираем поля LOAD: либо "*", либо список полей.
         var fields = VisitLoadFields(context.load_fields());
 
-        // 2. Source хранится как blocked name, поэтому снимаем квадратные скобки и escape.
+        // 3. Source хранится как blocked name, поэтому снимаем квадратные скобки и escape.
         var source = UnescapeName(context.BLOCKED_NAME().GetText());
 
-        // 3. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
+        // 4. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
         var options = VisitSourceOptions(context.source_options());
 
-        // 4. WHERE необязателен и хранится как обычное expression tree.
+        // 5. WHERE необязателен и хранится как обычное expression tree.
         var where = VisitLoadWhere(context.load_where());
 
-        // 5. GROUP BY необязателен и хранит список expression группировки.
+        // 6. GROUP BY необязателен и хранит список expression группировки.
         var groupBy = VisitLoadGroupBy(context.load_group_by());
 
-        // 6. ORDER BY необязателен и хранит список expression с направлением сортировки.
+        // 7. ORDER BY необязателен и хранит список expression с направлением сортировки.
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
-        // 7. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
+        // 8. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
         var limit = VisitLoadLimit(context.load_limit());
         var offset = VisitLoadOffset(context.load_limit()?.load_offset());
 
         return new LoadStatement
         {
+            TableName = tableName,
             Fields = fields,
             Source = source,
             Options = options,
@@ -92,6 +96,22 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Limit = limit,
             Offset = offset
         };
+    }
+
+    /// <summary>
+    /// Optional table name prefix before LOAD.
+    /// Пример: <c>orders: LOAD * FROM [orders.csv];</c>.
+    /// </summary>
+    private static string? VisitLoadTableName(LangParser.Load_table_nameContext? context)
+    {
+        // 1. Префикса нет: имя таблицы будет назначено execution-слоем.
+        if (context is null)
+        {
+            return null;
+        }
+
+        // 2. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
+        return context.NAME().GetText();
     }
 
     /// <summary>
