@@ -1,5 +1,4 @@
 using System.Data.Common;
-using Loader.Core.Decorators;
 
 namespace Loader.Core.Decorators;
 
@@ -55,6 +54,16 @@ public static class DbDataReaderExtensions
     public static DomainDataReader AutoCast(this DomainDataReader reader, AutoCastSchema schema)
     {
         return new AutoCastDataReader(reader, schema);
+    }
+
+    public static RenameColumnDataReader RenameColumns(this DbDataReader reader, IReadOnlyList<string> names)
+    {
+        return new RenameColumnDataReader(reader, names);
+    }
+
+    public static RenameColumnDataReader AbstractColumns(this DbDataReader reader)
+    {
+        return new RenameColumnDataReader(reader, AbstractColumnNames.Get(reader.FieldCount));
     }
 
 }
