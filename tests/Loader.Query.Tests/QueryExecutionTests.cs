@@ -118,6 +118,36 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query возвращает nullable boolean SELECT expression как Nullable(Bool) после Normalize")]
+    public async Task Nullable_boolean_select_expression_preserves_null_after_normalize()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("id", DataType.Integer),
+                new InlineField("Age", DataType.Integer, CanBeNull: true)
+            ],
+            [
+                ["1", "25"],
+                ["2", "NULL"],
+                ["3", "35"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = ["Age > 30".As("IsOlder")],
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Select(static row => row["IsOlder"]).ToArray())
+            .IsEquivalentTo((object?[])[false, null, true], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query применяет ORDER BY")]
     public async Task Order_by_query()
     {

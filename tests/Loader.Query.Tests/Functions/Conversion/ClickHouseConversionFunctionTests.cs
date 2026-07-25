@@ -1,4 +1,6 @@
 using Loader.Query.Tests.Infrastructure;
+using Loader.Lang.Expressions;
+using Loader.Query.Models;
 
 namespace Loader.Query.Tests.Functions.Conversion;
 
@@ -77,5 +79,106 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     public Task Date(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [Arguments("RawType(Int('1'))", "Int64")]
+    [Arguments("RawType(Num('1'))", "Decimal(18, 10)")]
+    [Arguments("RawType(Bool('a'))", "Bool")]
+    [DisplayName("ClickHouse conversion casts выбирают non-nullable тип для non-nullable выражений")]
+    public Task Conversion_casts_use_expected_clickhouse_type_for_required_expression(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(NullableConversionTypeCases))]
+    [DisplayName("ClickHouse conversion casts выбирают Nullable тип для nullable выражений")]
+    public async Task Conversion_casts_use_expected_clickhouse_type_for_nullable_expression(
+        DataType sourceType,
+        string sourceValue,
+        string expression,
+        string expectedType)
+    {
+        // Arrange
+        var source = InlineQueryArrange.SingleColumnSource(
+            "x",
+            sourceType,
+            [sourceValue],
+            canBeNull: true);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = [Select("type", $"RawType({expression})")]
+        };
+
+        // Act
+        var type = await GetScalarAsync(query);
+
+        // Assert
+        await Assert.That(type).IsEqualTo(expectedType);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(NullableConversionCases))]
+    [DisplayName("ClickHouse conversion function сохраняет NULL из nullable source field")]
+    public async Task Nullable_field_conversion_preserves_null(
+        DataType sourceType,
+        string sourceValue,
+        string expression)
+    {
+        // Arrange
+        var source = InlineQueryArrange.SingleColumnSource(
+            "x",
+            sourceType,
+            [sourceValue, "NULL"],
+            canBeNull: true);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = [Select("value", expression)]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows).Count().IsEqualTo(2);
+        await Assert.That(rows.Select(static row => row["value"]).Any(static value => value is null)).IsTrue();
+    }
+
+    public static IEnumerable<(DataType SourceType, string SourceValue, string Expression)> NullableConversionCases()
+    {
+        yield return (DataType.Text, "'25'", "Int(x)");
+        yield return (DataType.Text, "'25'", "Num(x)");
+        yield return (DataType.Text, "'abc'", "Bool(x)");
+        yield return (DataType.Text, "'2026-01-02'", "Date(x)");
+        yield return (DataType.Integer, "25", "Text(x)");
+        yield return (DataType.Number, "25.5", "Text(x)");
+        yield return (DataType.Boolean, "true", "Text(x)");
+        yield return (DataType.Number, "25.5", "Int(x)");
+        yield return (DataType.Integer, "25", "Num(x)");
+        yield return (DataType.Boolean, "true", "Int(x)");
+        yield return (DataType.Boolean, "true", "Num(x)");
+    }
+
+    public static IEnumerable<(DataType SourceType, string SourceValue, string Expression, string ExpectedType)> NullableConversionTypeCases()
+    {
+        yield return (DataType.Text, "'25'", "Int(x)", "Nullable(Int64)");
+        yield return (DataType.Text, "'25'", "Num(x)", "Nullable(Decimal(18, 10))");
+        yield return (DataType.Text, "'abc'", "Bool(x)", "Nullable(Bool)");
+        yield return (DataType.Number, "25.5", "Int(x)", "Nullable(Int64)");
+        yield return (DataType.Integer, "25", "Num(x)", "Nullable(Decimal(18, 10))");
+        yield return (DataType.Boolean, "true", "Int(x)", "Nullable(Int64)");
+        yield return (DataType.Boolean, "true", "Num(x)", "Nullable(Decimal(18, 10))");
+    }
+
+    private static SelectItem Select(string alias, string expression)
+    {
+        return new SelectItem
+        {
+            Alias = alias,
+            Expression = Expr.Parse(expression).Value
+        };
     }
 }

@@ -13,8 +13,12 @@ public sealed class ClickHouseQueryCompiler : SqlQueryCompiler
             return;
         }
 
+        var clickHouseType = expression.Type.CanBeNull ? "Nullable(Bool)" : "Bool";
         builder.Append("CAST(");
         ExpressionCompiler.Compile(builder, expression);
-        builder.Append(" AS Bool)");
+        builder
+            .Append(" AS ")
+            .Append(clickHouseType)
+            .Append(')');
     }
 }

@@ -23,50 +23,86 @@ public sealed class ConversionFunctions : FunctionDescriptor
                 .Template($"{0}");
         }
 
-        Conversion(DataType.Text, DataType.Integer)
+        RequiredConversion(DataType.Text, DataType.Integer)
             .Doc("Преобразует текст в целое число")
             .Template($"CAST({0} AS Int64)");
+            
+        NullableConversion(DataType.Text, DataType.Integer)
+            .Doc("Преобразует текст в целое число")
+            .Template($"CAST({0} AS Nullable(Int64))");
 
-        Conversion(DataType.Boolean, DataType.Integer)
+        RequiredConversion(DataType.Boolean, DataType.Integer)
             .Doc("Преобразует логическое значение в целое число")
-            .Template($"CASE WHEN {0} THEN 1 ELSE 0 END");
+            .Template($"CAST({0} AS Int64)");
+            
+        NullableConversion(DataType.Boolean, DataType.Integer)
+            .Doc("Преобразует логическое значение в целое число")
+            .Template($"CAST({0} AS Nullable(Int64))");
 
-        Conversion(DataType.Number, DataType.Integer)
+        RequiredConversion(DataType.Number, DataType.Integer)
             .Doc("Преобразует число в целое число")
             .Template($"CAST({0} AS Int64)");
+            
+        NullableConversion(DataType.Number, DataType.Integer)
+            .Doc("Преобразует число в целое число")
+            .Template($"CAST({0} AS Nullable(Int64))");
 
-        Conversion(DataType.Null, DataType.Integer)
-            .Template($"({0} + 0)");
+        NullableConversion(DataType.Null, DataType.Integer)
+            .Template($"CAST({0} AS Nullable(Int64))");
 
-        Conversion(DataType.Text, DataType.Number)
+        RequiredConversion(DataType.Text, DataType.Number)
             .Doc("Преобразует текст в число с плавающей точкой")
-            .Template($"toDecimal64({0}, 10)");
+            .Template($"CAST({0} AS Decimal64(10))");
+            
+        NullableConversion(DataType.Text, DataType.Number)
+            .Doc("Преобразует текст в число с плавающей точкой")
+            .Template($"CAST({0} AS Nullable(Decimal64(10)))");
 
-        Conversion(DataType.Boolean, DataType.Number)
+        RequiredConversion(DataType.Boolean, DataType.Number)
             .Doc("Преобразует логическое значение в число")
-            .Template($"CASE WHEN {0} THEN 1.0 ELSE 0.0 END");
+            .Template($"CAST({0} AS Decimal64(10))");
+            
+        NullableConversion(DataType.Boolean, DataType.Number)
+            .Doc("Преобразует логическое значение в число")
+            .Template($"CAST({0} AS Nullable(Decimal64(10)))");
 
-        Conversion(DataType.Integer, DataType.Number)
+        RequiredConversion(DataType.Integer, DataType.Number)
             .Doc("Преобразует целое число в число с плавающей точкой")
-            .Template($"toDecimal64({0}, 10)");
+            .Template($"CAST({0} AS Decimal64(10))");
+            
+        NullableConversion(DataType.Integer, DataType.Number)
+            .Doc("Преобразует целое число в число с плавающей точкой")
+            .Template($"CAST({0} AS Nullable(Decimal64(10)))");
 
-        Conversion(DataType.Null, DataType.Number)
-            .Template($"({0} + 0.0)");
+        NullableConversion(DataType.Null, DataType.Number)
+            .Template($"CAST({0} AS Nullable(Decimal64(10)))");
 
-        Conversion(DataType.Text, DataType.Boolean)
+        RequiredConversion(DataType.Text, DataType.Boolean)
             .Doc("Возвращает true если текст не пустой")
-            .Template($"(LENGTH({0}) > 0)");
+            .Template($"CAST((LENGTH({0}) > 0) AS Bool)");
+            
+        NullableConversion(DataType.Text, DataType.Boolean)
+            .Doc("Возвращает true если текст не пустой")
+            .Template($"CAST((LENGTH({0}) > 0) AS Nullable(Bool))");
 
-        Conversion(DataType.Number, DataType.Boolean)
+        RequiredConversion(DataType.Number, DataType.Boolean)
             .Doc("Возвращает true если дробное число больше нуля")
-            .Template($"({0} > 0.0)");
+            .Template($"CAST(({0} > 0.0) AS Bool)");
+            
+        NullableConversion(DataType.Number, DataType.Boolean)
+            .Doc("Возвращает true если дробное число больше нуля")
+            .Template($"CAST(({0} > 0.0) AS Nullable(Bool))");
 
-        Conversion(DataType.Integer, DataType.Boolean)
+        RequiredConversion(DataType.Integer, DataType.Boolean)
             .Doc("Возвращает true если целое число больше нуля")
-            .Template($"({0} > 0)");
+            .Template($"CAST(({0} > 0) AS Bool)");
+            
+        NullableConversion(DataType.Integer, DataType.Boolean)
+            .Doc("Возвращает true если целое число больше нуля")
+            .Template($"CAST(({0} > 0) AS Nullable(Bool))");
 
-        Conversion(DataType.Null, DataType.Boolean)
-            .Template($"({0} = 0)");
+        NullableConversion(DataType.Null, DataType.Boolean)
+            .Template($"CAST({0} AS Nullable(Bool))");
 
         Method("Text")
             .Doc("Преобразует целое число в текстовое представление")
@@ -118,6 +154,27 @@ public sealed class ConversionFunctions : FunctionDescriptor
 
     private FunctionBuilder Conversion(DataType input, DataType output)
     {
+        return NullableConversion(input, output);
+    }
+
+    private FunctionBuilder RequiredConversion(DataType input, DataType output)
+    {
+        var builder = CreateConversionBuilder(output)
+            .ReqArg("input", input)
+            .ReturnsNotNull(output);
+        return builder;
+    }
+
+    private FunctionBuilder NullableConversion(DataType input, DataType output)
+    {
+        var builder = CreateConversionBuilder(output)
+            .Arg("input", input)
+            .Returns(output);
+        return builder;
+    }
+
+    private FunctionBuilder CreateConversionBuilder(DataType output)
+    {
         var name = output switch
         {
             DataType.Number => "Num",
@@ -128,9 +185,7 @@ public sealed class ConversionFunctions : FunctionDescriptor
             _ => throw new ArgumentOutOfRangeException(nameof(output), output, null)
         };
 
-        return Method(name)
-            .Arg("input", input)
-            .Returns(output);
+        return Method(name);
     }
 
     private static string Display(ExprType type)
