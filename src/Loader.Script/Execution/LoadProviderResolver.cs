@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Providers.Excel;
+using Loader.Core.Providers.Hive;
 using Loader.Core.Providers.Json;
 using Loader.Core.Providers.Oracle;
 using Loader.Core.Providers.Postgres;
@@ -13,7 +14,7 @@ using Loader.Core.Providers.Xml;
 using Loader.Core.Sources;
 using Loader.Lang.Statements;
 
-namespace Loader.Script;
+namespace Loader.Script.Execution;
 
 public sealed partial class LoadProviderResolver : ILoadProviderResolver
 {
@@ -87,6 +88,13 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
                 options,
                 requiresBuffer: true,
                 static (source, config, token) => new OracleProvider().OpenReaderAsync(source, config, token)),
+
+            "hive" or "apachehive" or "apache-hive" => Database(
+                "hive",
+                statement.Source,
+                options,
+                requiresBuffer: true,
+                static (source, config, token) => new HiveProvider().OpenReaderAsync(source, config, token)),
 
             "clickhouse" => Database(
                 "clickhouse",

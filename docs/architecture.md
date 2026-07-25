@@ -63,6 +63,7 @@ classDiagram
     IProvider <|-- ClickHouseProvider
     IProvider <|-- SqlServerProvider
     IProvider <|-- OracleProvider
+    IProvider <|-- HiveProvider
 ```
 
 ## Текущие провайдеры
@@ -110,6 +111,10 @@ flowchart LR
     DbSource --> OracleProvider[OracleProvider]
     SqlConfig --> OracleProvider
     OracleProvider --> OracleReader[DbDataReader]
+
+    DbSource --> HiveProvider[HiveProvider]
+    SqlConfig --> HiveProvider
+    HiveProvider --> HiveReader[DbDataReader]
 
     CsvReader --> Typed[TypedDbDataReader]
     ExcelReader --> Typed
