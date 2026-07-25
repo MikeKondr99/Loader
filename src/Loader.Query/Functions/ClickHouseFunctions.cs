@@ -22,6 +22,7 @@ public static class ClickHouseFunctions
         ..new ColorFunctions().GetFunctions(),
         ..new FinancialFunctions().GetFunctions(),
         ..new ReflectionFunctions().GetFunctions(),
+        ..new JsonFunctions().GetFunctions(),
         ..new StringFunctions().GetFunctions()
     ];
 

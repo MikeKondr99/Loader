@@ -72,6 +72,92 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query не применяет JSON path из колонки потому что ClickHouse требует константу")]
+    public async Task Json_path_from_source_field_fails_because_clickhouse_requires_constant_path()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("Payload", DataType.Text),
+                new InlineField("Path", DataType.Text),
+                new InlineField("Keep", DataType.Integer)
+            ],
+            [
+                ["'{\"name\":\"Mike\",\"city\":\"Moscow\"}'", "'$.name'", "1"],
+                ["'{\"name\":\"Ann\",\"city\":\"Paris\"}'", "'$.name'", "1"],
+                ["'{\"name\":\"Ivan\",\"city\":\"Moscow\"}'", "'$.city'", "1"],
+                ["'{\"name\":\"Skip\",\"city\":\"Berlin\"}'", "'$.name'", "0"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "Payload.JsonGetText(Path)".As("Value"),
+                "COUNT()".As("Count")
+            ],
+            Where = Expr("Keep = 1"),
+            GroupBy = [Expr("Payload.JsonGetText(Path)")],
+            OrderBy = ["Payload.JsonGetText(Path)".Asc()]
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage(string.Join(
+                Environment.NewLine,
+                "Функция 'JsonGetText' требует, чтобы аргумент 2 был константой",
+                "Функция 'JsonGetText' требует, чтобы аргумент 2 был константой",
+                "Функция 'JsonGetText' требует, чтобы аргумент 2 был константой"));
+    }
+
+    [Test]
+    [DisplayName("Query разбирает JSON Lines загруженный как одна текстовая колонка")]
+    public async Task Query_parses_json_lines_loaded_as_text_column()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("Line", DataType.Text)
+            ],
+            [
+                ["'{\"id\":1,\"name\":\"Mike\",\"amount\":10.50,\"active\":true}'"],
+                ["'{\"id\":2,\"name\":\"Ann\",\"amount\":\"20.25\",\"active\":\"false\"}'"],
+                ["'{\"id\":3,\"name\":\"Skip\",\"amount\":\"not-num\",\"active\":true}'"],
+                ["'not-json'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "Line.JsonGetInt('$.id')".As("Id"),
+                "Line.JsonGetText('$.name')".As("Name"),
+                "Line.JsonGetNum('$.amount')".As("Amount"),
+                "Line.JsonGetBool('$.active')".As("Active")
+            ],
+            Where = Expr("Line.JsonGetInt('$.id').NotNull()"),
+            OrderBy = ["Line.JsonGetInt('$.id')".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Ints("Id"))
+            .IsEquivalentTo([1, 2, 3], CollectionOrdering.Matching);
+        await Assert.That(rows.Texts("Name"))
+            .IsEquivalentTo(["Mike", "Ann", "Skip"], CollectionOrdering.Matching);
+        await Assert.That(rows.Select(static row => row["Amount"] is null ? (double?)null : Convert.ToDouble(row["Amount"], CultureInfo.InvariantCulture)).ToArray())
+            .IsEquivalentTo((double?[])[10.50, 20.25, null], CollectionOrdering.Matching);
+        await Assert.That(rows.Select(static row => row["Active"]).ToArray())
+            .IsEquivalentTo((object?[])[true, false, true], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query применяет SELECT expressions")]
     public async Task Select_query()
     {

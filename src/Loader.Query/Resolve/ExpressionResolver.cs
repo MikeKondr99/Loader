@@ -79,6 +79,11 @@ public sealed class ExpressionResolver
         }
 
         var definition = resolution.Function;
+        if (!ValidateConstArguments(function, definition, arguments, context))
+        {
+            return null;
+        }
+
         var resolvedArguments = arguments
             .Zip(resolution.Casts, static (argument, cast) => argument with
             {
@@ -101,6 +106,30 @@ public sealed class ExpressionResolver
             },
             Arguments = resolvedArguments
         };
+    }
+
+    private static bool ValidateConstArguments(
+        FuncExpr function,
+        FunctionDefinition definition,
+        IReadOnlyList<ResolvedExpression> arguments,
+        ResolutionContext context)
+    {
+        for (var i = 0; i < definition.Arguments.Count; i++)
+        {
+            if (!definition.Arguments[i].IsConstRequired || arguments[i].Type.IsLiteral)
+            {
+                continue;
+            }
+
+            context.Errors.Add(new LangError
+            {
+                Span = function.Arguments[i].Span,
+                Message = $"Функция '{function.Name}' требует, чтобы аргумент {i + 1} был константой"
+            });
+            return false;
+        }
+
+        return true;
     }
 
     private static ResolvedExpression? AddError(Expr expression, ResolutionContext context, string message)

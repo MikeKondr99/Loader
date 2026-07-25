@@ -142,6 +142,22 @@ public sealed class FunctionBuilder
         return this;
     }
 
+    public FunctionBuilder ConstArg(string name, DataType type)
+    {
+        arguments.Add(new FunctionArgument
+        {
+            Name = name,
+            Type = new FunctionArgumentType
+            {
+                DataType = type,
+                CanBeNull = false
+            },
+            PropagateNull = false,
+            IsConstRequired = true
+        });
+        return this;
+    }
+
     public FunctionBuilder Returns(DataType type)
     {
         return Returns(type, ConstPropagation.Default);
