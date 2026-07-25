@@ -14,6 +14,7 @@ public static class ClickHouseFunctions
         ..new ComparisonFunctions().GetFunctions(),
         ..new LogicFunctions().GetFunctions(),
         ..new ConditionalFunctions().GetFunctions(),
+        ..new AggregationFunctions().GetFunctions(),
         ..new MathFunctions().GetFunctions(),
         ..new NumberFunctions().GetFunctions(),
         ..new TrigonometryFunctions().GetFunctions(),

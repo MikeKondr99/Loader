@@ -50,6 +50,7 @@
 - [ ] Date(text, 'yyyy-mm-dd') Joda паттерн
 - [ ] Subfield(text, delimeter, index)
 - [ ] Json функции
+- [ ] Fractile
 - [ ] Сделать названия case insensitive
 - [ ] Переименовать что бы были больше похожи на Qlik
 - [ ] *Qol функции (необязательно)*

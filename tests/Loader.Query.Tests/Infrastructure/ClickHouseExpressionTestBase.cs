@@ -103,6 +103,39 @@ public abstract class ClickHouseExpressionTestBase
         return reader.GetString(0);
     }
 
+    protected async Task<object?> GetScalarAsync(Query.Models.Query query)
+    {
+        var rows = await GetRowsAsync(query).ConfigureAwait(false);
+        if (rows.Count == 0)
+        {
+            throw new InvalidOperationException("Query returned no rows.");
+        }
+
+        return rows[0].Values.First();
+    }
+
+    protected async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> GetRowsAsync(Query.Models.Query query)
+    {
+        var sql = CompileQuery(query);
+        await using var rawReader = await OpenReaderAsync(sql).ConfigureAwait(false);
+        await using var reader = rawReader.Normalize();
+
+        var rows = new List<IReadOnlyDictionary<string, object?>>();
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            var row = new Dictionary<string, object?>(StringComparer.Ordinal);
+            for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
+            {
+                var value = reader.GetValue(ordinal);
+                row[reader.GetName(ordinal)] = value == DBNull.Value ? null : value;
+            }
+
+            rows.Add(row);
+        }
+
+        return rows;
+    }
+
     private static async Task AssertDateAsync(object value, string expectedText)
     {
         var expected = DateTime.Parse(expectedText, CultureInfo.InvariantCulture);
@@ -147,6 +180,20 @@ public abstract class ClickHouseExpressionTestBase
         }
 
         return new ExpressionCompiler().Compile(resolved);
+    }
+
+    private static string CompileQuery(Query.Models.Query query)
+    {
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+        if (!result.IsSuccess)
+        {
+            throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Select(error => error.Message)));
+        }
+
+        return new ClickHouseQueryCompiler
+        {
+            ExpressionCompiler = new ExpressionCompiler()
+        }.Compile(result.Value!);
     }
 
     private ValueTask<DbDataReader> OpenReaderAsync(string sql)

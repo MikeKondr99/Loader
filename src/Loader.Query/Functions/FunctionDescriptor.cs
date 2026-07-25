@@ -174,6 +174,28 @@ public sealed class FunctionBuilder
         return this;
     }
 
+    public FunctionBuilder ReturnsAggregated(DataType type)
+    {
+        returnType = new FunctionReturnType
+        {
+            DataType = type,
+            CanBeNull = true,
+            Aggregated = true
+        };
+        return this;
+    }
+
+    public FunctionBuilder ReturnsAggregatedNotNull(DataType type)
+    {
+        returnType = new FunctionReturnType
+        {
+            DataType = type,
+            CanBeNull = false,
+            Aggregated = true
+        };
+        return this;
+    }
+
     public FunctionBuilder ImplicitCast(uint cost)
     {
         implicitCastCost = cost;
