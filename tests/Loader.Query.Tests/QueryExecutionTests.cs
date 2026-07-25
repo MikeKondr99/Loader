@@ -99,6 +99,25 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query возвращает boolean SELECT expression как bool после Normalize")]
+    public async Task Boolean_select_expression_returns_bool_after_normalize()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Select = ["Age > 30".As("IsOlder")],
+            OrderBy = ["UserId".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Bools("IsOlder"))
+            .IsEquivalentTo([false, false, true, false, true, true, false, true], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query применяет ORDER BY")]
     public async Task Order_by_query()
     {
@@ -395,6 +414,11 @@ internal static class QueryExecutionTestExtensions
     public static string[] Texts(this IEnumerable<IReadOnlyDictionary<string, object?>> rows, string name)
     {
         return rows.Select(row => row.Text(name)).ToArray();
+    }
+
+    public static bool[] Bools(this IEnumerable<IReadOnlyDictionary<string, object?>> rows, string name)
+    {
+        return rows.Select(row => (bool)row[name]!).ToArray();
     }
 
     private static OrderItem Order(string expression, OrderDirection direction)

@@ -60,7 +60,7 @@ public abstract class SqlQueryCompiler : IQueryCompiler
             var field = query.Select[i];
 
             builder.Append("    ");
-            ExpressionCompiler.Compile(builder, field.Expression);
+            WriteOutputExpression(builder, field.Expression);
             builder.Append(" AS ");
             WriteIdentifier(builder, field.Alias);
 
@@ -71,6 +71,11 @@ public abstract class SqlQueryCompiler : IQueryCompiler
 
             builder.AppendLine();
         }
+    }
+
+    protected virtual void WriteOutputExpression(StringBuilder builder, ResolvedExpression expression)
+    {
+        ExpressionCompiler.Compile(builder, expression);
     }
 
     protected virtual void WriteWhere(StringBuilder builder, ResolvedQuery query)

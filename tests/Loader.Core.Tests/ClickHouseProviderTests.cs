@@ -81,6 +81,26 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
+    [DisplayName("ClickHouse boolean expression без явного Bool остается UInt8 после Normalize")]
+    public async Task Boolean_expression_requires_explicit_bool_cast_for_boolean_schema()
+    {
+        await using var rawReader = await OpenReaderAsync(
+            """
+            select
+                equals(true, 1) as comparison_value,
+                CAST(equals(true, 1) AS Bool) as comparison_bool
+            """);
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["comparison_value", "comparison_bool"],
+            types: [DataType.Integer, DataType.Boolean],
+            rows: [
+                ((byte)1, true)
+            ]);
+    }
+
+    [Test]
     [DisplayName("ClickHouse aliases сохраняют имя результата запроса")]
     public async Task Aliases_return_result_column_names()
     {
