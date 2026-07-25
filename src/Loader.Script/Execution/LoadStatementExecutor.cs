@@ -3,9 +3,8 @@ using Loader.Core.Decorators;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
-using Microsoft.Extensions.Logging;
 
-namespace Loader.Script;
+namespace Loader.Script.Execution;
 
 public class LoadStatementExecutor
 {

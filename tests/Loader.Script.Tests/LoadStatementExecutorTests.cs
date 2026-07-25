@@ -4,6 +4,7 @@ using Loader.Core.Decorators;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
+using Loader.Script.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
