@@ -87,6 +87,17 @@ public sealed class AggregationFunctions : FunctionDescriptor
             .CustomNullPropagation(_ => true)
             .Template($"quantileExactInclusive(0.5)({0})");
 
+        foreach (var type in Numbers())
+        {
+            Function("FRACTILE")
+                .Doc("Возвращает непрерывную квантиль для value по константному параметру p")
+                .Arg("value", type)
+                .ConstArg("p", DataType.Number)
+                .ReturnsAggregated(DataType.Number)
+                .CustomNullPropagation(_ => true)
+                .Template($"quantileExactInclusive({1})({0})");
+        }
+
         Function("CONCAT")
             .Doc("Aggregates all non-NULL values into a single string without delimiter")
             .Arg("value", DataType.Text)

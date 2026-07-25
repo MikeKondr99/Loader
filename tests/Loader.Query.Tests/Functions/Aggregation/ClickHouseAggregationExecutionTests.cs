@@ -239,6 +239,76 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         await AssertNumberAsync(result, 2.5);
     }
 
+    [Test]
+    [DisplayName("FRACTILE(num, p): возвращает непрерывную квантиль по константному p")]
+    public async Task Fractile_number()
+    {
+        double?[] values = [1, 2, 3, 4];
+        var inline = CreateSingleColumnInline(DataType.Number, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "FRACTILE(x, 0.25)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 1.75);
+    }
+
+    [Test]
+    [DisplayName("FRACTILE(int, p): работает для integer значений")]
+    public async Task Fractile_integer()
+    {
+        int?[] values = [1, 2, 3, 4];
+        var inline = CreateSingleColumnInline(DataType.Integer, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "FRACTILE(x, 0.75)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 3.25);
+    }
+
+    [Test]
+    [DisplayName("FRACTILE(num, p): игнорирует NULL")]
+    public async Task Fractile_number_with_nulls()
+    {
+        double?[] values = [1, null, 2, 3, 4, null];
+        var inline = CreateSingleColumnInline(DataType.Number, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "FRACTILE(x, 0.5)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2.5);
+    }
+
+    [Test]
+    [DisplayName("FRACTILE(num, p): требует константный p")]
+    public async Task Fractile_requires_constant_p()
+    {
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Number),
+                new InlineField("p", DataType.Number)
+            ],
+            [
+                ["1.0", "0.5"],
+                ["2.0", "0.5"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                new SelectItem
+                {
+                    Alias = "test",
+                    Expression = Expr.Parse("FRACTILE(x, p)").Value
+                }
+            ]
+        };
+
+        await Assert.That(async () => await GetScalarAsync(query))
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("Функция 'FRACTILE' требует, чтобы аргумент 2 был константой");
+    }
+
     private static QuerySource CreateSingleColumnInline(DataType dataType, IReadOnlyList<string> values)
     {
         return InlineQueryArrange.SingleColumnSource("x", dataType, values);
