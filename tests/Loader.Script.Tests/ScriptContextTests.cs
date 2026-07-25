@@ -1,4 +1,5 @@
 using Loader.Core.Sources;
+using Loader.Core.Writers.ClickHouse;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
@@ -29,20 +30,31 @@ public sealed class ScriptContextTests
 
         context.AddLoadedTable(new LoadedTable
         {
-            Name = "orders",
+            Name = Table("physical_orders"),
+            Alias = "orders",
             RowCount = 10,
             Fields = []
         });
         context.AddLoadedTable(new LoadedTable
         {
-            Name = null,
+            Name = Table("physical_generated"),
+            Alias = null,
             Fields = []
         });
 
         await Assert.That(context.LoadedTables).Count().IsEqualTo(2);
-        await Assert.That(context.LoadedTables[0].Name).IsEqualTo("orders");
+        await Assert.That(context.LoadedTables[0].Name.Table).IsEqualTo("physical_orders");
+        await Assert.That(context.LoadedTables[0].Alias).IsEqualTo("orders");
         await Assert.That(context.LoadedTables[0].RowCount).IsEqualTo(10);
-        await Assert.That(context.LoadedTables[1].Name).IsNull();
+        await Assert.That(context.LoadedTables[1].Alias).IsNull();
+    }
+
+    private static ClickHouseTableName Table(string name)
+    {
+        return new ClickHouseTableName
+        {
+            Table = name
+        };
     }
 
     private static ScriptContext CreateContext()

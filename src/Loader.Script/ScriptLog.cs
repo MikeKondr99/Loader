@@ -33,4 +33,16 @@ public static partial class ScriptLog
         Level = LogLevel.Information,
         Message = "Временная таблица '{TempTable}' загружена.")]
     public static partial void TempTableLoaded(this ILogger logger, string tempTable);
+
+    [LoggerMessage(
+        EventId = 1005,
+        Level = LogLevel.Information,
+        Message = "Материализую результат LOAD во финальную таблицу '{FinalTable}'.")]
+    public static partial void MaterializingFinalTable(this ILogger logger, string finalTable);
+
+    [LoggerMessage(
+        EventId = 1006,
+        Level = LogLevel.Information,
+        Message = "Финальная таблица '{FinalTable}' материализована.")]
+    public static partial void FinalTableMaterialized(this ILogger logger, string finalTable);
 }

@@ -32,7 +32,9 @@ public sealed class QueryResolver
             return ResolveResult<ResolvedQuery>.Failure(context.Errors);
         }
 
-        var outputFields = select.Select(item => item.OutputField).ToArray();
+        var outputFields = select.Count == 0
+            ? query.Source.Fields
+            : select.Select(item => item.OutputField).ToArray();
         return ResolveResult<ResolvedQuery>.Success(new ResolvedQuery
         {
             Source = query.Source,

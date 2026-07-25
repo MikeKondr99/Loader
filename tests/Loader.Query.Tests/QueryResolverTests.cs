@@ -62,4 +62,40 @@ public sealed class QueryResolverTests
         await Assert.That(result.Value.Where!.Template.ToString()).IsEqualTo("({0} > {1})");
         await Assert.That(result.Value.OrderBy[0].Direction).IsEqualTo(OrderDirection.Desc);
     }
+
+    [Test]
+    [DisplayName("QueryResolver для SELECT * использует source fields как output fields")]
+    public async Task Select_all_uses_source_fields_as_output_fields()
+    {
+        var source = new QuerySource
+        {
+            Sql = "stage",
+            Alias = "stage",
+            Fields =
+            [
+                new Field
+                {
+                    Alias = "amount",
+                    Template = QueryTemplate.Text("stage.column1"),
+                    Type = new FieldType
+                    {
+                        DataType = DataType.Number,
+                        CanBeNull = false
+                    }
+                }
+            ]
+        };
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = []
+        };
+        var functions = ClickHouseFunctions.CreateResolver();
+
+        var result = new QueryResolver().Resolve(query, functions);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value!.OutputFields).IsSameReferenceAs(source.Fields);
+        await Assert.That(result.Value.OutputFields[0].Alias).IsEqualTo("amount");
+    }
 }

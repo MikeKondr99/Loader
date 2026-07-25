@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Loader.Core\Loader.Core.csproj" />
     <ProjectReference Include="..\Loader.Lang\Loader.Lang.csproj" />
+    <ProjectReference Include="..\Loader.Query\Loader.Query.csproj" />
   </ItemGroup>
 
   <ItemGroup>

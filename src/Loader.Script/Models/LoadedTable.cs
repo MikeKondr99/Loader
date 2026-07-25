@@ -1,3 +1,5 @@
+using Loader.Core.Writers.ClickHouse;
+
 namespace Loader.Script;
 
 /// <summary>
@@ -6,9 +8,14 @@ namespace Loader.Script;
 public sealed record LoadedTable
 {
     /// <summary>
-    /// Имя таблицы, если оно известно. <c>null</c> означает, что имя еще не назначено.
+    /// Физическое имя таблицы в ClickHouse.
     /// </summary>
-    public required string? Name { get; init; }
+    public required ClickHouseTableName Name { get; init; }
+
+    /// <summary>
+    /// Доменное имя таблицы из script, если оно задано.
+    /// </summary>
+    public required string? Alias { get; init; }
 
     /// <summary>
     /// Количество строк в таблице, если оно известно.

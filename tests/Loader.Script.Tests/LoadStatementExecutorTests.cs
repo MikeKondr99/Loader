@@ -3,6 +3,7 @@ using System.Data.Common;
 using Loader.Core.Decorators;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
+using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -35,7 +36,8 @@ public sealed class LoadStatementExecutorTests
 
         await Assert.That(providerResolver.ResolveCalls).IsEqualTo(1);
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
-        await Assert.That(result.TableName.Table).StartsWith("tmp_orders_");
+        await Assert.That(result.TableName.Table).StartsWith("tmp_");
+        await Assert.That(result.TableName.Table).DoesNotContain("orders");
         await Assert.That(result.OriginalColumnNames).Count().IsEqualTo(2);
         await Assert.That(result.OriginalColumnNames[0]).IsEqualTo("id");
         await Assert.That(result.OriginalColumnNames[1]).IsEqualTo("name");
@@ -45,6 +47,63 @@ public sealed class LoadStatementExecutorTests
         await Assert.That(executor.Rows).Count().IsEqualTo(1);
         await Assert.That(executor.Rows[0][0]).IsEqualTo(1);
         await Assert.That(executor.Rows[0][1]).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    public async Task Execute_load_writes_temp_table_materializes_final_table_and_registers_loaded_table()
+    {
+        var providerResolver = new FakeProviderResolver();
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = providerResolver,
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var statement = new LoadStatement
+        {
+            TableName = "orders",
+            Fields =
+            [
+                new LoadField
+                {
+                    Name = "city",
+                    Expression = Expr.Parse("name").Value
+                }
+            ],
+            Source = "orders.csv",
+            Options = [],
+            Where = Expr.Parse("id > 0").Value,
+            GroupBy = null,
+            OrderBy =
+            [
+                new LoadOrderField
+                {
+                    Expression = Expr.Parse("name").Value,
+                    Direction = LoadOrderDirection.Ascending
+                }
+            ],
+            Limit = 10,
+            Offset = 1
+        };
+
+        var loadedTable = await executor.ExecuteAsync(context, statement);
+
+        await Assert.That(executor.WriteCalls).IsEqualTo(1);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
+        await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
+        await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
+        await Assert.That(executor.QuerySql).Contains("stage.`column2` AS `city`");
+        await Assert.That(executor.QuerySql).Contains("WHERE (stage.`column1` > 0)");
+        await Assert.That(executor.QuerySql).Contains("ORDER BY stage.`column2` ASC");
+        await Assert.That(executor.QuerySql).Contains("LIMIT 10");
+        await Assert.That(executor.QuerySql).Contains("OFFSET 1");
+        await Assert.That(loadedTable.Name).IsSameReferenceAs(executor.FinalTableName);
+        await Assert.That(loadedTable.Alias).IsEqualTo("orders");
+        await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
+        await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("city");
+        await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
+        await Assert.That(context.LoadedTables[0]).IsSameReferenceAs(loadedTable);
     }
 
     private static ScriptContext CreateContext()
@@ -91,6 +150,12 @@ public sealed class LoadStatementExecutorTests
 
         public ClickHouseTableName? TableName { get; private set; }
 
+        public int MaterializeCalls { get; private set; }
+
+        public ClickHouseTableName? FinalTableName { get; private set; }
+
+        public string? QuerySql { get; private set; }
+
         public List<object[]> Rows { get; } = [];
 
         protected override async ValueTask WriteTempTableAsync(
@@ -108,6 +173,18 @@ public sealed class LoadStatementExecutorTests
                 reader.GetValues(values);
                 Rows.Add(values);
             }
+        }
+
+        protected override ValueTask MaterializeFinalTableAsync(
+            ScriptContext context,
+            string querySql,
+            ClickHouseTableName finalTable,
+            CancellationToken cancellationToken)
+        {
+            MaterializeCalls++;
+            QuerySql = querySql;
+            FinalTableName = finalTable;
+            return ValueTask.CompletedTask;
         }
     }
 

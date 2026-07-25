@@ -1,8 +1,19 @@
 using System.Data.Common;
 using Loader.Core.Decorators;
+using Loader.Core.Providers.ClickHouse;
+using Loader.Core.Providers.Sql;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
+using Loader.Query.Compile;
+using Loader.Query.Functions;
+using Loader.Query.Models;
+using Loader.Query.Resolve;
+using Microsoft.Extensions.Logging;
+using CoreDataType = Loader.Core.Models.DataType;
+using QueryDataType = Loader.Query.Models.DataType;
+using QueryModel = Loader.Query.Models.Query;
+using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Script.Execution;
 
@@ -11,6 +22,35 @@ public class LoadStatementExecutor
     public ILoadProviderResolver ProviderResolver { get; init; } = new LoadProviderResolver();
 
     public string TempTablePrefix { get; init; } = "loader_script_temp_";
+
+    public string FinalTablePrefix { get; init; } = "loader_script_final_";
+
+    public async ValueTask<LoadedTable> ExecuteAsync(
+        ScriptContext context,
+        LoadStatement statement,
+        CancellationToken cancellationToken = default)
+    {
+        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.Execute");
+        activity?.SetTag("load.table_name", statement.TableName);
+
+        // 1. Сырые данные source кладем в физическую temp table column1, column2...
+        var tempTable = await LoadTempTableAsync(context, statement, cancellationToken).ConfigureAwait(false);
+
+        // 2. LOAD выражения превращаем в типизированный Query поверх temp table.
+        var query = BuildQuery(statement, tempTable);
+        var resolvedQuery = ResolveQuery(query);
+        var querySql = CompileQuery(resolvedQuery);
+
+        // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
+        var finalTable = CreatePhysicalFinalTableName();
+        activity?.SetTag("load.final_table", finalTable.Table);
+        await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+
+        // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
+        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable);
+        context.AddLoadedTable(loadedTable);
+        return loadedTable;
+    }
 
     public async ValueTask<LoadTempTableResult> LoadTempTableAsync(
         ScriptContext context,
@@ -35,7 +75,7 @@ public class LoadStatementExecutor
         await using var stageReader = NormalizeForTempTable(stageNameReader, source);
 
         // 5. Создаем temp table name.
-        var tempTable = CreateTempTableName(statement);
+        var tempTable = CreatePhysicalTempTableName();
         activity?.SetTag("load.temp_table", tempTable.Table);
 
         // 6. Потоково пишем stage reader в temp table.
@@ -108,6 +148,122 @@ public class LoadStatementExecutor
         context.Logger.TempTableLoaded(tempTable.ToSql());
     }
 
+    private static QueryModel BuildQuery(LoadStatement statement, LoadTempTableResult tempTable)
+    {
+        return new QueryModel
+        {
+            Source = BuildQuerySource(tempTable),
+            Select = BuildSelect(statement),
+            Where = statement.Where,
+            GroupBy = statement.GroupBy ?? [],
+            OrderBy = BuildOrderBy(statement),
+            Limit = ToUInt32(statement.Limit, nameof(statement.Limit)),
+            Offset = ToUInt32(statement.Offset, nameof(statement.Offset))
+        };
+    }
+
+    private static QuerySource BuildQuerySource(LoadTempTableResult tempTable)
+    {
+        ThrowIfDuplicateSourceNames(tempTable.OriginalColumnNames);
+        return new QuerySource
+        {
+            Sql = tempTable.TableName.ToSql(),
+            Alias = "stage",
+            Fields = tempTable.Schema.Fields.Select((field, ordinal) => new Field
+            {
+                Alias = tempTable.OriginalColumnNames[ordinal],
+                Template = QueryTemplate.Text($"stage.`{field.Name}`"),
+                Type = new FieldType
+                {
+                    DataType = ToQueryDataType(field.DataType),
+                    CanBeNull = field.AllowDBNull ?? true
+                }
+            }).ToArray()
+        };
+    }
+
+    private static IReadOnlyList<SelectItem> BuildSelect(LoadStatement statement)
+    {
+        if (statement.Fields is null)
+        {
+            return [];
+        }
+
+        return statement.Fields.Select(static field => new SelectItem
+        {
+            Alias = field.Name,
+            Expression = field.Expression
+        }).ToArray();
+    }
+
+    private static IReadOnlyList<OrderItem> BuildOrderBy(LoadStatement statement)
+    {
+        if (statement.OrderBy is null)
+        {
+            return [];
+        }
+
+        return statement.OrderBy.Select(static field => new OrderItem
+        {
+            Expression = field.Expression,
+            Direction = field.Direction switch
+            {
+                LoadOrderDirection.Ascending => OrderDirection.Asc,
+                LoadOrderDirection.Descending => OrderDirection.Desc,
+                var unknown => throw new ArgumentOutOfRangeException(nameof(field.Direction), unknown, null)
+            }
+        }).ToArray();
+    }
+
+    private static ResolvedQuery ResolveQuery(QueryModel query)
+    {
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+        if (result.IsSuccess)
+        {
+            return result.Value!;
+        }
+
+        throw new InvalidOperationException(
+            "Не удалось разрешить LOAD query:" + Environment.NewLine +
+            string.Join(Environment.NewLine, result.Errors.Select(static error => error.Message)));
+    }
+
+    private static string CompileQuery(ResolvedQuery query)
+    {
+        return new ClickHouseQueryCompiler
+        {
+            ExpressionCompiler = new ExpressionCompiler()
+        }.Compile(query);
+    }
+
+    protected virtual async ValueTask MaterializeFinalTableAsync(
+        ScriptContext context,
+        string querySql,
+        ClickHouseTableName finalTable,
+        CancellationToken cancellationToken)
+    {
+        context.Logger.MaterializingFinalTable(finalTable.ToSql());
+
+        var source = new ConnectionStringSource
+        {
+            ConnectionString = context.TargetConnectionString
+        };
+        await using var rawReader = await new ClickHouseProvider()
+            .OpenReaderAsync(source, new SqlTableConfig { Sql = querySql }, cancellationToken)
+            .ConfigureAwait(false);
+        await using var finalReader = rawReader.Normalize();
+
+        await new ClickHouseWriter()
+            .WriteAsync(
+                source,
+                finalReader,
+                new ClickHouseWriteOptions { TableName = finalTable },
+                cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
+
+        context.Logger.FinalTableMaterialized(finalTable.ToSql());
+    }
+
     private static LoadTempTableResult CreateTempTableResult(
         RenameColumnDataReader stageNameReader,
         DomainDataReader stageReader,
@@ -121,14 +277,93 @@ public class LoadStatementExecutor
         };
     }
 
-    private ClickHouseTableName CreateTempTableName(LoadStatement statement)
+    private ClickHouseTableName CreatePhysicalTempTableName()
     {
-        var stablePart = statement.TableName is null
-            ? string.Empty
-            : statement.TableName + "_";
         return new ClickHouseTableName
         {
-            Table = $"{TempTablePrefix}{stablePart}{Guid.NewGuid():N}"
+            Table = $"{TempTablePrefix}{Guid.NewGuid():N}"
+        };
+    }
+
+    private ClickHouseTableName CreatePhysicalFinalTableName()
+    {
+        return new ClickHouseTableName
+        {
+            Table = $"{FinalTablePrefix}{Guid.NewGuid():N}"
+        };
+    }
+
+    private static LoadedTable CreateLoadedTable(
+        LoadStatement statement,
+        ResolvedQuery resolvedQuery,
+        ClickHouseTableName finalTable)
+    {
+        return new LoadedTable
+        {
+            Name = finalTable,
+            Alias = statement.TableName,
+            Fields = resolvedQuery.OutputFields.Select(field => new LoadedTableField
+            {
+                Name = field.Alias,
+                DataType = ToCoreDataType(field.Type.DataType),
+                CanBeNull = field.Type.CanBeNull
+            }).ToList()
+        };
+    }
+
+    private static uint? ToUInt32(long? value, string name)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value < 0 || value > uint.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(name, value, "Value must fit UInt32.");
+        }
+
+        return (uint)value.Value;
+    }
+
+    private static void ThrowIfDuplicateSourceNames(IReadOnlyList<string> names)
+    {
+        var duplicate = names
+            .GroupBy(static name => name, StringComparer.Ordinal)
+            .FirstOrDefault(static group => group.Count() > 1);
+        if (duplicate is not null)
+        {
+            throw new InvalidOperationException($"LOAD source field '{duplicate.Key}' is duplicated.");
+        }
+    }
+
+    private static QueryDataType ToQueryDataType(CoreDataType dataType)
+    {
+        return dataType switch
+        {
+            CoreDataType.Text => QueryDataType.Text,
+            CoreDataType.Integer => QueryDataType.Integer,
+            CoreDataType.Number => QueryDataType.Number,
+            CoreDataType.DateTime => QueryDataType.DateTime,
+            CoreDataType.Date => QueryDataType.Date,
+            CoreDataType.Time => QueryDataType.Time,
+            CoreDataType.Boolean => QueryDataType.Boolean,
+            _ => QueryDataType.Unknown
+        };
+    }
+
+    private static CoreDataType ToCoreDataType(QueryDataType dataType)
+    {
+        return dataType switch
+        {
+            QueryDataType.Text => CoreDataType.Text,
+            QueryDataType.Integer => CoreDataType.Integer,
+            QueryDataType.Number => CoreDataType.Number,
+            QueryDataType.DateTime => CoreDataType.DateTime,
+            QueryDataType.Date => CoreDataType.Date,
+            QueryDataType.Time => CoreDataType.Time,
+            QueryDataType.Boolean => CoreDataType.Boolean,
+            _ => CoreDataType.Text
         };
     }
 }
