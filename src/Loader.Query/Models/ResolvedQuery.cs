@@ -17,5 +17,7 @@ public sealed record ResolvedQuery
 
     public uint? Limit { get; init; }
 
+    public uint? Offset { get; init; }
+
     public required IReadOnlyList<Field> OutputFields { get; init; }
 }

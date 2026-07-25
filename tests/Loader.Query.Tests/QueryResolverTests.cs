@@ -2,23 +2,26 @@ using Loader.Lang.Expressions;
 using Loader.Query.Functions;
 using Loader.Query.Models;
 using Loader.Query.Resolve;
+using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Query.Tests;
 
 public sealed class QueryResolverTests
 {
     [Test]
-    [DisplayName("QueryResolver резолвит select where order и output fields")]
+    [DisplayName("QueryResolver резолвит select, where, order и output fields")]
     public async Task Resolves_query_sections()
     {
         var source = new QuerySource
         {
-            Name = "stage",
+            Sql = "stage",
+            Alias = "stage",
             Fields =
             [
                 new Field
                 {
-                    Name = "amount",
+                    Alias = "amount",
+                    Template = QueryTemplate.Text("stage.column1"),
                     Type = new FieldType
                     {
                         DataType = DataType.Number,
@@ -54,7 +57,8 @@ public sealed class QueryResolverTests
 
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value!.Source).IsSameReferenceAs(source);
-        await Assert.That(result.Value.OutputFields[0].Name).IsEqualTo("amount");
+        await Assert.That(result.Value.OutputFields[0].Alias).IsEqualTo("amount");
+        await Assert.That(result.Value.Select[0].Expression.Template.ToString()).IsEqualTo("stage.column1");
         await Assert.That(result.Value.Where!.Template.ToString()).IsEqualTo("({0} > {1})");
         await Assert.That(result.Value.OrderBy[0].Direction).IsEqualTo(OrderDirection.Desc);
     }

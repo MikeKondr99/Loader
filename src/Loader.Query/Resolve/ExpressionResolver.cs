@@ -1,7 +1,6 @@
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
-using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Query.Resolve;
 
@@ -23,7 +22,7 @@ public sealed class ExpressionResolver
 
     private static ResolvedExpression? ResolveName(NameExpr name, ResolutionContext context)
     {
-        var field = context.Source.Fields.FirstOrDefault(field => field.Name == name.Value);
+        var field = context.Source.Fields.FirstOrDefault(field => field.Alias == name.Value);
         if (field is null)
         {
             context.Errors.Add(new LangError
@@ -37,7 +36,7 @@ public sealed class ExpressionResolver
         return new ResolvedExpression
         {
             Expression = name,
-            Template = QueryTemplate.Text($"{context.Source.Name}.{field.Name}"),
+            Template = field.Template,
             Type = new ExprType
             {
                 DataType = field.Type.DataType,

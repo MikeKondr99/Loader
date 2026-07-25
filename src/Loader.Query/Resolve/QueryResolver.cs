@@ -1,6 +1,7 @@
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
+using QueryTemplate = Loader.Query.Template.Template;
 using QueryModel = Loader.Query.Models.Query;
 
 namespace Loader.Query.Resolve;
@@ -40,6 +41,7 @@ public sealed class QueryResolver
             GroupBy = groupBy,
             OrderBy = orderBy,
             Limit = query.Limit,
+            Offset = query.Offset,
             OutputFields = outputFields
         });
     }
@@ -61,7 +63,8 @@ public sealed class QueryResolver
                 Expression = resolvedExpression,
                 OutputField = new Field
                 {
-                    Name = item.Alias,
+                    Alias = item.Alias,
+                    Template = QueryTemplate.Text(item.Alias),
                     Type = new FieldType
                     {
                         DataType = resolvedExpression.Type.DataType,

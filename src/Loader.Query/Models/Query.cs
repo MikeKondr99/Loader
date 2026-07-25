@@ -18,4 +18,6 @@ public sealed record Query
     public IReadOnlyList<OrderItem> OrderBy { get; init; } = [];
 
     public uint? Limit { get; init; }
+
+    public uint? Offset { get; init; }
 }

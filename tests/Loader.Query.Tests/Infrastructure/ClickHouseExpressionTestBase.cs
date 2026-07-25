@@ -133,7 +133,8 @@ public abstract class ClickHouseExpressionTestBase
         {
             Source = new QuerySource
             {
-                Name = "stage",
+                Sql = "stage",
+                Alias = "stage",
                 Fields = []
             },
             Functions = ClickHouseFunctions.CreateResolver(),
