@@ -1,3 +1,7 @@
+using Loader.Lang.Expressions;
+using Loader.Query.Functions;
+using Loader.Query.Models;
+using Loader.Query.Resolve;
 using Loader.Query.Tests.Infrastructure;
 
 namespace Loader.Query.Tests.Functions.Date;
@@ -97,6 +101,57 @@ public sealed class ClickHouseDateFunctionTests : ClickHouseExpressionTestBase
     public Task Date_constructors(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [DisplayName("Date парсит текст по константному Joda format")]
+    [Arguments("Date('2026-01-02', 'yyyy-MM-dd')", "@2026-01-02 00:00:00")]
+    [Arguments("'02.01.2026 03:04:05'.Date('dd.MM.yyyy HH:mm:ss')", "@2026-01-02 03:04:05")]
+    [Arguments("'02.01.2026 03:04:05 PM'.Date('dd.MM.yyyy hh:mm:ss a')", "@2026-01-02 15:04:05")]
+    [Arguments("'02.01.2026 03:04:05 AM'.Date('dd.MM.yyyy hh:mm:ss a')", "@2026-01-02 03:04:05")]
+    [Arguments("Date('02 Jan 2026', 'dd MMM yyyy')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('02 January 2026', 'dd MMMM yyyy')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('Friday, 02 January 2026', 'EEEE, dd MMMM yyyy')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('2026/01/02', 'yyyy/MM/dd')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('2026-1-2', 'yyyy-M-d')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('2026-001', 'yyyy-DDD')", "@2026-01-01 00:00:00")]
+    [Arguments("Date('2026-01-02T03:04:05', 'yyyy-MM-dd\\'T\\'HH:mm:ss')", "@2026-01-02 03:04:05")]
+    [Arguments("Date('2026-W01-5', 'xxxx-\\'W\\'ww-e')", "@2026-01-02 00:00:00")]
+    [Arguments("Date('02 янв. 2026', 'dd MMM yyyy')", null)]
+    [Arguments("Date('bad', 'yyyy-MM-dd')", null)]
+    [Arguments("Date(null, 'yyyy-MM-dd')", null)]
+    public Task Date_with_joda_format(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [DisplayName("Date format должен быть константой")]
+    public async Task Date_format_must_be_constant()
+    {
+        var source = InlineQueryArrange.SingleColumnSource(
+            "Format",
+            DataType.Text,
+            ["'yyyy-MM-dd'"],
+            canBeNull: false);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                new SelectItem
+                {
+                    Alias = "Value",
+                    Expression = Expr.Parse("Date('2026-01-02', Format)").Value
+                }
+            ]
+        };
+
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .IsEquivalentTo(["Функция 'Date' требует, чтобы аргумент 2 был константой"]);
     }
 
     [Test]

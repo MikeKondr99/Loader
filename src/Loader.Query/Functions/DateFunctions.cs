@@ -31,7 +31,16 @@ public sealed class DateFunctions : FunctionDescriptor
             .Doc("Парсит строку как дату")
             .Arg("input", DataType.Text)
             .Returns(DataType.DateTime)
+            .CustomNullPropagation(_ => true)
             .Template($"parseDateTimeBestEffortOrNull({0})");
+
+        Method("Date")
+            .Doc("Парсит строку как дату по Joda format")
+            .Arg("input", DataType.Text)
+            .ConstArg("format", DataType.Text)
+            .Returns(DataType.DateTime)
+            .CustomNullPropagation(_ => true)
+            .Template($"parseDateTimeInJodaSyntaxOrNull({0}, {1})");
 
         Method("Now")
             .Doc("Возвращает текущие дату и время")
@@ -115,8 +124,8 @@ public sealed class DateFunctions : FunctionDescriptor
             .Doc("Возвращает только дату без времени")
             .Arg("input", DataType.DateTime)
             .Returns(DataType.DateTime)
-            .Template($"toDate({0})");
-            
+            .Template($"toDateTime(toDate({0}))");
+
         Method("YearQuarter")
             .Doc("Возвращает год и квартал в формате 'YYYY-Q1'")
             .Arg("input", DataType.DateTime)

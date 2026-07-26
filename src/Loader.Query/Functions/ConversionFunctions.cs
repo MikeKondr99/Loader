@@ -140,6 +140,13 @@ public sealed class ConversionFunctions : FunctionDescriptor
             .Template($"formatDateTime({0}, '%Y-%m-%d %H:%i:%S')");
 
         Method("Text")
+            .Doc("Преобразует дату в текст по Joda format")
+            .Arg("input", DataType.DateTime)
+            .ConstArg("format", DataType.Text)
+            .Returns(DataType.Text)
+            .Template($"formatDateTimeInJodaSyntax({0}, {1})");
+
+        Method("Text")
             .Doc("Преобразует значение неизвестного типа в текстовое представление")
             .Arg("input", DataType.Unknown)
             .Returns(DataType.Text)

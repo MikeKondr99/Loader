@@ -47,7 +47,8 @@
 - [ ] Text(Time('12:00'))
 - [ ] Num(text, ',') или Dec|Float
 - [ ] Num(text, ',', ' ') или Dec|Float
-- [ ] Date(text, 'yyyy-mm-dd') Joda паттерн
+- [x] Date(text, 'yyyy-mm-dd') Joda паттерн
+- [x] Text(date, 'yyyy-mm-dd') Joda паттерн
 - [x] Subfield(text, delimeter, index) Без разворачивания
 - [x] Json функции JsonGet JsonGet<Type> JsonHas JsonType JsonLength
 - [x] Fractile

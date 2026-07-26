@@ -1,6 +1,8 @@
 using Loader.Query.Tests.Infrastructure;
 using Loader.Lang.Expressions;
+using Loader.Query.Functions;
 using Loader.Query.Models;
+using Loader.Query.Resolve;
 
 namespace Loader.Query.Tests.Functions.Conversion;
 
@@ -47,6 +49,12 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Arguments("Text(null)", null)]
     [Arguments("Date('2025-03-27 21:19').Text()", "2025-03-27 21:19:00")]
     [Arguments("Date('2025-03-27').Text()", "2025-03-27 00:00:00")]
+    [Arguments("Date('2026-01-02 15:04:05').Text('yyyy-MM-dd')", "2026-01-02")]
+    [Arguments("Date('2026-01-02 15:04:05').Text('dd.MM.yyyy hh:mm:ss a')", "02.01.2026 03:04:05 PM")]
+    [Arguments("Date('2026-01-02 15:04:05').Text('dd MMMM yyyy')", "02 January 2026")]
+    [Arguments("Date('2026-01-02', 'yyyy-MM-dd').DateOnly().Text('dd MMM yyyy')", "02 Jan 2026")]
+    [Arguments("Date('2026-01-02', 'yyyy-MM-dd').DateOnly().Text('yyyy-MM-dd')", "2026-01-02")]
+    [Arguments("Date(null, 'yyyy-MM-dd').DateOnly().Text('yyyy-MM-dd')", null)]
     public Task Text(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -145,6 +153,28 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
         // Assert
         await Assert.That(rows).Count().IsEqualTo(2);
         await Assert.That(rows.Select(static row => row["value"]).Any(static value => value is null)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Text date format должен быть константой")]
+    public async Task Text_date_format_must_be_constant()
+    {
+        var source = InlineQueryArrange.SingleColumnSource(
+            "Format",
+            DataType.Text,
+            ["'yyyy-MM-dd'"],
+            canBeNull: false);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = [Select("value", "Date('2026-01-02').Text(Format)")]
+        };
+
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .IsEquivalentTo(["Функция 'Text' требует, чтобы аргумент 2 был константой"]);
     }
 
     public static IEnumerable<(DataType SourceType, string SourceValue, string Expression)> NullableConversionCases()
