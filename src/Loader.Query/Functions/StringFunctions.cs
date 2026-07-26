@@ -114,6 +114,29 @@ public sealed class StringFunctions : FunctionDescriptor
             .Returns(DataType.Text)
             .Template($"repeat({0}, greatest({1}, 0))");
 
+        Method("ExcludeChars")
+            .Doc("Возвращает строку без символов, перечисленных в charset")
+            .Arg("input", DataType.Text)
+            .Arg("charset", DataType.Text)
+            .Returns(DataType.Text)
+            .Template($"replaceRegexpAll({0}, concat('[', if({1} = '', regexpQuoteMeta(char(0)), regexpQuoteMeta({1})), ']'), '')");
+
+        Method("KeepChars")
+            .Doc("Возвращает строку только из символов, перечисленных в charset")
+            .Arg("input", DataType.Text)
+            .Arg("charset", DataType.Text)
+            .Returns(DataType.Text)
+            .Template($"replaceRegexpAll({0}, concat('[^', if({1} = '', regexpQuoteMeta(char(0)), regexpQuoteMeta({1})), ']'), '')");
+
+        Method("SubField")
+            .Doc("Возвращает часть строки после разделения по delimiter. Положительный номер идет слева, отрицательный справа")
+            .Arg("input", DataType.Text)
+            .Arg("delimiter", DataType.Text)
+            .Arg("fieldNo", DataType.Integer)
+            .Returns(DataType.Text)
+            .CustomNullPropagation(_ => true)
+            .Template($"if(isNull({0}) OR isNull({1}) OR {0} = '', CAST(NULL AS Nullable(String)), arrayElement(CAST(splitByString(ifNull({1}, ''), ifNull({0}, '')) AS Array(Nullable(String))), {2}))");
+
         Method("Index")
             .Doc("Возвращает позицию первого вхождения подстроки")
             .Arg("input", DataType.Text)

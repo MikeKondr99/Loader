@@ -218,6 +218,85 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("ExcludeChars удаляет перечисленные символы")]
+    [Arguments("ExcludeChars('a1b2c3', '123')", "abc")]
+    [Arguments("ExcludeChars('hello world', 'aeiou')", "hll wrld")]
+    [Arguments("ExcludeChars('abc123', '')", "abc123")]
+    [Arguments("ExcludeChars('', '123')", "")]
+    [Arguments("ExcludeChars('aaaa', 'a')", "")]
+    [Arguments("ExcludeChars('abc', 'xyz')", "abc")]
+    [Arguments("ExcludeChars('aAbBcC', 'A')", "abBcC")]
+    [Arguments("ExcludeChars('a b c', ' ')", "abc")]
+    [Arguments("ExcludeChars('a-b]c^d', ']-^')", "abcd")]
+    [Arguments("ExcludeChars('a.b*c+d?', '.*+?')", "abcd")]
+    [Arguments("ExcludeChars('привет123', '123')", "привет")]
+    [Arguments("ExcludeChars('😀a👍b', 'a')", "😀👍b")]
+    [Arguments("ExcludeChars('😀a👍b', '😀')", "a👍b")]
+    [Arguments("ExcludeChars(null, '123')", null)]
+    [Arguments("ExcludeChars('abc', null)", null)]
+    public Task FuncExcludeCharsTests(string expr, object? expected)
+    {
+        return AssertExpressionAsync(expr, expected);
+    }
+
+    [Test]
+    [DisplayName("KeepChars оставляет только перечисленные символы")]
+    [Arguments("KeepChars('a1b2c3', '123')", "123")]
+    [Arguments("KeepChars('hello world', 'aeiou')", "eoo")]
+    [Arguments("KeepChars('abc123', '')", "")]
+    [Arguments("KeepChars('', '123')", "")]
+    [Arguments("KeepChars('aaaa', 'a')", "aaaa")]
+    [Arguments("KeepChars('abc', 'xyz')", "")]
+    [Arguments("KeepChars('aAbBcC', 'A')", "A")]
+    [Arguments("KeepChars('a b c', 'abc')", "abc")]
+    [Arguments("KeepChars('1a2b3c', '1234567890')", "123")]
+    [Arguments("KeepChars('a-b]c^d', ']-^')", "-]^")]
+    [Arguments("KeepChars('a.b*c+d?', '.*+?')", ".*+?")]
+    [Arguments("KeepChars('привет123', '123')", "123")]
+    [Arguments("KeepChars('😀a👍b', 'a')", "a")]
+    [Arguments("KeepChars('😀a👍b', '😀👍')", "😀👍")]
+    [Arguments("KeepChars(null, '123')", null)]
+    [Arguments("KeepChars('abc', null)", null)]
+    public Task FuncKeepCharsTests(string expr, object? expected)
+    {
+        return AssertExpressionAsync(expr, expected);
+    }
+
+    [Test]
+    [DisplayName("SubField возвращает часть строки по разделителю")]
+    [Arguments("SubField('abc;cde;efg', ';', 1)", "abc")]
+    [Arguments("SubField('abc;cde;efg', ';', 2)", "cde")]
+    [Arguments("SubField('abc;cde;efg', ';', 3)", "efg")]
+    [Arguments("SubField('abc;cde;efg', ';', -1)", "efg")]
+    [Arguments("SubField('abc;cde;efg', ';', -2)", "cde")]
+    [Arguments("SubField('abc;cde;efg', ';', -3)", "abc")]
+    [Arguments("SubField('abc;cde;efg', ';', 0)", null)]
+    [Arguments("SubField('abc;cde;efg', ';', 4)", null)]
+    [Arguments("SubField('abc;cde;efg', ';', -4)", null)]
+    [Arguments("SubField('', ';', 1)", null)]
+    [Arguments("SubField(';', ';', 1)", "")]
+    [Arguments("SubField(';', ';', 2)", "")]
+    [Arguments("SubField(';abc;;def;', ';', 1)", "")]
+    [Arguments("SubField(';abc;;def;', ';', 2)", "abc")]
+    [Arguments("SubField(';abc;;def;', ';', 3)", "")]
+    [Arguments("SubField(';abc;;def;', ';', -1)", "")]
+    [Arguments("SubField('a--b--c', '--', 2)", "b")]
+    [Arguments("SubField('привет|мир|😀', '|', 2)", "мир")]
+    [Arguments("SubField('привет|мир|😀', '|', -1)", "😀")]
+    [Arguments("SubField('abc', '', 1)", "a")]
+    [Arguments("SubField('abc', '', 3)", "c")]
+    [Arguments("SubField('abc', '', 4)", null)]
+    [Arguments("SubField(null, ';', 1)", null)]
+    [Arguments("SubField('abc', null, 1)", null)]
+    [Arguments("SubField('abc', ';', null)", null)]
+    [Arguments("'abc;cde;efg'.SubField(';', 2)", "cde")]
+    [Arguments("Type(SubField('abc;cde;efg', ';', 2))", "text")]
+    public Task FuncSubFieldTests(string expr, object? expected)
+    {
+        return AssertExpressionAsync(expr, expected);
+    }
+
+    [Test]
     [Arguments("Index('abc', 'a')", 1)]
     [Arguments("Index('abc', 'b')", 2)]
     [Arguments("Index('abc', 'c')", 3)]

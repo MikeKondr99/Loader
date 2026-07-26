@@ -48,10 +48,11 @@
 - [ ] Num(text, ',') или Dec|Float
 - [ ] Num(text, ',', ' ') или Dec|Float
 - [ ] Date(text, 'yyyy-mm-dd') Joda паттерн
-- [ ] Subfield(text, delimeter, index)
+- [x] Subfield(text, delimeter, index) Без разворачивания
 - [x] Json функции JsonGet JsonGet<Type> JsonHas JsonType JsonLength
-- [ ] Fractile
+- [x] Fractile
 - [ ] Сделать названия case insensitive
 - [ ] Переименовать что бы были больше похожи на Qlik
 - [ ] *Qol функции (необязательно)*
+  - [x] ExcludeChars KeepChars
 - [ ] Убрать некоторые редкие функции что бы не обещать их поддержку (FutureValue)
