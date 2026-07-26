@@ -23,13 +23,12 @@ public sealed class ConversionFunctions : FunctionDescriptor
                 .Template($"{0}");
         }
 
-        RequiredConversion(DataType.Text, DataType.Integer)
+        Method("Int")
             .Doc("Преобразует текст в целое число")
-            .Template($"CAST({0} AS Int64)");
-            
-        NullableConversion(DataType.Text, DataType.Integer)
-            .Doc("Преобразует текст в целое число")
-            .Template($"CAST({0} AS Nullable(Int64))");
+            .Arg("input", DataType.Text)
+            .Returns(DataType.Integer)
+            .CustomNullPropagation(static _ => true)
+            .Template($"toInt64OrNull({0})");
 
         RequiredConversion(DataType.Boolean, DataType.Integer)
             .Doc("Преобразует логическое значение в целое число")
@@ -50,13 +49,20 @@ public sealed class ConversionFunctions : FunctionDescriptor
         NullableConversion(DataType.Null, DataType.Integer)
             .Template($"CAST({0} AS Nullable(Int64))");
 
-        RequiredConversion(DataType.Text, DataType.Number)
+        Method("Num")
             .Doc("Преобразует текст в число с плавающей точкой")
-            .Template($"CAST({0} AS Decimal64(10))");
-            
-        NullableConversion(DataType.Text, DataType.Number)
-            .Doc("Преобразует текст в число с плавающей точкой")
-            .Template($"CAST({0} AS Nullable(Decimal64(10)))");
+            .Arg("input", DataType.Text)
+            .Returns(DataType.Number)
+            .CustomNullPropagation(static _ => true)
+            .Template($"toDecimal64OrNull({0}, 10)");
+
+        Method("Num")
+            .Doc("Преобразует текст в число с указанным десятичным разделителем")
+            .Arg("input", DataType.Text)
+            .ConstArg("decimalSeparator", DataType.Text)
+            .Returns(DataType.Number)
+            .CustomNullPropagation(static _ => true)
+            .Template($"if(isNull({0}) OR {1} = '', CAST(NULL AS Nullable(Decimal64(10))), toDecimal64OrNull(replaceAll(ifNull({0}, ''), {1}, '.'), 10))");
 
         RequiredConversion(DataType.Boolean, DataType.Number)
             .Doc("Преобразует логическое значение в число")

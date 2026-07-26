@@ -31,7 +31,7 @@ public sealed class ClickHouseReflectionFunctionTests : ClickHouseExpressionTest
 
     [Test]
     [Arguments("RawType(42)", "UInt8")]
-    [Arguments("RawType(Int('42'))", "Int64")]
+    [Arguments("RawType(Int('42'))", "Nullable(Int64)")]
     [Arguments("RawType(Bool('abc'))", "Bool")]
     public Task Raw_type_function(string expression, object? expected)
     {

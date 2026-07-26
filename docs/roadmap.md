@@ -45,8 +45,8 @@
 
 - [ ] Time('12:00')
 - [ ] Text(Time('12:00'))
-- [ ] Num(text, ',') или Dec|Float
-- [ ] Num(text, ',', ' ') или Dec|Float
+- [x] Num(text, ',') или Dec|Float
+- [x] Num(text, ',', ' ') или Dec|Float
 - [x] Date(text, 'yyyy-mm-dd') Joda паттерн
 - [x] Text(date, 'yyyy-mm-dd') Joda паттерн
 - [x] Subfield(text, delimeter, index) Без разворачивания

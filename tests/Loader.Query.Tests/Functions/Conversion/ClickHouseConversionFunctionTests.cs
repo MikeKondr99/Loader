@@ -21,6 +21,10 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Arguments("Int(false)", 0)]
     [Arguments("Int(true)", 1)]
     [Arguments("Int(null)", null)]
+    [Arguments("Int('bad')", null)]
+    [Arguments("'bad'.Int()", null)]
+    [Arguments("Int('')", null)]
+    [Arguments("Int('12,34')", null)]
     public Task Int(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -33,6 +37,18 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Arguments("Num(false)", 0.0)]
     [Arguments("Num(true)", 1.0)]
     [Arguments("Num(null)", null)]
+    [Arguments("Num('bad')", null)]
+    [Arguments("'bad'.Num()", null)]
+    [Arguments("Num('')", null)]
+    [Arguments("Num('12,34')", null)]
+    [Arguments("Num('12,34', ',')", 12.34)]
+    [Arguments("'12,34'.Num(',')", 12.34)]
+    [Arguments("Num('12.34', '.')", 12.34)]
+    [Arguments("'1 234,56'.Replace(' ', '').Num(',')", 1234.56)]
+    [Arguments("Num('1,234.56', '.')", null)]
+    [Arguments("Num('bad', ',')", null)]
+    [Arguments("Num('', ',')", null)]
+    [Arguments("Num(null, ',')", null)]
     public Task Num(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -69,6 +85,7 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Arguments("Bool(-5.0)", false)]
     [Arguments("Bool(23.0)", true)]
     [Arguments("Bool('25')", true)]
+    [Arguments("Bool('bad')", true)]
     [Arguments("Bool('')", false)]
     [Arguments("Bool(false)", false)]
     [Arguments("Bool(true)", true)]
@@ -83,6 +100,8 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Arguments("'2025-03-27 21:40'.Date()", "@2025-03-27 21:40")]
     [Arguments("Date('2025-03-27')", "@2025-03-27 00:00")]
     [Arguments("''.EmptyIsNull().Date()", null)]
+    [Arguments("Date('bad')", null)]
+    [Arguments("'bad'.Date()", null)]
     [Arguments("Date('2025-03-27').Date().Date()", "@2025-03-27 00:00")]
     public Task Date(string expression, object? expected)
     {
@@ -90,11 +109,11 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     }
 
     [Test]
-    [Arguments("RawType(Int('1'))", "Int64")]
-    [Arguments("RawType(Num('1'))", "Decimal(18, 10)")]
+    [Arguments("RawType(Int('1'))", "Nullable(Int64)")]
+    [Arguments("RawType(Num('1'))", "Nullable(Decimal(18, 10))")]
     [Arguments("RawType(Bool('a'))", "Bool")]
-    [DisplayName("ClickHouse conversion casts выбирают non-nullable тип для non-nullable выражений")]
-    public Task Conversion_casts_use_expected_clickhouse_type_for_required_expression(string expression, object? expected)
+    [DisplayName("ClickHouse conversion casts выбирают ожидаемый runtime тип")]
+    public Task Conversion_casts_use_expected_clickhouse_runtime_type(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
     }
@@ -175,6 +194,28 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
         await Assert.That(result.IsSuccess).IsFalse();
         await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
             .IsEquivalentTo(["Функция 'Text' требует, чтобы аргумент 2 был константой"]);
+    }
+
+    [Test]
+    [DisplayName("Num decimal separator должен быть константой")]
+    public async Task Num_decimal_separator_must_be_constant()
+    {
+        var source = InlineQueryArrange.SingleColumnSource(
+            "DecimalSeparator",
+            DataType.Text,
+            ["','"],
+            canBeNull: false);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = [Select("value", "Num('12,34', DecimalSeparator)")]
+        };
+
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).First())
+            .Contains("Num");
     }
 
     public static IEnumerable<(DataType SourceType, string SourceValue, string Expression)> NullableConversionCases()
