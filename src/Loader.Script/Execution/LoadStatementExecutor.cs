@@ -1,4 +1,6 @@
 using System.Data.Common;
+using System.Text;
+using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -34,7 +36,8 @@ public class LoadStatementExecutor
         activity?.SetTag("load.table_name", statement.TableName);
 
         // 1. Сырые данные source кладем в физическую temp table column1, column2...
-        var tempTable = await LoadTempTableAsync(context, statement, cancellationToken).ConfigureAwait(false);
+        await using var tempTable = await LoadTempTableAsync(context, statement, cancellationToken)
+            .ConfigureAwait(false);
 
         // 2. LOAD выражения превращаем в типизированный Query поверх temp table.
         var query = BuildQuery(statement, tempTable);
@@ -52,7 +55,7 @@ public class LoadStatementExecutor
         return loadedTable;
     }
 
-    public async ValueTask<LoadTempTableResult> LoadTempTableAsync(
+    public async ValueTask<TemporaryClickHouseTable> LoadTempTableAsync(
         ScriptContext context,
         LoadStatement statement,
         CancellationToken cancellationToken = default)
@@ -89,7 +92,7 @@ public class LoadStatementExecutor
         }
 
         // 7. Возвращаем данные, нужные следующему шагу LOAD pipeline.
-        return CreateTempTableResult(stageNameReader, stageReader, tempTable);
+        return CreateTempTableResult(context, stageNameReader, stageReader, tempTable);
     }
 
     private async ValueTask<LoadProviderSource> ResolveProviderAsync(
@@ -148,7 +151,7 @@ public class LoadStatementExecutor
         context.Logger.TempTableLoaded(tempTable.ToSql());
     }
 
-    private static QueryModel BuildQuery(LoadStatement statement, LoadTempTableResult tempTable)
+    private static QueryModel BuildQuery(LoadStatement statement, TemporaryClickHouseTable tempTable)
     {
         return new QueryModel
         {
@@ -162,7 +165,7 @@ public class LoadStatementExecutor
         };
     }
 
-    private static QuerySource BuildQuerySource(LoadTempTableResult tempTable)
+    private static QuerySource BuildQuerySource(TemporaryClickHouseTable tempTable)
     {
         ThrowIfDuplicateSourceNames(tempTable.OriginalColumnNames);
         return new QuerySource
@@ -264,17 +267,51 @@ public class LoadStatementExecutor
         context.Logger.FinalTableMaterialized(finalTable.ToSql());
     }
 
-    private static LoadTempTableResult CreateTempTableResult(
+    protected virtual async ValueTask DropTempTableAsync(
+        ScriptContext context,
+        ClickHouseTableName tempTable,
+        CancellationToken cancellationToken)
+    {
+        context.Logger.DroppingTempTable(tempTable.ToSql());
+
+        await using var connection = new ClickHouseConnection(context.TargetConnectionString);
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = new StringBuilder()
+            .Append("DROP TABLE IF EXISTS ")
+            .Append(tempTable.ToSql())
+            .ToString();
+        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        context.Logger.TempTableDropped(tempTable.ToSql());
+    }
+
+    private async ValueTask DropTempTableBestEffortAsync(
+        ScriptContext context,
+        ClickHouseTableName tempTable)
+    {
+        try
+        {
+            await DropTempTableAsync(context, tempTable, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            context.Logger.TempTableDropFailed(tempTable.ToSql(), exception);
+        }
+    }
+
+    private TemporaryClickHouseTable CreateTempTableResult(
+        ScriptContext context,
         RenameColumnDataReader stageNameReader,
         DomainDataReader stageReader,
         ClickHouseTableName tempTable)
     {
-        return new LoadTempTableResult
-        {
-            TableName = tempTable,
-            Schema = stageReader.DataSchema,
-            OriginalColumnNames = stageNameReader.OriginalNames.ToArray()
-        };
+        return new TemporaryClickHouseTable(
+            tempTable,
+            stageReader.DataSchema,
+            stageNameReader.OriginalNames.ToArray(),
+            () => DropTempTableBestEffortAsync(context, tempTable));
     }
 
     private ClickHouseTableName CreatePhysicalTempTableName()

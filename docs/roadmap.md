@@ -26,6 +26,8 @@
 - [ ] Базовые Трансформации в LOAD
   - [ ] WHERE
   - [ ] ORDER BY
+    - [ ] Проблема с LOG
+    - [ ] Проблема с Order By оптимизацией
   - [ ] GROUP BY и Аггрегации
   - [ ] LIMIT OFFSET
 - [ ]  LOAD FROM LOAD
@@ -46,7 +48,6 @@
 - [ ] Time('12:00')
 - [ ] Text(Time('12:00'))
 - [x] Num(text, ',') или Dec|Float
-- [x] Num(text, ',', ' ') или Dec|Float
 - [x] Date(text, 'yyyy-mm-dd') Joda паттерн
 - [x] Text(date, 'yyyy-mm-dd') Joda паттерн
 - [x] Subfield(text, delimeter, index) Без разворачивания

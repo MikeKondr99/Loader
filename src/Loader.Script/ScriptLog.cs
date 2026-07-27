@@ -45,4 +45,22 @@ public static partial class ScriptLog
         Level = LogLevel.Information,
         Message = "Финальная таблица '{FinalTable}' материализована.")]
     public static partial void FinalTableMaterialized(this ILogger logger, string finalTable);
+
+    [LoggerMessage(
+        EventId = 1007,
+        Level = LogLevel.Information,
+        Message = "Удаляю временную таблицу '{TempTable}'.")]
+    public static partial void DroppingTempTable(this ILogger logger, string tempTable);
+
+    [LoggerMessage(
+        EventId = 1008,
+        Level = LogLevel.Information,
+        Message = "Временная таблица '{TempTable}' удалена.")]
+    public static partial void TempTableDropped(this ILogger logger, string tempTable);
+
+    [LoggerMessage(
+        EventId = 1009,
+        Level = LogLevel.Warning,
+        Message = "Не удалось удалить временную таблицу '{TempTable}'.")]
+    public static partial void TempTableDropFailed(this ILogger logger, string tempTable, Exception exception);
 }

@@ -32,7 +32,7 @@ public sealed class LoadStatementExecutorTests
             OrderBy = null
         };
 
-        var result = await executor.LoadTempTableAsync(CreateContext(), statement);
+        await using var result = await executor.LoadTempTableAsync(CreateContext(), statement);
 
         await Assert.That(providerResolver.ResolveCalls).IsEqualTo(1);
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
@@ -91,6 +91,8 @@ public sealed class LoadStatementExecutorTests
 
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
+        await Assert.That(executor.DropCalls).IsEqualTo(1);
+        await Assert.That(executor.DropTableName!.Table).IsEqualTo(executor.TableName!.Table);
         await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
         await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
         await Assert.That(executor.QuerySql).Contains("stage.`column2` AS `city`");
@@ -104,6 +106,38 @@ public sealed class LoadStatementExecutorTests
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("city");
         await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
         await Assert.That(context.LoadedTables[0]).IsSameReferenceAs(loadedTable);
+    }
+
+    [Test]
+    public async Task Execute_load_drops_temp_table_when_final_materialization_fails()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            ThrowOnMaterialize = true
+        };
+        var context = CreateContext();
+        var statement = new LoadStatement
+        {
+            TableName = "orders",
+            Fields = null,
+            Source = "orders.csv",
+            Options = [],
+            Where = null,
+            GroupBy = null,
+            OrderBy = null
+        };
+
+        await Assert.That(async () => await executor.ExecuteAsync(context, statement))
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("materialize failed");
+
+        await Assert.That(executor.WriteCalls).IsEqualTo(1);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
+        await Assert.That(executor.DropCalls).IsEqualTo(1);
+        await Assert.That(executor.DropTableName!.Table).IsEqualTo(executor.TableName!.Table);
+        await Assert.That(context.LoadedTables).IsEmpty();
     }
 
     private static ScriptContext CreateContext()
@@ -154,7 +188,13 @@ public sealed class LoadStatementExecutorTests
 
         public ClickHouseTableName? FinalTableName { get; private set; }
 
+        public int DropCalls { get; private set; }
+
+        public ClickHouseTableName? DropTableName { get; private set; }
+
         public string? QuerySql { get; private set; }
+
+        public bool ThrowOnMaterialize { get; init; }
 
         public List<object[]> Rows { get; } = [];
 
@@ -184,6 +224,21 @@ public sealed class LoadStatementExecutorTests
             MaterializeCalls++;
             QuerySql = querySql;
             FinalTableName = finalTable;
+            if (ThrowOnMaterialize)
+            {
+                throw new InvalidOperationException("materialize failed");
+            }
+
+            return ValueTask.CompletedTask;
+        }
+
+        protected override ValueTask DropTempTableAsync(
+            ScriptContext context,
+            ClickHouseTableName tempTable,
+            CancellationToken cancellationToken)
+        {
+            DropCalls++;
+            DropTableName = tempTable;
             return ValueTask.CompletedTask;
         }
     }
