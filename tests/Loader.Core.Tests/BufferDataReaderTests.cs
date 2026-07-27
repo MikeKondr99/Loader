@@ -19,8 +19,6 @@ namespace Loader.Core.Tests;
 
 public sealed class BufferDataReaderTests
 {
-    private const string OracleConnectionStringEnvironmentVariable = "ORACLE_TEST_CONNECTION_STRING";
-
     [Test]
     [DisplayName("CsvProvider works without buffer")]
     public async Task Csv_provider_works_without_buffer()
@@ -102,12 +100,13 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
+    [ClassDataSource<PostgresTestDatabase>(Shared = SharedType.PerTestSession)]
+    [ParallelLimiter<PostgresParallelLimit>]
     [DisplayName("PostgresProvider works without buffer")]
-    public async Task Postgres_provider_works_without_buffer()
+    public async Task Postgres_provider_works_without_buffer(PostgresTestDatabase postgres)
     {
-        await using var database = await PostgresTestDatabase.StartAsync();
         var provider = new PostgresProvider();
-        var source = new ConnectionStringSource { ConnectionString = database.ConnectionString };
+        var source = new ConnectionStringSource { ConnectionString = postgres.ConnectionString };
         var config = new SqlTableConfig { Sql = "select 1::integer as id, 'Moscow'::text as name" };
 
         await AssertProviderWorksWithAndWithoutBuffer(
@@ -117,12 +116,13 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
+    [ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
+    [ParallelLimiter<ClickHouseParallelLimit>]
     [DisplayName("ClickHouseProvider works without buffer")]
-    public async Task ClickHouse_provider_works_without_buffer()
+    public async Task ClickHouse_provider_works_without_buffer(ClickHouseTestDatabase clickHouse)
     {
-        await using var database = await ClickHouseTestDatabase.StartAsync();
         var provider = new ClickHouseProvider();
-        var source = new ConnectionStringSource { ConnectionString = database.ConnectionString };
+        var source = new ConnectionStringSource { ConnectionString = clickHouse.ConnectionString };
         var config = new SqlTableConfig { Sql = "select toInt32(1) as id, 'Moscow' as name" };
 
         await AssertProviderWorksWithAndWithoutBuffer(
@@ -132,12 +132,13 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
+    [ClassDataSource<SqlServerTestDatabase>(Shared = SharedType.PerTestSession)]
+    [ParallelLimiter<SqlServerParallelLimit>]
     [DisplayName("SqlServerProvider works only with buffer")]
-    public async Task SqlServer_provider_works_only_with_buffer()
+    public async Task SqlServer_provider_works_only_with_buffer(SqlServerTestDatabase sqlServer)
     {
-        await using var database = await SqlServerTestDatabase.StartAsync();
         var provider = new SqlServerProvider();
-        var source = new ConnectionStringSource { ConnectionString = database.ConnectionString };
+        var source = new ConnectionStringSource { ConnectionString = sqlServer.ConnectionString };
         var config = new SqlTableConfig { Sql = "select cast(1 as int) as id, cast('Moscow' as nvarchar(20)) as name" };
 
         await AssertProviderWorksWithAndWithoutBuffer(
@@ -147,16 +148,14 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
+    [Explicit]
+    [ClassDataSource<OracleTestDatabase>(Shared = SharedType.PerTestSession)]
+    [ParallelLimiter<OracleParallelLimit>]
     [DisplayName("OracleProvider works only with buffer")]
-    public async Task Oracle_provider_works_only_with_buffer()
+    public async Task Oracle_provider_works_only_with_buffer(OracleTestDatabase oracle)
     {
-        var connectionString = Environment.GetEnvironmentVariable(OracleConnectionStringEnvironmentVariable);
-        Skip.When(
-            string.IsNullOrWhiteSpace(connectionString),
-            $"Set {OracleConnectionStringEnvironmentVariable} to run Oracle integration tests.");
-
         var provider = new OracleProvider();
-        var source = new ConnectionStringSource { ConnectionString = connectionString! };
+        var source = new ConnectionStringSource { ConnectionString = oracle.ConnectionString };
         var config = new SqlTableConfig { Sql = "select 1 as \"id\", 'Moscow' as \"name\" from dual" };
 
         await AssertProviderNeedsBuffer(

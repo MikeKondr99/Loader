@@ -7,23 +7,15 @@ using Loader.Core.Writers.ClickHouse;
 
 namespace Loader.Core.Tests;
 
+[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<ClickHouseParallelLimit>]
 public sealed class ClickHouseWriterTests
 {
-    private static ClickHouseTestDatabase? Database;
+    private readonly ClickHouseTestDatabase database;
 
-    [Before(Class)]
-    public static async Task StartDatabase()
+    public ClickHouseWriterTests(ClickHouseTestDatabase database)
     {
-        Database = await ClickHouseTestDatabase.StartAsync();
-    }
-
-    [After(Class)]
-    public static async Task StopDatabase()
-    {
-        if (Database is not null)
-        {
-            await Database.DisposeAsync();
-        }
+        this.database = database;
     }
 
     [Test]
@@ -134,9 +126,8 @@ public sealed class ClickHouseWriterTests
         return table;
     }
 
-    private static ConnectionStringSource Source()
+    private ConnectionStringSource Source()
     {
-        var database = Database ?? throw new InvalidOperationException("ClickHouse test database is not started.");
         return new ConnectionStringSource
         {
             ConnectionString = database.ConnectionString

@@ -7,24 +7,16 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
+[ClassDataSource<PostgresTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<PostgresParallelLimit>]
 public sealed class AutoCastPostgresIntegrationTests
 {
     private static readonly PostgresProvider Provider = new();
-    private static PostgresTestDatabase? Database;
+    private readonly PostgresTestDatabase database;
 
-    [Before(Class)]
-    public static async Task StartDatabase()
+    public AutoCastPostgresIntegrationTests(PostgresTestDatabase database)
     {
-        Database = await PostgresTestDatabase.StartAsync();
-    }
-
-    [After(Class)]
-    public static async Task StopDatabase()
-    {
-        if (Database is not null)
-        {
-            await Database.DisposeAsync();
-        }
+        this.database = database;
     }
 
     [Test]
@@ -61,7 +53,7 @@ public sealed class AutoCastPostgresIntegrationTests
             ]);
     }
 
-    private static async Task<AutoCastSchema> AnalyzeAsync(string sql)
+    private async Task<AutoCastSchema> AnalyzeAsync(string sql)
     {
         await using var rawReader = await OpenReaderAsync(sql);
         var analyzer = new AutoCastAnalyzer();
@@ -76,9 +68,8 @@ public sealed class AutoCastPostgresIntegrationTests
         return analyzer.Schema ?? throw new InvalidOperationException("AutoCast analyzer did not complete.");
     }
 
-    private static ValueTask<DbDataReader> OpenReaderAsync(string sql)
+    private ValueTask<DbDataReader> OpenReaderAsync(string sql)
     {
-        var database = Database ?? throw new InvalidOperationException("Postgres test database is not started.");
         return Provider.OpenReaderAsync(
             new ConnectionStringSource
             {

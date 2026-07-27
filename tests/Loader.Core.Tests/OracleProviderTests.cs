@@ -7,10 +7,18 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
+[Explicit]
+[ClassDataSource<OracleTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<OracleParallelLimit>]
 public sealed class OracleProviderTests
 {
-    private const string ConnectionStringEnvironmentVariable = "ORACLE_TEST_CONNECTION_STRING";
     private static readonly OracleProvider Provider = new();
+    private readonly OracleTestDatabase database;
+
+    public OracleProviderTests(OracleTestDatabase database)
+    {
+        this.database = database;
+    }
 
     [Test]
     [DisplayName("Oracle provider возвращает ожидаемый provider kind")]
@@ -24,8 +32,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle sql-выражение мапится в ожидаемое canonical value")]
     public async Task Sql_expression_maps_to_expected_value(string sqlExpression, DataType expectedType, object expected)
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync($"select {sqlExpression} as \"value\" from dual");
         await using var reader = rawReader.Normalize();
 
@@ -41,8 +47,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle пустой результат сохраняет имена и типы схемы")]
     public async Task Empty_result_preserves_schema()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             """
             select
@@ -64,8 +68,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle aliases возвращают uppercase без кавычек и точное имя с кавычками")]
     public async Task Aliases_return_uppercase_without_quotes_and_exact_name_with_quotes()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             """
             select
@@ -93,8 +95,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle несколько строк читаются в порядке результата")]
     public async Task Reads_multiple_rows_in_result_order()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             """
             select cast(1 as number(10, 0)) as "id", 'first' as "name" from dual
@@ -120,8 +120,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle provider работает с Where поверх Domain reader")]
     public async Task Supports_where_over_domain_reader()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             """
             select cast(1 as number(10, 0)) as "id", 'Moscow' as "city" from dual
@@ -147,8 +145,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle GetDataTypeName сохраняет доступным исходное имя типа")]
     public async Task Keeps_origin_data_type_name_available()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             """
             select
@@ -166,8 +162,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle null значение возвращает DBNull и сохраняет тип схемы")]
     public async Task Null_value_returns_dbnull()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync("select cast(null as number(10, 0)) as \"value\" from dual");
         await using var reader = rawReader.Normalize();
 
@@ -183,8 +177,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle SELECT 1 без alias использует имя колонки от Oracle")]
     public async Task Select_without_alias_uses_oracle_generated_column_name()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync("select 1 from dual");
         await using var reader = rawReader.Normalize();
 
@@ -200,8 +192,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle ошибка запроса оборачивается в DbExecutionException")]
     public async Task Query_error_is_wrapped_in_provider_exception()
     {
-        RequireOracleConnectionString();
-
         await Assert.That(async () => await OpenReaderAsync("select * from table_that_does_not_exist"))
             .ThrowsExactly<DbExecutionException>()
             .WithMessage("Database query failed for provider 'oracle': select * from table_that_does_not_exist");
@@ -211,8 +201,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle слишком большой numeric при чтении оборачивается в DataReaderValueException")]
     public async Task Oversized_numeric_value_error_is_wrapped_in_reader_value_exception()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync(
             "select cast(99999999999999999999999999999999999999 as number(38, 0)) as \"value\" from dual");
         await using var reader = rawReader.Normalize();
@@ -227,8 +215,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle повторяющиеся имена колонок кидают явную ошибку схемы")]
     public async Task Duplicate_column_names_throw_schema_exception()
     {
-        RequireOracleConnectionString();
-
         await using var rawReader = await OpenReaderAsync("select 1 as value, 2 as value from dual");
 
         await Assert.That(() => rawReader.Normalize())
@@ -240,8 +226,6 @@ public sealed class OracleProviderTests
     [DisplayName("Oracle CollectMeta читает decimal precision и scale из column schema")]
     public async Task Collect_meta_reads_decimal_precision_and_scale_from_column_schema()
     {
-        RequireOracleConnectionString();
-
         var meta = new DataMetaContainer();
         await using var rawReader = await OpenReaderAsync("select cast(12.34 as number(10, 2)) as \"amount\" from dual");
         await using var reader = rawReader
@@ -288,25 +272,12 @@ public sealed class OracleProviderTests
         yield return ("timestamp '2026-01-02 03:04:05' at time zone 'UTC'", DataType.Text, "02-JAN-26 03.04.05.000000 AM UTC");
     }
 
-    private static void RequireOracleConnectionString()
-    {
-        Skip.When(
-            string.IsNullOrWhiteSpace(GetConnectionString()),
-            $"Set {ConnectionStringEnvironmentVariable} to run Oracle integration tests.");
-    }
-
-    private static string? GetConnectionString()
-    {
-        return Environment.GetEnvironmentVariable(ConnectionStringEnvironmentVariable);
-    }
-
-    private static ValueTask<DbDataReader> OpenReaderAsync(string sql)
+    private ValueTask<DbDataReader> OpenReaderAsync(string sql)
     {
         return Provider.OpenReaderAsync(
             new ConnectionStringSource
             {
-                ConnectionString = GetConnectionString()
-                    ?? throw new InvalidOperationException($"{ConnectionStringEnvironmentVariable} is not set.")
+                ConnectionString = database.ConnectionString
             },
             new SqlTableConfig
             {

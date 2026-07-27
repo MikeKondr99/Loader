@@ -11,11 +11,12 @@ using Loader.Query.Compile;
 using Loader.Query.Functions;
 using Loader.Query.Models;
 using Loader.Query.Resolve;
+using Loader.Tests.Common;
 
 namespace Loader.Query.Tests.Infrastructure;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerAssembly)]
-[NotInParallel("ClickHouse")]
+[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<ClickHouseParallelLimit>]
 public abstract class ClickHouseExpressionTestBase
 {
     private static readonly ClickHouseProvider Provider = new();

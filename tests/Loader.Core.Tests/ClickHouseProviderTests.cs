@@ -7,24 +7,16 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
+[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<ClickHouseParallelLimit>]
 public sealed class ClickHouseProviderTests
 {
     private static readonly ClickHouseProvider Provider = new();
-    private static ClickHouseTestDatabase? Database;
+    private readonly ClickHouseTestDatabase database;
 
-    [Before(Class)]
-    public static async Task StartDatabase()
+    public ClickHouseProviderTests(ClickHouseTestDatabase database)
     {
-        Database = await ClickHouseTestDatabase.StartAsync();
-    }
-
-    [After(Class)]
-    public static async Task StopDatabase()
-    {
-        if (Database is not null)
-        {
-            await Database.DisposeAsync();
-        }
+        this.database = database;
     }
 
     [Test]
@@ -346,9 +338,8 @@ public sealed class ClickHouseProviderTests
         yield return ("map('a', 1, 'b', 2)", DataType.Text);
     }
 
-    private static ValueTask<DbDataReader> OpenReaderAsync(string sql)
+    private ValueTask<DbDataReader> OpenReaderAsync(string sql)
     {
-        var database = Database ?? throw new InvalidOperationException("ClickHouse test database is not started.");
         return Provider.OpenReaderAsync(
             new ConnectionStringSource
             {

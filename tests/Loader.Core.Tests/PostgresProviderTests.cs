@@ -7,24 +7,16 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
+[ClassDataSource<PostgresTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<PostgresParallelLimit>]
 public sealed class PostgresProviderTests
 {
     private static readonly PostgresProvider Provider = new();
-    private static PostgresTestDatabase? Database;
+    private readonly PostgresTestDatabase database;
 
-    [Before(Class)]
-    public static async Task StartDatabase()
+    public PostgresProviderTests(PostgresTestDatabase database)
     {
-        Database = await PostgresTestDatabase.StartAsync();
-    }
-
-    [After(Class)]
-    public static async Task StopDatabase()
-    {
-        if (Database is not null)
-        {
-            await Database.DisposeAsync();
-        }
+        this.database = database;
     }
 
     [Test]
@@ -304,9 +296,8 @@ public sealed class PostgresProviderTests
         yield return ("array['a', 'b']::text[]", DataType.Text, "{a,b}");
     }
 
-    private static ValueTask<DbDataReader> OpenReaderAsync(string sql)
+    private ValueTask<DbDataReader> OpenReaderAsync(string sql)
     {
-        var database = Database ?? throw new InvalidOperationException("Postgres test database is not started.");
         return Provider.OpenReaderAsync(
             new ConnectionStringSource
             {

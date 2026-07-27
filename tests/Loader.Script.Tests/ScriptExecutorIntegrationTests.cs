@@ -7,15 +7,15 @@ using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
 using Loader.Script.Execution;
-using Loader.Script.Tests.Infrastructure;
+using Loader.Tests.Common;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions.Enums;
 using LangScript = Loader.Lang.Script;
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerAssembly)]
-[NotInParallel("ClickHouse")]
+[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<ClickHouseParallelLimit>]
 public sealed class ScriptExecutorIntegrationTests
 {
     private readonly ClickHouseTestDatabase database;

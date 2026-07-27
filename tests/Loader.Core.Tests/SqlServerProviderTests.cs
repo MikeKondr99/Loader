@@ -7,24 +7,16 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
+[ClassDataSource<SqlServerTestDatabase>(Shared = SharedType.PerTestSession)]
+[ParallelLimiter<SqlServerParallelLimit>]
 public sealed class SqlServerProviderTests
 {
     private static readonly SqlServerProvider Provider = new();
-    private static SqlServerTestDatabase? Database;
+    private readonly SqlServerTestDatabase database;
 
-    [Before(Class)]
-    public static async Task StartDatabase()
+    public SqlServerProviderTests(SqlServerTestDatabase database)
     {
-        Database = await SqlServerTestDatabase.StartAsync();
-    }
-
-    [After(Class)]
-    public static async Task StopDatabase()
-    {
-        if (Database is not null)
-        {
-            await Database.DisposeAsync();
-        }
+        this.database = database;
     }
 
     [Test]
@@ -330,9 +322,8 @@ public sealed class SqlServerProviderTests
         yield return ("cast(0x0000000000000001 as rowversion)", DataType.Text);
     }
 
-    private static ValueTask<DbDataReader> OpenReaderAsync(string sql)
+    private ValueTask<DbDataReader> OpenReaderAsync(string sql)
     {
-        var database = Database ?? throw new InvalidOperationException("SqlServer test database is not started.");
         return Provider.OpenReaderAsync(
             new ConnectionStringSource
             {
