@@ -93,6 +93,7 @@ public sealed class LoadStatementExecutorTests
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
         await Assert.That(executor.DropCalls).IsEqualTo(1);
         await Assert.That(executor.DropTableName!.Table).IsEqualTo(executor.TableName!.Table);
+        await Assert.That(executor.DropFinalCalls).IsEqualTo(0);
         await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
         await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
         await Assert.That(executor.QuerySql).Contains("stage.`column2` AS `city`");
@@ -137,6 +138,8 @@ public sealed class LoadStatementExecutorTests
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
         await Assert.That(executor.DropCalls).IsEqualTo(1);
         await Assert.That(executor.DropTableName!.Table).IsEqualTo(executor.TableName!.Table);
+        await Assert.That(executor.DropFinalCalls).IsEqualTo(1);
+        await Assert.That(executor.DropFinalTableName!.Table).IsEqualTo(executor.FinalTableName!.Table);
         await Assert.That(context.LoadedTables).IsEmpty();
     }
 
@@ -192,6 +195,10 @@ public sealed class LoadStatementExecutorTests
 
         public ClickHouseTableName? DropTableName { get; private set; }
 
+        public int DropFinalCalls { get; private set; }
+
+        public ClickHouseTableName? DropFinalTableName { get; private set; }
+
         public string? QuerySql { get; private set; }
 
         public bool ThrowOnMaterialize { get; init; }
@@ -239,6 +246,16 @@ public sealed class LoadStatementExecutorTests
         {
             DropCalls++;
             DropTableName = tempTable;
+            return ValueTask.CompletedTask;
+        }
+
+        protected override ValueTask DropFinalTableAsync(
+            ScriptContext context,
+            ClickHouseTableName finalTable,
+            CancellationToken cancellationToken)
+        {
+            DropFinalCalls++;
+            DropFinalTableName = finalTable;
             return ValueTask.CompletedTask;
         }
     }

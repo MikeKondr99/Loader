@@ -63,4 +63,22 @@ public static partial class ScriptLog
         Level = LogLevel.Warning,
         Message = "Не удалось удалить временную таблицу '{TempTable}'.")]
     public static partial void TempTableDropFailed(this ILogger logger, string tempTable, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1010,
+        Level = LogLevel.Information,
+        Message = "Удаляю неуспешную финальную таблицу '{FinalTable}'.")]
+    public static partial void DroppingFinalTable(this ILogger logger, string finalTable);
+
+    [LoggerMessage(
+        EventId = 1011,
+        Level = LogLevel.Information,
+        Message = "Неуспешная финальная таблица '{FinalTable}' удалена.")]
+    public static partial void FinalTableDropped(this ILogger logger, string finalTable);
+
+    [LoggerMessage(
+        EventId = 1012,
+        Level = LogLevel.Warning,
+        Message = "Не удалось удалить неуспешную финальную таблицу '{FinalTable}'.")]
+    public static partial void FinalTableDropFailed(this ILogger logger, string finalTable, Exception exception);
 }

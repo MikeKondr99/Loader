@@ -45,13 +45,14 @@ public class LoadStatementExecutor
         var querySql = CompileQuery(resolvedQuery);
 
         // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
-        var finalTable = CreatePhysicalFinalTableName();
-        activity?.SetTag("load.final_table", finalTable.Table);
-        await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+        await using var finalTable = CreateFinalTable(context);
+        activity?.SetTag("load.final_table", finalTable.TableName.Table);
+        await MaterializeFinalTableAsync(context, querySql, finalTable.TableName, cancellationToken).ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
-        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable);
+        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName);
         context.AddLoadedTable(loadedTable);
+        finalTable.Commit();
         return loadedTable;
     }
 
@@ -273,18 +274,34 @@ public class LoadStatementExecutor
         CancellationToken cancellationToken)
     {
         context.Logger.DroppingTempTable(tempTable.ToSql());
+        await DropTableAsync(context, tempTable, cancellationToken).ConfigureAwait(false);
+        context.Logger.TempTableDropped(tempTable.ToSql());
+    }
 
+    protected virtual async ValueTask DropFinalTableAsync(
+        ScriptContext context,
+        ClickHouseTableName finalTable,
+        CancellationToken cancellationToken)
+    {
+        context.Logger.DroppingFinalTable(finalTable.ToSql());
+        await DropTableAsync(context, finalTable, cancellationToken).ConfigureAwait(false);
+        context.Logger.FinalTableDropped(finalTable.ToSql());
+    }
+
+    private static async ValueTask DropTableAsync(
+        ScriptContext context,
+        ClickHouseTableName tableName,
+        CancellationToken cancellationToken)
+    {
         await using var connection = new ClickHouseConnection(context.TargetConnectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         await using var command = connection.CreateCommand();
         command.CommandText = new StringBuilder()
             .Append("DROP TABLE IF EXISTS ")
-            .Append(tempTable.ToSql())
+            .Append(tableName.ToSql())
             .ToString();
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-
-        context.Logger.TempTableDropped(tempTable.ToSql());
     }
 
     private async ValueTask DropTempTableBestEffortAsync(
@@ -301,6 +318,20 @@ public class LoadStatementExecutor
         }
     }
 
+    private async ValueTask DropFinalTableBestEffortAsync(
+        ScriptContext context,
+        ClickHouseTableName finalTable)
+    {
+        try
+        {
+            await DropFinalTableAsync(context, finalTable, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            context.Logger.FinalTableDropFailed(finalTable.ToSql(), exception);
+        }
+    }
+
     private TemporaryClickHouseTable CreateTempTableResult(
         ScriptContext context,
         RenameColumnDataReader stageNameReader,
@@ -312,6 +343,14 @@ public class LoadStatementExecutor
             stageReader.DataSchema,
             stageNameReader.OriginalNames.ToArray(),
             () => DropTempTableBestEffortAsync(context, tempTable));
+    }
+
+    private FinalClickHouseTable CreateFinalTable(ScriptContext context)
+    {
+        var finalTable = CreatePhysicalFinalTableName();
+        return new FinalClickHouseTable(
+            finalTable,
+            () => DropFinalTableBestEffortAsync(context, finalTable));
     }
 
     private ClickHouseTableName CreatePhysicalTempTableName()
