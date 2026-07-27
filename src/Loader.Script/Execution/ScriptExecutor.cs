@@ -11,8 +11,18 @@ public sealed class ScriptExecutor
         Loader.Lang.Script script,
         CancellationToken cancellationToken = default)
     {
-        foreach (var statement in script.Statements)
+        for (var index = 0; index < script.Statements.Count; index++)
         {
+            var statement = script.Statements[index];
+            using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("Script.Statement");
+            activity?.SetTag("script.statement.index", index);
+            activity?.SetTag("script.statement.type", statement.GetType().Name);
+            if (statement is LoadStatement load)
+            {
+                activity?.SetTag("load.table_name", load.TableName);
+                activity?.SetTag("load.source", LoadScriptTelemetry.RedactSource(load.Source));
+            }
+
             await ExecuteStatementAsync(context, statement, cancellationToken).ConfigureAwait(false);
         }
 

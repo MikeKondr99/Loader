@@ -32,22 +32,17 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
-        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.Execute");
-        activity?.SetTag("load.table_name", statement.TableName);
-
         // 1. Сырые данные source кладем в физическую temp table column1, column2...
         await using var tempTable = await LoadTempTableAsync(context, statement, cancellationToken)
             .ConfigureAwait(false);
 
         // 2. LOAD выражения превращаем в типизированный Query поверх temp table.
-        var query = BuildQuery(statement, tempTable);
-        var resolvedQuery = ResolveQuery(query);
-        var querySql = CompileQuery(resolvedQuery);
+        var (resolvedQuery, querySql) = BuildResolvedQuerySql(statement, tempTable);
 
         // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
         await using var finalTable = CreateFinalTable(context);
-        activity?.SetTag("load.final_table", finalTable.TableName.Table);
-        await MaterializeFinalTableAsync(context, querySql, finalTable.TableName, cancellationToken).ConfigureAwait(false);
+        await MaterializeFinalTableWithTelemetryAsync(context, statement, querySql, finalTable.TableName, cancellationToken)
+            .ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
         var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName);
@@ -61,8 +56,9 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
-        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement");
+        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.Prepare");
         activity?.SetTag("load.table_name", statement.TableName);
+        activity?.SetTag("load.source", LoadScriptTelemetry.RedactSource(statement.Source));
 
         // 1. По FROM и options выбираем provider.
         var source = await ResolveProviderAsync(context, statement, cancellationToken).ConfigureAwait(false);
@@ -81,6 +77,7 @@ public class LoadStatementExecutor
         // 5. Создаем temp table name.
         var tempTable = CreatePhysicalTempTableName();
         activity?.SetTag("load.temp_table", tempTable.Table);
+        activity?.Stop();
 
         // 6. Потоково пишем stage reader в temp table.
         using (var tempTableActivity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.TempTableWrite"))
@@ -150,6 +147,20 @@ public class LoadStatementExecutor
             .ConfigureAwait(false);
 
         context.Logger.TempTableLoaded(tempTable.ToSql());
+    }
+
+    private static ResolvedQuerySql BuildResolvedQuerySql(
+        LoadStatement statement,
+        TemporaryClickHouseTable tempTable)
+    {
+        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.QueryBuild");
+        activity?.SetTag("load.table_name", statement.TableName);
+        activity?.SetTag("load.temp_table", tempTable.TableName.Table);
+
+        var query = BuildQuery(statement, tempTable);
+        var resolvedQuery = ResolveQuery(query);
+        var querySql = CompileQuery(resolvedQuery);
+        return new ResolvedQuerySql(resolvedQuery, querySql);
     }
 
     private static QueryModel BuildQuery(LoadStatement statement, TemporaryClickHouseTable tempTable)
@@ -238,6 +249,20 @@ public class LoadStatementExecutor
         {
             ExpressionCompiler = new ExpressionCompiler()
         }.Compile(query);
+    }
+
+    private async ValueTask MaterializeFinalTableWithTelemetryAsync(
+        ScriptContext context,
+        LoadStatement statement,
+        string querySql,
+        ClickHouseTableName finalTable,
+        CancellationToken cancellationToken)
+    {
+        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.FinalTableWrite");
+        activity?.SetTag("load.table_name", statement.TableName);
+        activity?.SetTag("load.final_table", finalTable.Table);
+
+        await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
     }
 
     protected virtual async ValueTask MaterializeFinalTableAsync(
@@ -442,4 +467,6 @@ public class LoadStatementExecutor
             _ => CoreDataType.Text
         };
     }
+
+    private readonly record struct ResolvedQuerySql(ResolvedQuery Query, string Sql);
 }
