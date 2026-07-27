@@ -441,6 +441,179 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
         await AssertNumberAsync(rows[0]["UserCount"], 4);
     }
 
+    [Test]
+    [DisplayName("Query применяет WHERE до GROUP BY")]
+    public async Task Where_is_applied_before_group_by()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Select =
+            [
+                "Notes".As("Note"),
+                "COUNT()".As("UserCount"),
+                "SUM(Salary)".As("TotalSalary")
+            ],
+            Where = Expr("Age >= 30"),
+            GroupBy = [Expr("Notes")],
+            OrderBy = ["Notes".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("Note"))
+            .IsEquivalentTo(["Active user", "Blocked", "New"], CollectionOrdering.Matching);
+        await Assert.That(rows.Ints("UserCount"))
+            .IsEquivalentTo([2, 1, 2], CollectionOrdering.Matching);
+        await Assert.That(rows.Numbers("TotalSalary"))
+            .IsEquivalentTo([140000.0, 30000.0, 100000.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query применяет GROUP BY ORDER BY LIMIT вместе")]
+    public async Task Group_by_order_by_limit_combo()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Select =
+            [
+                "Notes".As("Note"),
+                "COUNT()".As("UserCount")
+            ],
+            GroupBy = [Expr("Notes")],
+            OrderBy =
+            [
+                "COUNT()".Desc(),
+                "Notes".Asc()
+            ],
+            Limit = 2
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("Note"))
+            .IsEquivalentTo(["Active user", "New"], CollectionOrdering.Matching);
+        await Assert.That(rows.Ints("UserCount"))
+            .IsEquivalentTo([4, 3], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query сортирует по выражению которого нет в SELECT")]
+    public async Task Order_by_expression_does_not_need_to_be_selected()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Select = ["FirstName".As("Name")],
+            OrderBy =
+            [
+                "Age + Salary".Desc(),
+                "FirstName".Asc()
+            ],
+            Limit = 3
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("Name"))
+            .IsEquivalentTo(["Diana", "Alice", "Frank"], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query применяет OFFSET без LIMIT после ORDER BY")]
+    public async Task Offset_without_limit_is_applied_after_order_by()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Select = ["FirstName".As("Name")],
+            OrderBy = ["Salary".Desc()],
+            Offset = 6
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("Name"))
+            .IsEquivalentTo(["Bob", "Charlie"], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query фильтрует nullable поля без ручной проверки NULL")]
+    public async Task Where_on_nullable_field_filters_nulls()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("id", DataType.Integer),
+                new InlineField("score", DataType.Number, CanBeNull: true)
+            ],
+            [
+                ["1", "10.5"],
+                ["2", "NULL"],
+                ["3", "7.25"],
+                ["4", "0.0"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "id".As("id"),
+                "score".As("score")
+            ],
+            Where = Expr("score > 0"),
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Ints("id"))
+            .IsEquivalentTo([1, 3], CollectionOrdering.Matching);
+        await Assert.That(rows.Numbers("score"))
+            .IsEquivalentTo([10.5, 7.25], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query возвращает SELECT * после WHERE ORDER BY LIMIT OFFSET")]
+    public async Task Select_all_with_where_order_by_limit_offset()
+    {
+        // Arrange
+        var query = UsersQuery() with
+        {
+            Where = Expr("Notes != 'Blocked'"),
+            OrderBy =
+            [
+                "Age".Desc(),
+                "UserId".Asc()
+            ],
+            Limit = 3,
+            Offset = 1
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Ints("UserId"))
+            .IsEquivalentTo([3, 6, 2], CollectionOrdering.Matching);
+        await Assert.That(rows.Texts("FirstName"))
+            .IsEquivalentTo(["Bob", "Diana", "Jane"], CollectionOrdering.Matching);
+        await Assert.That(rows[0].ContainsKey("LastName")).IsTrue();
+        await Assert.That(rows[0].ContainsKey("Salary")).IsTrue();
+        await Assert.That(rows[0].ContainsKey("Notes")).IsTrue();
+    }
+
     private static Query.Models.Query UsersQuery()
     {
         return new Query.Models.Query
