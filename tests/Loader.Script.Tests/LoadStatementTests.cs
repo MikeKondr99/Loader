@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
 
-public sealed class LoadStatementExecutorTests
+public sealed class LoadStatementTests
 {
     [Test]
     public async Task Load_temp_table_resolves_source_normalizes_physical_columns_and_writes_temp_table()

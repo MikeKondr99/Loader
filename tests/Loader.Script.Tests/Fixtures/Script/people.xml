@@ -1,0 +1,17 @@
+<root>
+  <person source="crm">
+    <id>1</id>
+    <name>Alice</name>
+    <city>Moscow</city>
+  </person>
+  <person source="erp">
+    <id>2</id>
+    <name>Bob</name>
+    <city>Berlin</city>
+  </person>
+  <person source="crm">
+    <id>3</id>
+    <name>Charlie</name>
+    <city>London</city>
+  </person>
+</root>
