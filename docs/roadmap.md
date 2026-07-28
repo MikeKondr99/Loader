@@ -22,14 +22,14 @@
 ### Скрипт
 
 - [x] LOAD
-- [ ] Поддержка нескольких операций в скрипте
-- [ ] Базовые Трансформации в LOAD
-  - [ ] WHERE
-  - [ ] ORDER BY
+- [x] Поддержка нескольких операций в скрипте
+- [x] Базовые Трансформации в LOAD
+  - [x] WHERE
+  - [x] ORDER BY
     - [ ] Проблема с LOG
     - [ ] Проблема с Order By оптимизацией
-  - [ ] GROUP BY и Аггрегации
-  - [ ] LIMIT OFFSET
+  - [x] GROUP BY и Аггрегации
+  - [x] LIMIT OFFSET
 - [ ]  LOAD FROM LOAD
 - [ ]  DROP TABLE
 - [ ] LINK - `shadow table`
