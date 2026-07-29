@@ -108,6 +108,27 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query WHERE не boolean expression отклоняет на resolve")]
+    public async Task Where_non_boolean_expression_is_rejected_by_resolver()
+    {
+        // Arrange
+        var query = new Query.Models.Query
+        {
+            Source = CityAmountsSource(),
+            Select = ["city".As("city")],
+            Where = Expr("amount")
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("WHERE expression должен возвращать Boolean.");
+    }
+
+    [Test]
     [DisplayName("Query группирует LowCardinality(String) как обычный Text")]
     public async Task Low_cardinality_text_groups_like_text()
     {
@@ -198,7 +219,11 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
                 "city.IsNull()".As("is_null"),
                 "COUNT()".As("count")
             ],
-            GroupBy = [Expr("city")],
+            GroupBy =
+            [
+                Expr("city"),
+                Expr("city.IsNull()")
+            ],
             OrderBy =
             [
                 "city.IsNull()".Asc(),
@@ -554,8 +579,8 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query aggregate с non-grouped field сейчас отклоняется ClickHouse")]
-    public async Task Aggregate_with_non_grouped_field_is_rejected_by_clickhouse()
+    [DisplayName("Query aggregate с non-grouped field отклоняет на resolve")]
+    public async Task Aggregate_with_non_grouped_field_is_rejected_by_resolver()
     {
         // Arrange
         var query = new Query.Models.Query
@@ -572,7 +597,9 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var act = async () => await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act).ThrowsExactly<DbExecutionException>();
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("SELECT expression 'city' должен быть агрегирован или вынесен в GROUP BY.");
     }
 
     [Test]
@@ -594,8 +621,8 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query aggregation в GROUP BY сейчас отклоняется ClickHouse")]
-    public async Task Aggregation_in_group_by_is_rejected_by_clickhouse()
+    [DisplayName("Query aggregation в GROUP BY отклоняет на resolve")]
+    public async Task Aggregation_in_group_by_is_rejected_by_resolver()
     {
         // Arrange
         var query = new Query.Models.Query
@@ -609,7 +636,30 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var act = async () => await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act).ThrowsExactly<DbExecutionException>();
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("GROUP BY не может содержать агрегатные выражения.");
+    }
+
+    [Test]
+    [DisplayName("Query SELECT star с GROUP BY отклоняет на resolve")]
+    public async Task Select_star_with_group_by_is_rejected_by_resolver()
+    {
+        // Arrange
+        var query = new Query.Models.Query
+        {
+            Source = CityAmountsSource(),
+            Select = [],
+            GroupBy = [Expr("city")]
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("SELECT * нельзя использовать вместе с GROUP BY. Перечислите группируемые и агрегированные поля явно.");
     }
 
     [Test]

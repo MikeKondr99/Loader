@@ -29,7 +29,7 @@ public sealed class ClickHouseQueryCompilerTests
             Select =
             [
                 new SelectItem { Alias = "city", Expression = Expr.Parse("city").Value },
-                new SelectItem { Alias = "total", Expression = Expr.Parse("amount").Value }
+                new SelectItem { Alias = "total", Expression = Expr.Parse("SUM(amount)").Value }
             ],
             Where = Expr.Parse("amount > 0").Value,
             GroupBy = [Expr.Parse("city").Value],
@@ -37,7 +37,7 @@ public sealed class ClickHouseQueryCompilerTests
             [
                 new OrderItem
                 {
-                    Expression = Expr.Parse("amount").Value,
+                    Expression = Expr.Parse("SUM(amount)").Value,
                     Direction = OrderDirection.Desc
                 }
             ],
@@ -58,11 +58,11 @@ public sealed class ClickHouseQueryCompilerTests
             Environment.NewLine,
             "SELECT",
             "    stage.city AS `city`, ",
-            "    stage.amount AS `total`",
+            "    COALESCE(SUM(stage.amount), 0) AS `total`",
             "FROM `tmp_orders` AS stage",
             "WHERE (stage.amount > toFloat64(0))",
             "GROUP BY stage.city",
-            "ORDER BY stage.amount DESC",
+            "ORDER BY COALESCE(SUM(stage.amount), 0) DESC",
             "LIMIT 10",
             "OFFSET 5"));
     }
