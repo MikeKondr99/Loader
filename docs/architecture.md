@@ -1,37 +1,37 @@
 # Архитектура Loader
 
-## Цель
-
-Библиотека строится снизу вверх вокруг потоковых табличных данных.
-
-Базовый контракт:
+## Слои
 
 ```text
-Источник + конфиг таблицы + провайдер -> DbDataReader -> типизированная потоковая обертка
+Loader.Core   -> providers, sources, DbDataReader decorators, ClickHouse writer
+Loader.Lang   -> parser expressions/statements/script
+Loader.Query  -> expression resolver, functions, ClickHouse query compiler
+Loader.Script -> script execution over providers + ClickHouse staging/final tables
 ```
 
-Провайдеры умеют только открывать данные. Они не решают, куда сохранять результат, как создавать финальные таблицы, как фильтровать и как проектировать поля.
+Базовый контракт чтения:
 
-## Основные понятия
+```text
+Source + TableConfig + Provider -> DbDataReader -> Normalize() -> DomainDataReader
+```
+
+Script/materialization контракт:
+
+```text
+LOAD statement -> provider reader -> temp ClickHouse -> Query -> final ClickHouse -> LoadedTable
+```
+
+## Основные понятия Core
 
 - `Source` описывает, где лежат данные.
-- `TableConfig` описывает, что именно читать: файл, лист Excel, SQL-запрос и так далее.
-- `Provider` принимает source с нужной возможностью доступа и конкретный `TableConfig`, затем выдает `DbDataReader`.
-- `TypedDbDataReader` оборачивает любой `DbDataReader` и показывает нормализованные `DataType`.
-- `Row` позже станет фасадом доступа к строке для потоковых трансформаций.
+- `TableConfig` описывает, что читать из source.
+- `Provider` открывает `DbDataReader`.
+- `DomainDataReader` добавляет `DataSchema` и доменный ADO.NET contract.
+- `Normalize()` переводит обычный `DbDataReader` в `DomainDataReader`.
+- `AutoCast`, `Where`, `Limit`, `CollectMeta` работают поверх `DomainDataReader`.
+- `ClickHouseWriter` потоково пишет `DbDataReader` в ClickHouse.
 
-## CSV Reader Wrapper
-
-CSV provider возвращает не сырой Sylvan reader, а wrapper над ним.
-
-Wrapper фиксирует контракт Loader:
-
-- CSV без header получает имена колонок как в Excel: `A`, `B`, ..., `Z`, `AA`, `AB`.
-- Если в строке меньше значений, чем в схеме, отсутствующие значения возвращаются как `DBNull`.
-- Если в строке больше значений, чем в схеме, лишние значения игнорируются.
-- Ошибки формата CSV нормализуются в provider exceptions.
-
-## Форма провайдера
+## Providers
 
 ```mermaid
 classDiagram
@@ -66,80 +66,40 @@ classDiagram
     IProvider <|-- HiveProvider
 ```
 
-## Текущие провайдеры
+## File providers
 
-QVD provider сейчас имеет статус beta: базовое чтение, symbol tables, dual values и ошибки layout покрыты маленькими fixtures, но формат proprietary и набор тестов пока ограничен.
+- CSV provider оборачивает Sylvan reader и фиксирует CSV contract.
+- Excel provider читает через Sylvan Excel.
+- JSON provider потоковый; schema analysis и data reader не материализуют весь документ.
+- XML provider потоковый и поддерживает flat table по имени элемента строки.
+- QVD provider читает строки потоково, но symbol tables загружаются заранее.
 
-XML provider потоково читает плоские таблицы: элементы с выбранным именем становятся строками,
-их атрибуты и прямые leaf-элементы — текстовыми колонками. Схема либо задается явно, либо получается
-отдельным полным проходом; XML-документ и все строки одновременно в памяти не хранятся.
+## Query layer
 
-```mermaid
-flowchart LR
-    FileSource[FileSystemSource] --> CsvProvider
-    CsvConfig[CsvTableConfig] --> CsvProvider
-    CsvProvider --> CsvReader[DbDataReader]
+`Loader.Query` не знает о providers.
+Он получает:
 
-    FileSource --> ExcelProvider
-    ExcelConfig[ExcelTableConfig] --> ExcelProvider
-    ExcelProvider --> ExcelReader[DbDataReader]
+- `QuerySource.Sql`
+- `QuerySource.Alias`
+- `QuerySource.Fields` с логическими aliases, templates и типами
+- `Query.Select`, `Where`, `GroupBy`, `OrderBy`, `Limit`, `Offset`
 
-    FileSource --> JsonProvider
-    JsonConfig[JsonTableConfig] --> JsonProvider
-    JsonProvider --> JsonReader[DbDataReader]
+Затем:
 
-    FileSource --> XmlProvider
-    XmlConfig[XmlTableConfig] --> XmlProvider
-    XmlProvider --> XmlReader[DbDataReader]
-
-    FileSource --> QvdProvider
-    QvdConfig[QvdTableConfig] --> QvdProvider
-    QvdProvider --> QvdReader[DbDataReader]
-
-    DbSource[ConnectionStringSource] --> PgProvider[PostgresProvider]
-    SqlConfig[SqlTableConfig] --> PgProvider
-    PgProvider --> PgReader[DbDataReader]
-
-    DbSource --> ChProvider[ClickHouseProvider]
-    SqlConfig --> ChProvider
-    ChProvider --> ChReader[DbDataReader]
-
-    DbSource --> SqlServerProvider[SqlServerProvider]
-    SqlConfig --> SqlServerProvider
-    SqlServerProvider --> SqlServerReader[DbDataReader]
-
-    DbSource --> OracleProvider[OracleProvider]
-    SqlConfig --> OracleProvider
-    OracleProvider --> OracleReader[DbDataReader]
-
-    DbSource --> HiveProvider[HiveProvider]
-    SqlConfig --> HiveProvider
-    HiveProvider --> HiveReader[DbDataReader]
-
-    CsvReader --> Typed[TypedDbDataReader]
-    ExcelReader --> Typed
-    JsonReader --> Typed
-    XmlReader --> Typed
-    QvdReader --> Typed
-    PgReader --> Typed
-    ChReader --> Typed
-    SqlServerReader --> Typed
-    OracleReader --> Typed
+```text
+Query -> QueryResolver -> ResolvedQuery -> ClickHouseQueryCompiler -> SQL
 ```
 
-## Планируемый Stream API
+## Script layer
 
-`Where` и `Select` уже заведены как заглушки с `NotImplementedException`.
+`Loader.Script` связывает source/provider слой с Query:
 
-Целевая форма:
+1. `LoadProviderResolver` выбирает provider по `FROM [source] (...)`.
+2. Provider reader переименовывается в физические `column1`, `column2`, ...
+3. Reader нормализуется и пишется в temp ClickHouse table.
+4. `LoadStatement` превращается в `Query` над temp table.
+5. Query выполняется в ClickHouse и результат пишется в final table.
+6. Возвращается `LoadedTable`.
 
-```csharp
-reader
-    .Where(row => row.Text("name").ToLowerInvariant() == "moscow")
-    .Select(new Dictionary<string, Func<Row, object?>>
-    {
-        ["name_lower"] = row => row.Text("name").ToLowerInvariant()
-    });
-```
-
-Этот слой должен жить над `DbDataReader`, а не внутри провайдеров.
+Temp table удаляется best-effort.
+Final table удаляется только если materialization не была успешно committed.

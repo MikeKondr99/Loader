@@ -5,60 +5,70 @@
 ```mermaid
 flowchart LR
     raw["raw<br/>DbDataReader<br/>provider-specific"]
-    normalized["normalize<br/>NormalizingDomainDataReader<br/>DomainDataReader"]
-    where["where<br/>WhereDomainDataReader<br/>DomainDataReaderDecorator"]
-    limit["limit<br/>LimitDbDataReader<br/>DomainDataReaderDecorator"]
-    meta["meta<br/>MetaCollectingDataReader<br/>DomainDataReaderDecorator"]
+    normalized["Normalize<br/>NormalizingDomainDataReader<br/>DomainDataReader"]
+    autocast["AutoCast<br/>AutoCastDataReader<br/>optional"]
+    where["Where<br/>WhereDomainDataReader"]
+    limit["Limit<br/>LimitDbDataReader"]
+    meta["CollectMeta<br/>MetaCollectingDataReader"]
 
-    raw --> normalized --> where --> limit --> meta
+    raw --> normalized --> autocast --> where --> limit --> meta
 ```
 
-## Provider-specific пример CSV
+`Normalize()` является входом в доменный reader pipeline.
+После него reader имеет `DataSchema`, корректные typed getters и ADO.NET schema, вычисленную по доменной схеме.
 
-```mermaid
-flowchart LR
-    source["source<br/>IFileSource<br/>OpenRead(fileName)"]
-    sylvan["csv raw<br/>CsvDataReader<br/>DbDataReader"]
-    csv_wrapper["csv contract<br/>CsvProviderDataReader<br/>DbDataReaderDecorator"]
-    normalized["normalize<br/>NormalizingDomainDataReader<br/>DomainDataReader"]
-    where["where<br/>WhereDomainDataReader<br/>DomainDataReaderDecorator"]
-    limit["limit<br/>LimitDbDataReader<br/>DomainDataReaderDecorator"]
-    meta["meta<br/>MetaCollectingDataReader<br/>DomainDataReaderDecorator"]
-
-    source --> sylvan --> csv_wrapper --> normalized --> where --> limit --> meta
-```
-
-`CsvProviderDataReader` остается provider-specific слоем: он фиксирует CSV-контракт до доменной нормализации.
-
-## Правило нормализации
+## Normalize
 
 ```mermaid
 flowchart TD
     input["DbDataReader"]
     is_domain{"reader is DomainDataReader?"}
-    same["return same reader<br/>без повторной нормализации"]
-    normalize["new NormalizingDomainDataReader(reader)<br/>schema + lazy mapping"]
+    same["return same reader"]
+    normalize["new NormalizingDomainDataReader(reader)"]
+    buffer{"options.Buffer?"}
+    buffered["new BufferingDomainDataReader(normalized)"]
 
     input --> is_domain
     is_domain -->|yes| same
     is_domain -->|no| normalize
+    normalize --> buffer
+    buffer -->|true| buffered
+    buffer -->|false| normalize
 ```
 
 `Normalize()` idempotent: если reader уже доменный, повторный вызов не создает второй normalizer.
 
+`NormalizeOptions.Buffer` по умолчанию `false`.
+Буферизация остается доступной для provider-ов, которым нужно материализовать текущую строку перед произвольным чтением полей, но по умолчанию pipeline идет без буфера.
+
 ## Техническая буферизация
 
-Буферизация не меняет доменный pipeline, поэтому не показывается отдельным слоем на схемах.
+`BufferingDomainDataReader` материализует одну текущую строку в `object[]` во время `Read`.
+Это безопаснее для sequential readers, но дает лишние аллокации, поэтому не используется без явного `Buffer = true`.
 
-`Normalize()` по умолчанию оборачивает lazy-нормализацию в `BufferingDomainDataReader`. Он материализует одну текущую строку в `object[]` во время `Read`, чтобы поля текущей строки можно было безопасно читать в любом порядке.
+## AutoCast
 
-`Normalize(new NormalizeOptions { Buffer = false })` отключает этот слой. Это быстрее, но повторный `GetValue` повторно читает/конвертирует значение, а sequential provider может не поддержать произвольный порядок чтения.
+`AutoCast` применяется только к текстовым полям и меняет `DataSchema`/ADO schema.
+Не указанные в `AutoCastSchema` поля остаются без изменений.
 
-## Ответственность классов
+AutoCast analyzer может собрать схему вторым проходом, но сам `AutoCastDataReader` конвертирует значения лениво при чтении поля.
 
-- `NormalizingDomainDataReader` строит `DataSchema` и применяет mapping/conversion лениво в `GetValue`.
-- `BufferingDomainDataReader` технически буферизует одну текущую строку, но не добавляет нового доменного шага.
-- `DomainDataReaderDecorator` переиспользует нормализованную схему и значения inner reader, но держит собственный флаг `HasReadableRow`.
-- `WhereDomainDataReader` двигает inner reader до строки, прошедшей predicate.
-- `LimitDbDataReader` останавливает чтение после заданного количества строк.
-- `MetaCollectingDataReader` собирает meta по строкам, которые реально прошли до него в pipeline.
+## Provider-specific пример CSV
+
+```mermaid
+flowchart LR
+    source["IFileSource"]
+    sylvan["CsvDataReader"]
+    wrapper["CsvProviderDataReader"]
+    normalize["Normalize"]
+    pipeline["Where / Limit / CollectMeta / AutoCast"]
+
+    source --> sylvan --> wrapper --> normalize --> pipeline
+```
+
+`CsvProviderDataReader` фиксирует CSV-specific контракт до доменной нормализации:
+
+- CSV без header получает имена колонок `A`, `B`, ..., `Z`, `AA`, ...
+- Missing values возвращаются как `DBNull`.
+- Extra values за пределами схемы игнорируются.
+- Ошибки CSV нормализуются в provider exceptions.

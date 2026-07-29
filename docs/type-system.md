@@ -1,8 +1,15 @@
 # Система типов
 
-## Нормализованные типы
+В проекте сейчас есть два близких, но не объединенных типа:
 
-Первый набор типов специально маленький:
+- `Loader.Core.Models.DataType` - типы доменного reader pipeline и provider metadata.
+- `Loader.Query.Models.DataType` - типы expression/query resolver-а.
+
+Их объединение остается отдельной задачей roadmap.
+
+## Core DataType
+
+Базовый набор:
 
 - `Text`
 - `Integer`
@@ -12,56 +19,51 @@
 - `Time`
 - `Boolean`
 
-В коде это `Loader.Core.Data.DataType`.
+`Normalize()` строит `DataSchema` по source reader и приводит значения к доменному контракту.
+Декораторы, меняющие значения (`Normalize`, `AutoCast`), обязаны менять `DataSchema`, `GetColumnSchema()` и `GetSchemaTable()` согласованно.
 
-## Важное ограничение
+## Query DataType
 
-Файловые источники не умеют надежно отдавать типы до чтения значений.
+Query layer использует собственные типы для resolve/compile выражений.
+Тип выражения хранится в `ExprType`:
 
-Примеры:
+- `DataType`
+- `CanBeNull`
+- aggregate/constant flags
 
-- CSV по сути содержит только текст.
-- В Excel тип может отличаться от клетки к клетке.
-- JSON/XML могут иметь форму, но не гарантируют стабильную табличную схему без явного описания.
+`QueryResolver` использует эти типы для выбора overload-ов функций, implicit casts и output schema.
 
-Поэтому есть три разных понятия схемы:
+## Схемы
 
-- Declared schema: пользователь явно описал поля и типы.
-- Source schema: провайдер или БД отдали метаинформацию до чтения строк.
-- Observed schema: типы выведены по фактически прочитанным значениям.
+Есть три разных уровня схемы:
 
-## Текущее правило
+- Source schema: то, что отдал provider или DB driver.
+- Domain schema: `DataSchema` после `Normalize()`/`AutoCast()`.
+- Query schema: `ResolvedQuery.OutputFields` после resolve выражений.
 
-`TypedDbDataReader` строится через `reader.AsTyped()` и сам выводит нормализованную схему из `DbDataReader`.
-
-Для неизвестных CLR-типов используется безопасное сведение к `Text`, поэтому выше по pipeline они видны как `string`.
-
-```mermaid
-flowchart TD
-    SourceReader[Any DbDataReader] --> AsTyped[reader.AsTyped()]
-    AsTyped --> SourceSchema[Schema from DbDataReader]
-    SourceSchema --> Normalize[Normalize CLR types]
-    Normalize --> TypedReader[TypedDbDataReader]
-```
-
-## Позже
-
-Явная схема должна быть близка к Qlik load expressions:
+В `Loader.Script` переход выглядит так:
 
 ```text
-#date(created_at) as created_at
+provider DbDataReader
+-> Normalize() DataSchema
+-> QuerySource.Fields
+-> ResolvedQuery.OutputFields
+-> LoadedTable.Fields
 ```
 
-Возможная C#-форма:
+## Файловые источники
 
-```csharp
-new DataSchema
-{
-    Fields =
-    [
-        new DataField { Ordinal = 0, Name = "created_at", DataType = DataType.Date }
-    ]
-}
+Файловые источники не гарантируют надежные source-типы:
+
+- CSV фактически текстовый.
+- Excel может менять типы от ячейки к ячейке.
+- JSON/XML анализируют shape, но значения в provider reader остаются текстовыми.
+- QVD имеет собственные symbol tables и dual values, но тоже проходит через доменный mapper.
+
+Если нужен typing поверх файлов, сейчас путь такой:
+
+```text
+Analyze/CollectAutoCast -> AutoCastSchema -> AutoCast()
 ```
 
-Финальные правила кастинга и inference пока намеренно не реализованы.
+В Script pipeline пользовательские преобразования типов обычно задаются выражениями `LOAD`, например `Int(id)`, `Num(amount)`, `Date(created, 'yyyy-MM-dd')`.

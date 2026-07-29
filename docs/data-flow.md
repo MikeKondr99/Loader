@@ -1,6 +1,6 @@
 # Поток данных
 
-## Pipeline чтения
+## Базовое чтение
 
 ```mermaid
 sequenceDiagram
@@ -8,37 +8,49 @@ sequenceDiagram
     participant Provider
     participant Source
     participant Reader as DbDataReader
-    participant Typed as TypedDbDataReader
+    participant Domain as DomainDataReader
 
     App->>Provider: OpenReaderAsync(source, config)
     Provider->>Source: Resolve/open data
     Source-->>Provider: Stream/file/connection
     Provider-->>App: DbDataReader
-    App->>Typed: reader.AsTyped()
-    Typed-->>App: normalized streamed rows
+    App->>Domain: reader.Normalize()
+    Domain-->>App: DataSchema + normalized values
 ```
 
-## Почему Source отделен от Provider
+Provider отвечает только за чтение source и выдачу `DbDataReader`.
+Доменный pipeline начинается после `Normalize()` и работает поверх стандартного `DbDataReader`.
 
-Провайдер описывает логику чтения и зависит от возможностей source, а не от provider-specific marker-ов.
+## Script execution
 
-Источник описывает место и способ доступа:
+`Loader.Script` добавляет materialization pipeline поверх provider/query слоев:
 
-- `FileSystemSource` для файловых провайдеров CSV, Excel, JSON, XML и QVD.
-- `ConnectionStringSource` для DB-провайдеров Postgres, ClickHouse, Microsoft SQL Server и Oracle.
+```mermaid
+flowchart LR
+    From[FROM source] --> Provider[Provider resolver]
+    Provider --> RawReader[Provider DbDataReader]
+    RawReader --> StageNames[column1, column2, ...]
+    StageNames --> Normalize[Normalize]
+    Normalize --> Temp[ClickHouse temp table]
+    Temp --> Query[LOAD fields + WHERE/GROUP/ORDER/LIMIT]
+    Query --> Final[ClickHouse final table]
+    Final --> Loaded[LoadedTable metadata]
 
-Позже можно добавлять новые источники, не меняя смысл провайдера:
+    Temp -. always best-effort drop .-> DropTemp[DROP temp]
+    Final -. drop only on failed materialization .-> DropFinal[DROP final]
+```
 
-- CSV из S3
-- Excel по HTTP
-- подключение к БД из Vault
+Важные правила:
 
-## Чего нет в этом слое
+- Temp table хранит физические имена `column1`, `column2`, ... .
+- `QuerySource.Field.Template` связывает логические source names с физическими temp columns.
+- Final table получает результат `Query -> Resolve -> Compile -> ClickHouse reader -> ClickHouseWriter`.
+- `LoadedTable.Name` хранит физическое имя final table в БД.
+- `LoadedTable.Alias` хранит имя таблицы из script (`table_name: LOAD`).
 
-Этот слой не создает финальные таблицы в БД.
+## Source abstraction
 
-Этот слой не выбирает постоянное хранилище.
+- `FileSystemSource` используется для CSV, Excel, JSON, XML и QVD.
+- `ConnectionStringSource` используется для Postgres, ClickHouse, SQL Server, Oracle и Hive.
 
-Этот слой пока не выполняет трансформации.
-
-Все это отдельные уровни pipeline/materialization выше текущей библиотеки.
+Новые источники должны добавляться через source abstraction, не меняя смысл provider-а.

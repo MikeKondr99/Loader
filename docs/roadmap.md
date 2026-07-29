@@ -37,7 +37,13 @@
 - [ ] CALENDAR (Федя)
 - [ ] LOAD FROM DATASET (возможно только уже внутри PIX?)
 - [ ] INDEX?
-- [ ] *Трейсы процесса загрузки \*OpenTelemetry (не обязательно но круто для дебага)*
+- [x] *Трейсы процесса загрузки \*OpenTelemetry (LoadScript ActivitySource)*
+  - [x] `Script.Statement`
+  - [x] `LoadStatement.Prepare`
+  - [x] `LoadStatement.TempTableWrite`
+  - [x] `LoadStatement.QueryBuild`
+  - [x] `LoadStatement.FinalTableWrite`
+  - [x] Sanitized telemetry tag для `load.source`
 
 ### Типы
 - [ ] Соединить ReData.DataType и Loader.DataType

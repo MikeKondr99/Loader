@@ -1,74 +1,53 @@
-# Схема загрузки файлов
+# Загрузка файлов через Script
+
+Этот документ описывает текущий путь file source в `Loader.Script`.
+Preview raw data остается отдельной продуктовой задачей и не входит в этот pipeline.
 
 ## Общий путь
 
 ```mermaid
 flowchart TD
-    File[Файл] --> Download[Скачать / открыть файл]
-    Download --> RawScan[Потоковое чтение raw values]
-    RawScan --> RawStage[Raw staging в ClickHouse]
+    File[Файл] --> Resolver[LoadProviderResolver]
+    Resolver --> Provider[File provider]
+    Provider --> Reader[DbDataReader]
+    Reader --> Rename[AbstractColumns: column1, column2, ...]
+    Rename --> Normalize[Normalize]
+    Normalize --> Temp[ClickHouse temp table, ENGINE = Log]
 
-    RawScan -. pattern scan .-> CastPlan[План auto-cast]
-    CastPlan -. нужен для .-> PreviewRead
-    CastPlan -. нужен для .-> MetaRead
-    CastPlan -. нужен для .-> FinalRead
+    Temp --> QueryBuild[Build Query from LOAD]
+    QueryBuild --> Resolve[QueryResolver + ClickHouse functions]
+    Resolve --> Compile[ClickHouseQueryCompiler]
+    Compile --> Select[SELECT from temp]
+    Select --> Final[ClickHouse final table]
 
-    RawStage --> PreviewRead[Preview из raw staging]
-    PreviewRead --> PreviewCast[Применить auto-cast]
-    PreviewCast --> PreviewEtl[Применить C# ETL]
-    PreviewEtl --> Preview[Preview пользователю]
-
-    RawStage --> MetaRead[Чтение raw staging для meta]
-    MetaRead --> MetaCast[Применить auto-cast]
-    MetaCast --> MetaEtl[Применить C# ETL]
-    MetaEtl --> MetaCollect[Сбор meta по результату ETL]
-
-    MetaCollect -. nullability .-> FinalSchema[Оптимальная CH схема]
-    MetaCollect -. min / max .-> FinalSchema
-    MetaCollect -. decimal precision / scale .-> FinalSchema
-    MetaCollect -. bounded cardinality .-> FinalSchema
-    MetaCollect -. text length .-> FinalSchema
-
-    FinalSchema --> FinalTable[Создать final table]
-
-    RawStage --> FinalRead[Повторное чтение raw staging]
-    FinalRead --> FinalCast[Применить auto-cast]
-    FinalCast --> FinalEtl[Применить C# ETL]
-    FinalEtl --> FinalInsert[INSERT в final table]
-    FinalTable --> FinalInsert
+    Temp -. finally .-> DropTemp[DROP temp]
 ```
 
-## JSON путь
+## Что происходит по source
 
-```mermaid
-flowchart TD
-    JsonFile[JSON файл] --> Download[Скачать файл локально / в raw storage]
+- CSV/Excel/QVD открываются одним reader pass.
+- JSON/XML сначала анализируют схему, затем открывают reader по полученной схеме.
+- JSON reader потоковый; root array и flat known schema используют быстрый flat reader.
+- XML reader потоковый и поддерживает только flat table shape по имени элемента строки.
 
-    Download --> AnalyzePathRead[Проход 1: найти / проверить ArrayPath]
-    AnalyzePathRead --> JsonSchema[JSON table shape / columns]
+## Где выполняются преобразования
 
-    Download --> RawLoadRead[Проход 2: прочитать данные по ArrayPath]
-    JsonSchema -. columns .-> RawLoadRead
-    RawLoadRead --> RawStage[Raw staging в ClickHouse]
+Преобразования `LOAD` не выполняются в C# row-by-row.
 
-    RawLoadRead -. pattern scan .-> CastPlan[План auto-cast]
+Текущий путь:
 
-    RawStage --> PreviewRead[Preview из raw staging]
-    CastPlan -. нужен для preview .-> PreviewRead
-    PreviewRead --> PreviewEtl[auto-cast + C# ETL]
-    PreviewEtl --> Preview[Preview пользователю до final load]
-
-    RawStage --> MetaRead[Meta pass из raw staging]
-    CastPlan -. нужен для meta .-> MetaRead
-    MetaRead --> MetaEtl[auto-cast + C# ETL]
-    MetaEtl --> MetaCollect[Сбор meta]
-
-    MetaCollect -. нужна для типов CH .-> FinalSchema[Оптимальная CH схема]
-    FinalSchema --> FinalTable[Создать final table]
-
-    RawStage --> FinalRead[Final pass из raw staging]
-    CastPlan -. нужен для final .-> FinalRead
-    FinalRead --> FinalEtl[auto-cast + C# ETL]
-    FinalEtl --> FinalInsert[INSERT в final table]
-    FinalTable --> FinalInsert
+```text
+source -> temp ClickHouse -> SQL SELECT transformations -> final ClickHouse
 ```
+
+`LOAD` превращается в `Query`, затем:
+
+```text
+Query -> ResolvedQuery -> ClickHouse SQL -> reader -> ClickHouseWriter
+```
+
+## Temp и final
+
+- Temp table должна быть короткоживущей и удаляется best-effort в `finally`.
+- Final table удаляется только если materialization не была успешно committed.
+- Сейчас temp/final физические имена генерируются executor-ом, а script alias хранится отдельно в `LoadedTable.Alias`.
