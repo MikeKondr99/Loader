@@ -1,8 +1,12 @@
 lexer grammar LangLexer;
 
 LOAD: [Ll] [Oo] [Aa] [Dd];
+CALENDAR: [Cc] [Aa] [Ll] [Ee] [Nn] [Dd] [Aa] [Rr];
 AS: [Aa] [Ss];
 FROM: [Ff] [Rr] [Oo] [Mm];
+TO: [Tt] [Oo];
+FIELD: [Ff] [Ii] [Ee] [Ll] [Dd];
+RESIDENT: [Rr] [Ee] [Ss] [Ii] [Dd] [Ee] [Nn] [Tt];
 WHERE: [Ww] [Hh] [Ee] [Rr] [Ee];
 GROUP: [Gg] [Rr] [Oo] [Uu] [Pp];
 ORDER: [Oo] [Rr] [Dd] [Ee] [Rr];

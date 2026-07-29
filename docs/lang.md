@@ -3,7 +3,7 @@
 ## Script
 
 `Script.Parse(text)` парсит несколько statement.
-Пока поддерживается только `LOAD`, но модель рассчитана на расширение через наследников `Statement`.
+Поддерживаются `LOAD` и `CALENDAR`; оба представлены наследниками `Statement`.
 
 ## LOAD statement
 
@@ -84,3 +84,59 @@ OFFSET 10;
 ```text
 LOAD [where] FROM [orders.csv];
 ```
+
+Исключение — префикс `Calendar:`: он разрешен специально, чтобы имя календаря не требовало escaping.
+Новые слова `CALENDAR`, `TO`, `FIELD`, `RESIDENT` также остаются допустимыми в однозначных позициях имен,
+чтобы добавление statement не ломало существующие поля с такими именами.
+
+## CALENDAR statement
+
+`CALENDAR` создает материализованную таблицу с одной строкой на каждый день включительного диапазона.
+Имя результирующей таблицы обязательно.
+
+Явный диапазон задается ISO-датами:
+
+```text
+Calendar:
+CALENDAR
+FROM '2024-01-01'
+TO '2024-12-31';
+```
+
+Дата должна быть обычным строковым литералом строго в формате `yyyy-MM-dd`.
+Интерполяция и другие форматы не допускаются.
+
+Диапазон можно вычислить по полю ранее загруженной таблицы:
+
+```text
+Orders:
+LOAD
+    Date(created_at, 'yyyy-MM-dd') AS CreatedAt
+FROM [orders.csv] (csv);
+
+Calendar:
+CALENDAR
+FROM FIELD CreatedAt
+RESIDENT Orders;
+```
+
+- `RESIDENT` ссылается только на таблицу, созданную предыдущим statement того же script.
+- Alias таблицы и имя поля сравниваются с учетом регистра.
+- Alias таблицы должен разрешаться однозначно.
+- Поле должно иметь тип `Date` или `DateTime`; для `DateTime` используется календарная дата.
+- `NULL` не участвуют в `MIN/MAX`. Пустая таблица или поле без non-null дат считается ошибкой.
+- Диапазон включителен и должен помещаться в ClickHouse `Date`: `1970-01-01`–`2149-06-06`.
+
+Публичная схема календаря фиксирована:
+
+```text
+Date, Year, QuarterNumber, Quarter, YearQuarterNumber, YearQuarter,
+MonthNumber, MonthName, MonthShortName, YearMonthNumber, YearMonth,
+MonthYear, WeekNumber, YearWeek, StartOfWeek, LastDayOfWeek,
+DayOfWeek, DayOfWeekName, DayOfMonth, DayOfYear, StartOfYear,
+EndOfYear, StartOfQuarter, EndOfQuarter, StartOfMonth, EndOfMonth,
+DayMonth, WeekPeriod
+```
+
+Физические колонки следуют общей стратегии materialization и называются
+`column1`–`column28`; логические имена и типы хранятся в `LoadedTable.Fields`.

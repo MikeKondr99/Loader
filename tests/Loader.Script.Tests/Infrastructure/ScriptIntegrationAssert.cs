@@ -8,6 +8,7 @@ using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
 using Loader.Script.Execution;
+using Loader.Script.Execution.Calendar;
 using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions.Enums;
 using LangScript = Loader.Lang.Script;
@@ -40,6 +41,10 @@ internal static class ScriptIntegrationAssert
             LoadStatementExecutor = new LoadStatementExecutor
             {
                 TempTablePrefix = tempPrefix,
+                FinalTablePrefix = finalPrefix
+            },
+            CalendarStatementExecutor = new CalendarStatementExecutor
+            {
                 FinalTablePrefix = finalPrefix
             }
         };

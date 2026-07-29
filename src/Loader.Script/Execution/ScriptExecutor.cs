@@ -1,10 +1,13 @@
 using Loader.Lang.Statements;
+using Loader.Script.Execution.Calendar;
 
 namespace Loader.Script.Execution;
 
 public sealed class ScriptExecutor
 {
     public LoadStatementExecutor LoadStatementExecutor { get; init; } = new();
+
+    public CalendarStatementExecutor CalendarStatementExecutor { get; init; } = new();
 
     public async ValueTask<IReadOnlyList<LoadedTable>> ExecuteAsync(
         ScriptContext context,
@@ -23,6 +26,12 @@ public sealed class ScriptExecutor
                 activity?
                     .SetTag("load.table_name", load.TableName)
                     .SetSanitizedTag("load.source", load.Source);
+            }
+            else if (statement is CalendarStatement calendar)
+            {
+                activity?
+                    .SetTag("calendar.table_name", calendar.TableName)
+                    .SetTag("calendar.range_type", calendar.Range.GetType().Name);
             }
 
             try
@@ -51,6 +60,10 @@ public sealed class ScriptExecutor
         {
             case LoadStatement load:
                 await LoadStatementExecutor.ExecuteAsync(context, load, cancellationToken).ConfigureAwait(false);
+                return;
+
+            case CalendarStatement calendar:
+                await CalendarStatementExecutor.ExecuteAsync(context, calendar, cancellationToken).ConfigureAwait(false);
                 return;
 
             default:

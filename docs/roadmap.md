@@ -34,7 +34,7 @@
 - [ ]  DROP TABLE
 - [ ] LINK - `shadow table`
 - [ ] LIB CONNECT
-- [ ] CALENDAR (Федя)
+- [x] CALENDAR
 - [ ] LOAD FROM DATASET (возможно только уже внутри PIX?)
 - [ ] INDEX?
 - [x] *Трейсы процесса загрузки \*OpenTelemetry (LoadScript ActivitySource)*
