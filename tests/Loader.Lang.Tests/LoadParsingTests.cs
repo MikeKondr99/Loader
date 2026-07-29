@@ -330,10 +330,10 @@ public sealed class LoadParsingTests
         var load = ParseLoad("LOAD id FROM [orders.csv] LIMIT 0;");
 
         await Assert.That(load.Limit).IsEqualTo(0);
-        await Assert.That(load.LimitSpan).IsNotNull();
-        await Assert.That(load.LimitSpan!.Value.StartRow).IsEqualTo(1u);
-        await Assert.That(load.LimitSpan.Value.StartColumn).IsEqualTo(26u);
-        await Assert.That(load.LimitSpan.Value.EndColumn).IsEqualTo(33u);
+        await Assert.That(load.LimitPart).IsNotNull();
+        await Assert.That(load.LimitPart!.Span.StartRow).IsEqualTo(1u);
+        await Assert.That(load.LimitPart.Span.StartColumn).IsEqualTo(26u);
+        await Assert.That(load.LimitPart.Span.EndColumn).IsEqualTo(33u);
     }
 
     [Test]

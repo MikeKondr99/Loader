@@ -45,12 +45,12 @@ public sealed record LoadStatement : Statement
     /// </summary>
     public required List<LoadOrderField>? OrderBy { get; init; }
 
+    public LimitPart? LimitPart { get; init; }
+
     /// <summary>
     /// Ограничение количества строк из части <c>LIMIT 100</c>. <c>null</c> означает отсутствие ограничения.
     /// </summary>
-    public long? Limit { get; init; }
-
-    public LangSpan? LimitSpan { get; init; }
+    public long? Limit => LimitPart?.Value;
 
     /// <summary>
     /// Смещение строк из части <c>OFFSET 100</c>. Допускается только после <c>LIMIT</c>.

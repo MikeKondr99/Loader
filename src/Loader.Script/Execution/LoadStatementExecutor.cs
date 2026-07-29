@@ -179,7 +179,7 @@ public class LoadStatementExecutor
             GroupBy = statement.GroupBy ?? [],
             OrderBy = BuildOrderBy(statement),
             Limit = ToUInt32(statement.Limit, nameof(statement.Limit)),
-            LimitSpan = statement.LimitSpan,
+            LimitSpan = statement.LimitPart?.Span,
             Offset = ToUInt32(statement.Offset, nameof(statement.Offset))
         };
     }

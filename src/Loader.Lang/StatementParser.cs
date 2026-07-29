@@ -83,7 +83,6 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 8. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
         var limitContext = context.load_limit();
         var limit = VisitLoadLimit(limitContext);
-        var limitSpan = VisitLoadLimitSpan(limitContext);
         var offset = VisitLoadOffset(limitContext?.load_offset());
 
         return new LoadStatement
@@ -95,8 +94,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Where = where,
             GroupBy = groupBy,
             OrderBy = orderBy,
-            Limit = limit,
-            LimitSpan = limitSpan,
+            LimitPart = limit,
             Offset = offset
         };
     }
@@ -253,7 +251,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// Optional LIMIT part of LOAD.
     /// Пример: <c>LIMIT 100</c>.
     /// </summary>
-    private static long? VisitLoadLimit(LangParser.Load_limitContext? context)
+    private static LimitPart? VisitLoadLimit(LangParser.Load_limitContext? context)
     {
         // 1. LIMIT отсутствует: ограничение количества строк не задано.
         if (context is null)
@@ -262,12 +260,11 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         }
 
         // 2. LIMIT принимает только INTEGER, без expression, чтобы не смешивать синтаксис с вычислениями.
-        return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
-    }
-
-    private static LangSpan? VisitLoadLimitSpan(LangParser.Load_limitContext? context)
-    {
-        return context is null ? null : Span(context);
+        return new LimitPart
+        {
+            Value = long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture),
+            Span = Span(context)
+        };
     }
 
     /// <summary>

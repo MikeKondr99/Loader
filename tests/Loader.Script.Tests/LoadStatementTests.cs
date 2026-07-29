@@ -85,7 +85,11 @@ public sealed class LoadStatementTests
                     Direction = LoadOrderDirection.Ascending
                 }
             ],
-            Limit = 10,
+            LimitPart = new LimitPart
+            {
+                Value = 10,
+                Span = Span()
+            },
             Offset = 1
         };
 
@@ -208,7 +212,7 @@ public sealed class LoadStatementTests
 
         await Assert.That(exception!.StatementIndex).IsEqualTo(0);
         await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
-        await Assert.That(exception.Span).IsEqualTo(statement.LimitSpan);
+        await Assert.That(exception.Span).IsEqualTo(statement.LimitPart!.Span);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
         await Assert.That(exception.InnerException!.Message)
