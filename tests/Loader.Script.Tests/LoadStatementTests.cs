@@ -247,6 +247,77 @@ public sealed class LoadStatementTests
             .Contains("LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT.");
     }
 
+    [Test]
+    [DisplayName("ScriptExecutor оборачивает WHERE не boolean как QueryResolution ошибку")]
+    public async Task Execute_load_wraps_non_boolean_where_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD
+                name AS city
+            FROM [orders.csv]
+            WHERE id;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.Where!.Span);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message)
+            .Contains("WHERE expression должен возвращать Boolean.");
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor оборачивает LOAD * GROUP BY как QueryResolution ошибку")]
+    public async Task Execute_load_wraps_select_all_group_by_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD *
+            FROM [orders.csv]
+            GROUP BY name;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.GroupBy![0].Span);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message)
+            .Contains("SELECT * нельзя использовать вместе с GROUP BY.");
+    }
+
     private static ScriptContext CreateContext()
     {
         return new ScriptContext

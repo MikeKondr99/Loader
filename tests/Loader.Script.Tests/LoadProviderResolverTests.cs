@@ -205,6 +205,72 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver указывает span option если delimiter не один символ")]
+    public async Task Resolve_rejects_delimiter_option_with_more_than_one_character()
+    {
+        var resolver = new LoadProviderResolver();
+        var delimiterSpan = Span(5, 20, 35);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "orders.csv",
+                    [Option("delimiter", "||", delimiterSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(delimiterSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("delimiter");
+        await Assert.That(exception.Errors[0].Message).Contains("один символ");
+    }
+
+    [Test]
+    [DisplayName("Resolver указывает span option если DB table не строка")]
+    public async Task Resolve_rejects_database_table_option_with_non_string_value()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(5, 20, 29);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Host=localhost;Database=db",
+                    [
+                        Marker("postgres"),
+                        Option("table", new IntegerLiteral(123), tableSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("table");
+        await Assert.That(exception.Errors[0].Message).Contains("строкой");
+    }
+
+    [Test]
+    [DisplayName("Resolver возвращает ошибки по повторяющимся options")]
+    public async Task Resolve_rejects_duplicate_named_options()
+    {
+        var resolver = new LoadProviderResolver();
+        var duplicateSpan = Span(5, 35, 47);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "orders.csv",
+                    [
+                        Option("header", new BooleanLiteral(true), Span(5, 20, 31)),
+                        Option("header", new BooleanLiteral(false), duplicateSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(duplicateSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("header");
+        await Assert.That(exception.Errors[0].Message).Contains("несколько раз");
+    }
+
+    [Test]
     [DisplayName("Resolver возвращает несколько ошибок provider options")]
     public async Task Resolve_returns_multiple_provider_option_errors()
     {
@@ -272,11 +338,16 @@ public sealed class LoadProviderResolverTests
 
     private static LoadOption Option(string name, string value, LangSpan span)
     {
+        return Option(name, new StringLiteral(value), span);
+    }
+
+    private static LoadOption Option(string name, Literal value, LangSpan span)
+    {
         return new LoadOption
         {
             Name = name,
             Span = span,
-            Value = new StringLiteral(value)
+            Value = value
         };
     }
 
