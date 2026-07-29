@@ -717,6 +717,44 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query Alt numeric expression не создает ClickHouse Variant")]
+    public async Task Numeric_alt_expression_does_not_create_clickhouse_variant()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("id", DataType.Integer),
+                new InlineField("raw", DataType.Text)
+            ],
+            [
+                ["1", "'12.34'"],
+                ["2", "''"],
+                ["3", "'bad'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "raw.Num().Alt(0.0)".As("amount"),
+                "RawType(raw.Num().Alt(0.0))".As("amount_type")
+            ],
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Numbers("amount"))
+            .IsEquivalentTo([12.34, 0.0, 0.0], CollectionOrdering.Matching);
+        await Assert.That(rows.Texts("amount_type"))
+            .IsEquivalentTo(
+                ["Nullable(Decimal(18, 10))", "Nullable(Decimal(18, 10))", "Nullable(Decimal(18, 10))"],
+                CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query применяет implicit cast int и num в одном выражении")]
     public async Task Mixed_integer_number_expression_uses_implicit_casts()
     {

@@ -39,13 +39,21 @@ public sealed class ConditionalFunctions : FunctionDescriptor
                 .CustomNullPropagation(static _ => true)
                 .Template($"COALESCE({0}, CASE WHEN {1} THEN {2} ELSE NULL END)");
 
-            Method("Alt")
+            var alt = Method("Alt")
                 .Doc("Возвращает первое значение, если оно не NULL, иначе возвращает альтернативное значение")
                 .Arg("input", type)
                 .Arg("alt", type)
                 .Returns(type)
-                .CustomNullPropagation(static nulls => nulls.All(static value => value))
-                .Template($"COALESCE({0}, {1})");
+                .CustomNullPropagation(static nulls => nulls.All(static value => value));
+
+            if (type == DataType.Number)
+            {
+                alt.Template($"COALESCE({0}, toDecimal64OrNull(toString({1}), 10))");
+            }
+            else
+            {
+                alt.Template($"COALESCE({0}, {1})");
+            }
         }
 
         foreach (var type in new[]
