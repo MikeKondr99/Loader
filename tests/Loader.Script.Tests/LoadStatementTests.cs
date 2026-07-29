@@ -187,6 +187,31 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("ScriptExecutor оборачивает provider options как ProviderResolution ошибку")]
+    public async Task Execute_load_wraps_provider_option_errors_as_provider_resolution_script_exception()
+    {
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD *
+            FROM [Host=localhost;Database=db] (postgres, csv);
+            """).Value!;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor()
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
+        await Assert.That(exception.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.InnerException).IsTypeOf<ProviderResolutionException>();
+        await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
+            .Contains("Для provider-а БД 'postgres' требуется опция table='schema.table'.");
+        await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
+            .Contains("Provider marker 'csv' нельзя указывать вместе с 'postgres'.");
+    }
+
+    [Test]
     [DisplayName("ScriptExecutor оборачивает LIMIT 0 как QueryResolution ошибку")]
     public async Task Execute_load_wraps_limit_zero_as_query_resolution_script_exception()
     {

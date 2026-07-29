@@ -12,6 +12,7 @@ using Loader.Core.Providers.Sql;
 using Loader.Core.Providers.SqlServer;
 using Loader.Core.Providers.Xml;
 using Loader.Core.Sources;
+using Loader.Lang;
 using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
@@ -23,88 +24,121 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         ScriptContext context,
         CancellationToken cancellationToken = default)
     {
-        var options = new LoadOptionReader(statement.Options);
-        var provider = options.Provider ?? ProviderFromExtension(statement.Source);
+        var errors = new List<LangError>();
+        var options = new LoadOptionReader(statement.Options, errors);
+        var provider = ResolveProvider(statement, options, errors);
 
-        return provider switch
+        var source = provider switch
         {
-            "csv" => File(
-                "csv",
-                context.FileStorage,
-                statement.Source,
-                (source, fileName, token) => new CsvProvider().OpenReaderAsync(
-                    source,
-                    new CsvTableConfig
-                    {
-                        FileName = fileName,
-                        Delimiter = options.Character("delimiter", ','),
-                        HasHeader = options.Boolean("header", true)
-                    },
-                    token)),
-
-            "excel" or "xlsx" or "xls" or "xlsb" => File(
-                "excel",
-                context.FileStorage,
-                statement.Source,
-                (source, fileName, token) => new ExcelProvider().OpenReaderAsync(
-                    source,
-                    new ExcelTableConfig
-                    {
-                        FileName = fileName,
-                        WorksheetName = options.String("sheet"),
-                        HasHeader = options.Boolean("header", true)
-                    },
-                    token)),
-
-            "json" => await JsonAsync(statement, context, cancellationToken).ConfigureAwait(false),
-            "xml" => await XmlAsync(statement, context, options, cancellationToken).ConfigureAwait(false),
-
-            "qvd" => File(
-                "qvd",
-                context.FileStorage,
-                statement.Source,
-                static (source, fileName, token) => new QvdProvider().OpenReaderAsync(
-                    source,
-                    new QvdTableConfig { FileName = fileName },
-                    token)),
-
+            "csv" => Csv(statement, context, options),
+            "excel" or "xlsx" or "xls" or "xlsb" => Excel(statement, context, options),
+            "json" => errors.Count == 0
+                ? await JsonAsync(statement, context, cancellationToken).ConfigureAwait(false)
+                : null,
+            "xml" => await XmlAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false),
+            "qvd" => Qvd(statement, context),
             "postgres" or "postgresql" or "postgre" => Database(
                 "postgres",
-                statement.Source,
+                statement,
                 options,
+                errors,
                 requiresBuffer: false,
                 static (source, config, token) => new PostgresProvider().OpenReaderAsync(source, config, token)),
-
             "sqlserver" or "mssql" => Database(
                 "sqlserver",
-                statement.Source,
+                statement,
                 options,
+                errors,
                 requiresBuffer: true,
                 static (source, config, token) => new SqlServerProvider().OpenReaderAsync(source, config, token)),
-
             "oracle" => Database(
                 "oracle",
-                statement.Source,
+                statement,
                 options,
+                errors,
                 requiresBuffer: true,
                 static (source, config, token) => new OracleProvider().OpenReaderAsync(source, config, token)),
-
             "hive" or "apachehive" or "apache-hive" => Database(
                 "hive",
-                statement.Source,
+                statement,
                 options,
+                errors,
                 requiresBuffer: true,
                 static (source, config, token) => new HiveProvider().OpenReaderAsync(source, config, token)),
-
             "clickhouse" => Database(
                 "clickhouse",
-                statement.Source,
+                statement,
                 options,
+                errors,
                 requiresBuffer: false,
                 static (source, config, token) => new ClickHouseProvider().OpenReaderAsync(source, config, token)),
-
-            _ => throw new InvalidOperationException($"Provider '{provider}' не поддерживается.")
+            _ => null
         };
+
+        if (errors.Count > 0)
+        {
+            throw new ProviderResolutionException(errors);
+        }
+
+        return source!;
+    }
+
+    private static LoadProviderSource Csv(
+        LoadStatement statement,
+        ScriptContext context,
+        LoadOptionReader options)
+    {
+        var delimiter = options.Character("delimiter", ',');
+        var hasHeader = options.Boolean("header", true);
+
+        return File(
+            "csv",
+            context.FileStorage,
+            statement.Source,
+            (source, fileName, token) => new CsvProvider().OpenReaderAsync(
+                source,
+                new CsvTableConfig
+                {
+                    FileName = fileName,
+                    Delimiter = delimiter,
+                    HasHeader = hasHeader
+                },
+                token));
+    }
+
+    private static LoadProviderSource Excel(
+        LoadStatement statement,
+        ScriptContext context,
+        LoadOptionReader options)
+    {
+        var sheet = options.String("sheet");
+        var hasHeader = options.Boolean("header", true);
+
+        return File(
+            "excel",
+            context.FileStorage,
+            statement.Source,
+            (source, fileName, token) => new ExcelProvider().OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = sheet,
+                    HasHeader = hasHeader
+                },
+                token));
+    }
+
+    private static LoadProviderSource Qvd(LoadStatement statement, ScriptContext context)
+    {
+        return File(
+            "qvd",
+            context.FileStorage,
+            statement.Source,
+            static (source, fileName, token) => new QvdProvider().OpenReaderAsync(
+                source,
+                new QvdTableConfig { FileName = fileName },
+                token));
     }
 
     private static LoadProviderSource File(
@@ -151,10 +185,18 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
+        List<LangError> errors,
         CancellationToken cancellationToken)
     {
-        var tableName = options.String("table") ??
-            throw new InvalidOperationException("Для XML-источника требуется опция table='имя-строки'.");
+        var tableName = options.RequiredString(
+            "table",
+            statement.FromSpan,
+            "Для XML-источника требуется опция table='имя-строки'.");
+        if (tableName is null || errors.Count > 0)
+        {
+            return null!;
+        }
+
         var provider = new XmlProvider();
         var schema = await provider
             .AnalyzeSchemaAsync(context.FileStorage, statement.Source, tableName, cancellationToken)
@@ -178,19 +220,31 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
 
     private static LoadProviderSource Database(
         string kind,
-        string connectionString,
+        LoadStatement statement,
         LoadOptionReader options,
+        List<LangError> errors,
         bool requiresBuffer,
         Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open)
     {
-        var table = options.String("table") ??
-            throw new InvalidOperationException($"Для provider-а БД '{kind}' требуется опция table='schema.table'.");
-        if (!QualifiedTableNameRegex().IsMatch(table))
+        var table = options.RequiredString(
+            "table",
+            statement.FromSpan,
+            $"Для provider-а БД '{kind}' требуется опция table='schema.table'.");
+        if (table is not null && !QualifiedTableNameRegex().IsMatch(table))
         {
-            throw new InvalidOperationException($"Имя таблицы '{table}' не поддерживается.");
+            errors.Add(new LangError
+            {
+                Message = $"Имя таблицы '{table}' не поддерживается.",
+                Span = options.GetOption("table")?.Span ?? statement.FromSpan
+            });
         }
 
-        var source = new ConnectionStringSource { ConnectionString = connectionString };
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
+        var source = new ConnectionStringSource { ConnectionString = statement.Source };
         var config = new SqlTableConfig { Sql = $"SELECT * FROM {table}" };
         return new LoadProviderSource
         {
@@ -200,9 +254,46 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         };
     }
 
-    private static string ProviderFromExtension(string source)
+    private static string? ResolveProvider(
+        LoadStatement statement,
+        LoadOptionReader options,
+        List<LangError> errors)
     {
-        return Path.GetExtension(source).ToLowerInvariant() switch
+        var markers = options.Markers;
+        if (markers.Count > 1)
+        {
+            var first = markers[0];
+            foreach (var marker in markers.Skip(1))
+            {
+                errors.Add(new LangError
+                {
+                    Message = $"Provider marker '{marker.Name}' нельзя указывать вместе с '{first.Name}'.",
+                    Span = marker.Span
+                });
+            }
+        }
+
+        var provider = options.Provider;
+        if (provider is null)
+        {
+            return ProviderFromExtension(statement, errors);
+        }
+
+        if (!IsSupportedProvider(provider))
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Provider '{provider}' не поддерживается.",
+                Span = markers[0].Span
+            });
+        }
+
+        return provider;
+    }
+
+    private static string? ProviderFromExtension(LoadStatement statement, List<LangError> errors)
+    {
+        var provider = Path.GetExtension(statement.Source).ToLowerInvariant() switch
         {
             ".csv" => "csv",
             ".xlsx" => "xlsx",
@@ -211,9 +302,42 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
             ".json" => "json",
             ".xml" => "xml",
             ".qvd" => "qvd",
-            _ => throw new InvalidOperationException(
-                "Нужно указать provider marker, если FROM не является поддерживаемым относительным путем к файлу.")
+            _ => null
         };
+
+        if (provider is null)
+        {
+            errors.Add(new LangError
+            {
+                Message = "Нужно указать provider marker, если FROM не является поддерживаемым относительным путем к файлу.",
+                Span = statement.FromSpan
+            });
+        }
+
+        return provider;
+    }
+
+    private static bool IsSupportedProvider(string provider)
+    {
+        return provider is
+            "csv" or
+            "excel" or
+            "xlsx" or
+            "xls" or
+            "xlsb" or
+            "json" or
+            "xml" or
+            "qvd" or
+            "postgres" or
+            "postgresql" or
+            "postgre" or
+            "sqlserver" or
+            "mssql" or
+            "oracle" or
+            "hive" or
+            "apachehive" or
+            "apache-hive" or
+            "clickhouse";
     }
 
     [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)*$", RegexOptions.CultureInvariant)]

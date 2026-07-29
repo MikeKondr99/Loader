@@ -1,3 +1,4 @@
+using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 
@@ -5,35 +6,61 @@ namespace Loader.Script;
 
 internal sealed class LoadOptionReader
 {
-    private readonly IReadOnlyDictionary<string, LoadOption> _options;
+    private readonly IReadOnlyList<LoadOption> _options;
+    private readonly IReadOnlyDictionary<string, LoadOption> _optionsByName;
+    private readonly List<LangError> _errors;
 
-    public LoadOptionReader(IEnumerable<LoadOption> options)
+    public LoadOptionReader(IReadOnlyList<LoadOption> options, List<LangError> errors)
     {
-        _options = options.ToDictionary(static option => option.Name, StringComparer.OrdinalIgnoreCase);
+        _options = options;
+        _errors = errors;
+        _optionsByName = BuildOptionMap(options, errors);
     }
 
-    public string? Provider => _options.Values
-        .FirstOrDefault(static option => option.Value is null)
+    public IReadOnlyList<LoadOption> Markers => _options
+        .Where(static option => option.Value is null)
+        .ToArray();
+
+    public string? Provider => Markers
+        .FirstOrDefault()
         ?.Name
         .ToLowerInvariant();
 
     public string? String(string name)
     {
-        return GetValue(name) switch
+        var option = GetOption(name);
+        return option?.Value switch
         {
             null => null,
             StringLiteral value => value.Value,
-            _ => throw new InvalidOperationException($"Опция '{name}' должна быть строкой.")
+            _ => AddError(option, $"Опция '{name}' должна быть строкой.")
         };
+    }
+
+    public string? RequiredString(string name, LangSpan missingSpan, string missingMessage)
+    {
+        var option = GetOption(name);
+        if (option is null)
+        {
+            _errors.Add(new LangError
+            {
+                Message = missingMessage,
+                Span = missingSpan
+            });
+            return null;
+        }
+
+        return String(name);
     }
 
     public bool Boolean(string name, bool defaultValue)
     {
-        return GetValue(name) switch
+        var option = GetOption(name);
+        return option?.Value switch
         {
             null => defaultValue,
             BooleanLiteral value => value.Value,
-            _ => throw new InvalidOperationException($"Опция '{name}' должна быть boolean.")
+            _ => AddError(option, $"Опция '{name}' должна быть true или false.", defaultValue)
         };
     }
 
@@ -45,13 +72,63 @@ internal sealed class LoadOptionReader
             return defaultValue;
         }
 
-        return value.Length == 1
-            ? value[0]
-            : throw new InvalidOperationException($"Опция '{name}' должна содержать один символ.");
+        if (value.Length == 1)
+        {
+            return value[0];
+        }
+
+        AddError(GetOption(name), $"Опция '{name}' должна содержать один символ.");
+        return defaultValue;
     }
 
-    private Literal? GetValue(string name)
+    public LoadOption? GetOption(string name)
     {
-        return _options.TryGetValue(name, out var option) ? option.Value : null;
+        return _optionsByName.TryGetValue(name, out var option) ? option : null;
+    }
+
+    private static IReadOnlyDictionary<string, LoadOption> BuildOptionMap(
+        IReadOnlyList<LoadOption> options,
+        List<LangError> errors)
+    {
+        var map = new Dictionary<string, LoadOption>(StringComparer.OrdinalIgnoreCase);
+        foreach (var option in options.Where(static option => option.Value is not null))
+        {
+            if (map.TryAdd(option.Name, option))
+            {
+                continue;
+            }
+
+            errors.Add(new LangError
+            {
+                Message = $"Опция '{option.Name}' указана несколько раз.",
+                Span = option.Span
+            });
+        }
+
+        return map;
+    }
+
+    private string? AddError(LoadOption? option, string message)
+    {
+        if (option is not null)
+        {
+            _errors.Add(new LangError
+            {
+                Message = message,
+                Span = option.Span
+            });
+        }
+
+        return null;
+    }
+
+    private bool AddError(LoadOption option, string message, bool fallback)
+    {
+        _errors.Add(new LangError
+        {
+            Message = message,
+            Span = option.Span
+        });
+        return fallback;
     }
 }
