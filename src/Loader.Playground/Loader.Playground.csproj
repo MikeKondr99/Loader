@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Loader.Core\Loader.Core.csproj" />
+    <ProjectReference Include="..\Loader.Lang\Loader.Lang.csproj" />
+    <ProjectReference Include="..\Loader.Script\Loader.Script.csproj" />
   </ItemGroup>
 
 </Project>

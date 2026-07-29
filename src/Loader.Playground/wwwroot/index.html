@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LoadScript Playground</title>
+  <style>
+    :root {
+      --bg: #f7f7f4;
+      --panel: #ffffff;
+      --panel-soft: #f0f1ee;
+      --text: #20231f;
+      --muted: #6c7168;
+      --accent: #2f5f9f;
+      --accent-soft: #e6eef9;
+      --danger: #b3261e;
+      --danger-soft: #fdecea;
+      --border: #d9ddd3;
+      --shadow: 0 18px 45px rgba(30, 35, 28, .08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        linear-gradient(135deg, rgba(47, 95, 159, .08), transparent 32%),
+        linear-gradient(180deg, #ffffff 0%, var(--bg) 42%, #eff1ec 100%);
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 16px 26px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255, 255, 255, .84);
+      backdrop-filter: blur(12px);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: -.03em;
+      font-weight: 680;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: 280px minmax(420px, 1.1fr) minmax(360px, .78fr);
+      gap: 16px;
+      height: calc(100vh - 80px);
+      padding: 16px;
+    }
+
+    .card {
+      overflow: hidden;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-soft);
+    }
+
+    .files-panel {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+    }
+
+    .files-title {
+      padding: 13px 14px 10px;
+      font-weight: 680;
+    }
+
+    .upload-row {
+      padding: 0 12px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .upload-label {
+      display: block;
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px dashed #aeb9c9;
+      border-radius: 10px;
+      background: #fbfcff;
+      color: var(--accent);
+      line-height: 1.2;
+      font-size: 13px;
+      font-weight: 650;
+      text-align: center;
+      cursor: pointer;
+    }
+
+    .upload-label input {
+      display: none;
+    }
+
+    .file-list {
+      overflow: auto;
+      padding: 8px;
+    }
+
+    .file-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border-radius: 10px;
+    }
+
+    .file-row:hover {
+      background: var(--accent-soft);
+    }
+
+    .file-name {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--text);
+      font: 12px Consolas, monospace;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .file-meta {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .delete-file {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border-color: transparent;
+      background: transparent;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1;
+    }
+
+    .delete-file:hover {
+      background: var(--danger-soft);
+      color: var(--danger);
+    }
+
+    .empty-files {
+      padding: 10px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    button {
+      padding: 8px 12px;
+      border: 1px solid #bcc8d8;
+      border-radius: 9px;
+      background: #ffffff;
+      color: var(--text);
+      font-weight: 650;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: white;
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: default;
+    }
+
+    #editor {
+      height: calc(100% - 53px);
+      min-height: 360px;
+    }
+
+    .output {
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .status {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-soft);
+      color: var(--muted);
+      font: 13px Consolas, monospace;
+    }
+
+    .status.ok {
+      color: #0f6b3a;
+      background: #eaf7ef;
+    }
+
+    .status.fail {
+      color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    pre {
+      margin: 0;
+      padding: 14px;
+      overflow: auto;
+      font: 12px Consolas, monospace;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      background: #fbfcfa;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+
+    .result-body {
+      overflow: auto;
+      background: #fbfcfa;
+    }
+
+    .result-body pre {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .preview {
+      padding: 12px 14px 14px;
+    }
+
+    .table-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .table-tab {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+    }
+
+    .table-tab.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .preview-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+    }
+
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font: 12px Consolas, monospace;
+    }
+
+    .preview-table th,
+    .preview-table td {
+      max-width: 260px;
+      padding: 7px 9px;
+      border-bottom: 1px solid #edf0ea;
+      text-align: left;
+      vertical-align: top;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preview-table th {
+      position: sticky;
+      top: 0;
+      background: #f4f6f2;
+      color: #3b4238;
+      font-weight: 700;
+    }
+
+    .preview-null {
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .preview-message {
+      color: var(--muted);
+      font: 13px "Segoe UI", sans-serif;
+    }
+
+    .monaco-editor .line-error {
+      background: rgba(179, 38, 30, .12);
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+
+      #editor {
+        height: 520px;
+      }
+
+      .card.output {
+        min-height: 460px;
+      }
+
+      header {
+        display: block;
+      }
+
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LoadScript Playground</h1>
+  </header>
+
+  <main>
+    <aside class="card files-panel">
+      <div>
+        <div class="files-title">Файлы:</div>
+      </div>
+      <div class="upload-row">
+        <label class="upload-label">
+          Загрузить файл
+          <input type="file" id="file-upload">
+        </label>
+      </div>
+      <div class="file-list" id="file-list">
+        <div class="empty-files">Файлы еще не загружены.</div>
+      </div>
+    </aside>
+
+    <section class="card">
+      <div class="toolbar">
+        <button class="primary" id="run">Run script</button>
+        <button id="parse">Parse only</button>
+        <button id="sample">Reset sample</button>
+      </div>
+      <div id="editor"></div>
+    </section>
+
+    <section class="card output">
+      <div class="status" id="status">Готово</div>
+      <div class="result-body">
+        <pre id="output">Напиши script и нажми Run.</pre>
+        <div class="preview" id="preview" hidden></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    window.MonacoEnvironment = {
+      getWorkerUrl: function () {
+        const worker = 'self.MonacoEnvironment={baseUrl:"https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/"};importScripts("https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js");';
+        return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(worker);
+      }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <script>
+    const sample = `orders: LOAD
+    id,
+    city,
+    amount.Num() AS amount
+FROM [orders.csv] (csv, delimiter=',', header=true)
+WHERE amount > 0
+ORDER BY city ASC
+LIMIT 10;`;
+
+    let editor;
+    let decorations = [];
+
+    const status = document.getElementById('status');
+    const output = document.getElementById('output');
+    const preview = document.getElementById('preview');
+    const runButton = document.getElementById('run');
+    const parseButton = document.getElementById('parse');
+    const sampleButton = document.getElementById('sample');
+    const fileUpload = document.getElementById('file-upload');
+    const fileList = document.getElementById('file-list');
+    refreshFiles();
+    refreshLastRun();
+
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
+    require(['vs/editor/editor.main'], function () {
+      monaco.languages.register({ id: 'loader-script' });
+      monaco.languages.setMonarchTokensProvider('loader-script', {
+        ignoreCase: true,
+        tokenizer: {
+          root: [
+            [/\/\*/, 'comment', '@comment'],
+            [/\/\/.*$/, 'comment'],
+            [/\b(LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|true|false|null)\b/, 'keyword'],
+            [/\[[^\]]*\]/, 'string'],
+            [/'([^'\\]|\\.)*'/, 'string'],
+            [/[0-9]+(\.[0-9]+)?/, 'number'],
+            [/--.*$/, 'comment'],
+            [/[a-zA-Z_][a-zA-Z0-9_]*/, 'identifier']
+          ],
+          comment: [
+            [/[^/*]+/, 'comment'],
+            [/\*\//, 'comment', '@pop'],
+            [/[/*]/, 'comment']
+          ]
+        }
+      });
+      monaco.editor.defineTheme('loader-light', {
+        base: 'vs',
+        inherit: true,
+        rules: [
+          { token: 'keyword', foreground: '2f5f9f', fontStyle: 'bold' },
+          { token: 'string', foreground: '8a4b00' },
+          { token: 'number', foreground: '1f6f78' },
+          { token: 'comment', foreground: '7a8175' }
+        ],
+        colors: {
+          'editor.background': '#ffffff',
+          'editor.lineHighlightBackground': '#f4f7fb',
+          'editorCursor.foreground': '#2f5f9f',
+          'editorLineNumber.foreground': '#9aa19a'
+        }
+      });
+      editor = monaco.editor.create(document.getElementById('editor'), {
+        value: localStorage.getItem('loader-playground-script') || sample,
+        language: 'loader-script',
+        theme: 'loader-light',
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 14,
+        tabSize: 4
+      });
+      editor.onDidChangeModelContent(() => {
+        localStorage.setItem('loader-playground-script', editor.getValue());
+        clearMarkers();
+      });
+    });
+
+    runButton.onclick = () => send('/api/run', 'Выполняю script...');
+    parseButton.onclick = () => send('/api/parse', 'Парсю script...');
+    sampleButton.onclick = () => {
+      editor.setValue(sample);
+      clearMarkers();
+      clearPreview();
+      setResult('Готово', 'Напиши script и нажми Run.', null);
+    };
+
+    fileUpload.onchange = async () => {
+      const file = fileUpload.files && fileUpload.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        clearPreview();
+        setResult(`Загружаю файл ${file.name}...`, '', null);
+        const response = await fetch('/api/files', {
+          method: 'POST',
+          body: form
+        });
+        const json = await response.json();
+        renderFiles(json.files || []);
+        setResult('Файл загружен', JSON.stringify(json.file, null, 2), true);
+      } catch (error) {
+        setResult('UPLOAD FAIL', error.stack || error.message, false);
+      } finally {
+        fileUpload.value = '';
+      }
+    };
+
+    async function send(url, pendingText) {
+      if (!editor) return;
+      setBusy(true);
+      clearMarkers();
+      clearPreview();
+      setResult(pendingText, '', null);
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ script: editor.getValue() })
+        });
+        const json = await response.json();
+        if (json.ok) {
+          setResult('OK', formatSuccess(json.data), true);
+          renderPreviewTabs(json.data);
+        } else {
+          markError(json.error);
+          clearPreview();
+          setResult(`FAIL: ${json.stage || 'unknown'}`, JSON.stringify(json, null, 2), false);
+        }
+      } catch (error) {
+        setResult('REQUEST FAIL', error.stack || error.message, false);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function setBusy(value) {
+      runButton.disabled = value;
+      parseButton.disabled = value;
+    }
+
+    function setResult(text, body, ok) {
+      status.textContent = text;
+      status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
+      output.textContent = body;
+    }
+
+    function formatSuccess(data) {
+      if (!data || !Array.isArray(data.tables)) {
+        return JSON.stringify(data, null, 2);
+      }
+
+      const lines = [];
+      if (data.elapsedMs !== undefined && data.elapsedMs !== null) {
+        lines.push(`Elapsed: ${data.elapsedMs} ms`);
+        lines.push('');
+      }
+
+      if (data.tables.length === 0) {
+        lines.push('Таблиц нет.');
+        return lines.join('\n');
+      }
+
+      for (const table of data.tables) {
+        lines.push(`Таблица \`${table.name}\``);
+        if (table.alias) {
+          lines.push(`alias: ${table.alias}`);
+        }
+        if (table.rowCount !== undefined && table.rowCount !== null) {
+          lines.push(`rows: ${table.rowCount}`);
+        }
+
+        const fields = Array.isArray(table.fields) ? table.fields : [];
+        if (fields.length === 0) {
+          lines.push('- полей нет');
+          lines.push('');
+          continue;
+        }
+
+        for (const field of fields) {
+          const nullableSuffix = field.canBeNull ? '' : '!';
+          const density = field.density === undefined || field.density === null
+            ? ''
+            : ` ${formatDensity(field.density)} {density}`;
+          lines.push(`- ${field.name}: ${field.dataType}${nullableSuffix}${density}`);
+        }
+
+        lines.push('');
+      }
+
+      return lines.join('\n').trimEnd();
+    }
+
+    function formatDensity(value) {
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return `${value}%`;
+      }
+
+      return `${number.toFixed(number % 1 === 0 ? 0 : 2)}%`;
+    }
+
+    function renderPreviewTabs(data) {
+      if (!data || !Array.isArray(data.tables) || data.tables.length === 0) {
+        clearPreview();
+        return;
+      }
+
+      preview.hidden = false;
+      preview.innerHTML = '';
+
+      const tabs = document.createElement('div');
+      tabs.className = 'table-tabs';
+      const tableHost = document.createElement('div');
+      tableHost.className = 'preview-table-host';
+      preview.appendChild(tabs);
+      preview.appendChild(tableHost);
+
+      data.tables.forEach((table, ordinal) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'table-tab';
+        button.textContent = table.alias || table.name || `table ${ordinal + 1}`;
+        button.title = table.name || button.textContent;
+        button.onclick = () => loadPreviewTable(table.index ?? ordinal, button, tabs, tableHost);
+        tabs.appendChild(button);
+      });
+
+      const first = tabs.querySelector('.table-tab');
+      if (first) {
+        first.click();
+      }
+    }
+
+    async function loadPreviewTable(index, activeButton, tabs, tableHost) {
+      for (const button of tabs.querySelectorAll('.table-tab')) {
+        button.classList.toggle('active', button === activeButton);
+      }
+
+      tableHost.innerHTML = '<div class="preview-message">Читаю первые 15 строк...</div>';
+      try {
+        const response = await fetch(`/api/last-run/tables/${index}/preview`);
+        const json = await readJsonResponse(response);
+        if (!response.ok) {
+          tableHost.textContent = json.error || JSON.stringify(json, null, 2);
+          return;
+        }
+
+        if (json.ok === false) {
+          tableHost.textContent = JSON.stringify(json, null, 2);
+          return;
+        }
+
+        renderPreviewTable(tableHost, json.columns || [], json.rows || []);
+      } catch (error) {
+        tableHost.textContent = error.stack || error.message;
+      }
+    }
+
+    async function readJsonResponse(response) {
+      const text = await response.text();
+      if (!text.trim()) {
+        throw new Error(`Сервер вернул пустой ответ (${response.status}). Если playground был запущен до последних правок, перезапусти его.`);
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        throw new Error(`Сервер вернул не JSON (${response.status}): ${text.slice(0, 500)}`);
+      }
+    }
+
+    function renderPreviewTable(host, columns, rows) {
+      host.innerHTML = '';
+      if (!columns.length) {
+        host.innerHTML = '<div class="preview-message">У таблицы нет колонок.</div>';
+        return;
+      }
+
+      const wrap = document.createElement('div');
+      wrap.className = 'preview-table-wrap';
+      const table = document.createElement('table');
+      table.className = 'preview-table';
+
+      const thead = document.createElement('thead');
+      const headerRow = document.createElement('tr');
+      for (const column of columns) {
+        const th = document.createElement('th');
+        th.textContent = column;
+        headerRow.appendChild(th);
+      }
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        for (let i = 0; i < columns.length; i++) {
+          const td = document.createElement('td');
+          const value = row[i];
+          if (value === null || value === undefined) {
+            td.textContent = 'NULL';
+            td.className = 'preview-null';
+          } else {
+            td.textContent = String(value);
+            td.title = String(value);
+          }
+
+          tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+      }
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      host.appendChild(wrap);
+    }
+
+    function clearPreview() {
+      preview.hidden = true;
+      preview.innerHTML = '';
+    }
+
+    function clearMarkers() {
+      if (!editor || !window.monaco) return;
+      monaco.editor.setModelMarkers(editor.getModel(), 'loader', []);
+      decorations = editor.deltaDecorations(decorations, []);
+    }
+
+    function markError(error) {
+      if (!editor || !error) return;
+      const span = findSpan(error);
+      if (!span) return;
+      const range = new monaco.Range(
+        Math.max(1, span.startRow + 1),
+        Math.max(1, span.startColumn + 1),
+        Math.max(1, span.endRow + 1),
+        Math.max(1, span.endColumn + 1)
+      );
+      monaco.editor.setModelMarkers(editor.getModel(), 'loader', [{
+        severity: monaco.MarkerSeverity.Error,
+        message: error.message,
+        startLineNumber: range.startLineNumber,
+        startColumn: range.startColumn,
+        endLineNumber: range.endLineNumber,
+        endColumn: range.endColumn
+      }]);
+      decorations = editor.deltaDecorations(decorations, [{
+        range,
+        options: {
+          isWholeLine: true,
+          className: 'line-error'
+        }
+      }]);
+      editor.revealRangeInCenter(range);
+    }
+
+    function findSpan(error) {
+      let current = error;
+      while (current) {
+        if (current.span) return current.span;
+        current = current.inner;
+      }
+      return null;
+    }
+
+    async function refreshFiles() {
+      try {
+        const response = await fetch('/api/files');
+        const json = await response.json();
+        renderFiles(json.files || []);
+      } catch (error) {
+        fileList.innerHTML = `<div class="empty-files">Не удалось прочитать loaded_files: ${escapeHtml(error.message)}</div>`;
+      }
+    }
+
+    async function refreshLastRun() {
+      try {
+        const response = await fetch('/api/last-run');
+        if (!response.ok) {
+          return;
+        }
+
+        const json = await response.json();
+        if (!json.ok) {
+          return;
+        }
+
+        setResult('Последний OK', formatSuccess(json.data), true);
+        renderPreviewTabs(json.data);
+      } catch {
+        // Последний успешный запуск нужен только для удобства, поэтому ошибки восстановления не показываем.
+      }
+    }
+
+    function renderFiles(files) {
+      if (!files.length) {
+        fileList.innerHTML = '<div class="empty-files">Файлы еще не загружены.</div>';
+        return;
+      }
+
+      fileList.innerHTML = '';
+      for (const file of files) {
+        const row = document.createElement('div');
+        row.className = 'file-row';
+
+        const info = document.createElement('div');
+        const name = document.createElement('button');
+        name.className = 'file-name';
+        name.type = 'button';
+        name.title = 'Вставить имя файла в editor';
+        name.textContent = file.name;
+        name.onclick = () => insertFileName(file.name);
+
+        const meta = document.createElement('div');
+        meta.className = 'file-meta';
+        meta.textContent = `${formatSize(file.size)} | ${new Date(file.modifiedUtc).toLocaleString()}`;
+
+        const remove = document.createElement('button');
+        remove.className = 'delete-file';
+        remove.type = 'button';
+        remove.title = 'Удалить файл';
+        remove.textContent = '×';
+        remove.onclick = () => deleteFile(file.name);
+
+        info.appendChild(name);
+        info.appendChild(meta);
+        row.appendChild(info);
+        row.appendChild(remove);
+        fileList.appendChild(row);
+      }
+    }
+
+    async function deleteFile(name) {
+      if (!confirm(`Удалить ${name}?`)) return;
+      try {
+        clearPreview();
+        const response = await fetch(`/api/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const json = await response.json();
+        renderFiles(json.files || []);
+        setResult('Файл удален', name, true);
+      } catch (error) {
+        setResult('DELETE FAIL', error.stack || error.message, false);
+      }
+    }
+
+    function insertFileName(name) {
+      if (!editor) return;
+      editor.executeEdits('files-panel', [{
+        range: editor.getSelection(),
+        text: `[${name}]`,
+        forceMoveMarkers: true
+      }]);
+      editor.focus();
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024) return `${bytes} B`;
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/[&<>"']/g, c => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[c]));
+    }
+  </script>
+</body>
+</html>
