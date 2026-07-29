@@ -3,9 +3,7 @@
 `Loader.Demo` был POC и больше не является актуальным слоем.
 Текущая реализация живет в `Loader.Script`.
 
-Этот файл стоит переименовать в `script.md` или удалить после переноса нужной информации.
-
-## Текущий pipeline
+## LOAD pipeline
 
 ```text
 Script
@@ -17,6 +15,31 @@ Script
 -> final ClickHouse table
 -> LoadedTable metadata
 ```
+
+## CALENDAR pipeline
+
+```text
+CalendarStatement
+-> CalendarStatementExecutor
+-> literal range или MIN/MAX поля RESIDENT table
+-> CREATE TABLE ... ENGINE = MergeTree ORDER BY column1 AS SELECT
+-> LoadedTable metadata
+```
+
+`CALENDAR` генерируется непосредственно в целевом ClickHouse, без provider reader и staging table.
+Даты строятся через `numbers(dateDiff(...) + 1)` и `addDays`, поэтому обе границы включены.
+
+Для `RESIDENT` executor:
+
+1. Находит единственную ранее загруженную таблицу по `LoadedTable.Alias`.
+2. Разрешает логическое поле в `LoadedTable.Fields` и его физический ordinal `columnN`.
+3. Разрешает только `Date`/`DateTime`.
+4. Вычисляет количество non-null значений и `MIN/MAX(toDate(columnN))`.
+5. Отклоняет пустой диапазон и материализует фиксированные 28 колонок.
+
+Календарь регистрируется в `ScriptContext` как обычный `LoadedTable`, поэтому доступен последующим statement.
+`RowCount` известен заранее, все поля имеют `CanBeNull = false`, а для логического поля `Date`
+заполняются `Cardinality`, `Density`, `Min` и `Max`.
 
 ## LOAD source
 
@@ -67,6 +90,8 @@ FROM [Host=localhost;Database=app;Username=postgres;Password=postgres]
 - `LoadStatement.TempTableWrite`
 - `LoadStatement.QueryBuild`
 - `LoadStatement.FinalTableWrite`
+- `CalendarStatement.Execute`
+- `CalendarStatement.FinalTableWrite`
 
 Для тегов, где может быть connection string, используется `activity?.SetTag(...).SetSanitizedTag(...)`.
 Сейчас sanitizing применяется к `load.source` и скрывает `password`/`pwd`.

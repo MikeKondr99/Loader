@@ -81,4 +81,22 @@ public static partial class ScriptLog
         Level = LogLevel.Warning,
         Message = "Не удалось удалить неуспешную финальную таблицу '{FinalTable}'.")]
     public static partial void FinalTableDropFailed(this ILogger logger, string finalTable, Exception exception);
+
+    [LoggerMessage(
+        EventId = 1020,
+        Level = LogLevel.Information,
+        Message = "Вычисляю диапазон CALENDAR из поля '{Field}' таблицы '{Table}'.")]
+    public static partial void ResolvingCalendarResidentRange(this ILogger logger, string table, string field);
+
+    [LoggerMessage(
+        EventId = 1021,
+        Level = LogLevel.Information,
+        Message = "Материализую CALENDAR во финальную таблицу '{FinalTable}'.")]
+    public static partial void MaterializingCalendar(this ILogger logger, string finalTable);
+
+    [LoggerMessage(
+        EventId = 1022,
+        Level = LogLevel.Information,
+        Message = "CALENDAR материализован во финальную таблицу '{FinalTable}'.")]
+    public static partial void CalendarMaterialized(this ILogger logger, string finalTable);
 }

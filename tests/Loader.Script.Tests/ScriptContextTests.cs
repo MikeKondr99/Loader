@@ -49,6 +49,45 @@ public sealed class ScriptContextTests
         await Assert.That(context.LoadedTables[1].Alias).IsNull();
     }
 
+    [Test]
+    public async Task Context_resolves_exactly_one_loaded_table_by_alias()
+    {
+        var context = CreateContext();
+        var orders = new LoadedTable
+        {
+            Name = Table("physical_orders"),
+            Alias = "Orders",
+            Fields = []
+        };
+        context.AddLoadedTable(orders);
+
+        await Assert.That(context.GetLoadedTable("Orders")).IsSameReferenceAs(orders);
+        await Assert.That(() => context.GetLoadedTable("orders"))
+            .ThrowsExactly<QueryResolutionException>();
+    }
+
+    [Test]
+    public async Task Context_rejects_ambiguous_loaded_table_alias()
+    {
+        var context = CreateContext();
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = Table("physical_orders_1"),
+            Alias = "Orders",
+            Fields = []
+        });
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = Table("physical_orders_2"),
+            Alias = "Orders",
+            Fields = []
+        });
+
+        await Assert.That(() => context.GetLoadedTable("Orders"))
+            .ThrowsExactly<QueryResolutionException>()
+            .WithMessageContaining("неоднозначно");
+    }
+
     private static ClickHouseTableName Table(string name)
     {
         return new ClickHouseTableName

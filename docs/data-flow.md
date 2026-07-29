@@ -40,13 +40,26 @@ flowchart LR
     Final -. drop only on failed materialization .-> DropFinal[DROP final]
 ```
 
+Календарь использует укороченный путь:
+
+```mermaid
+flowchart LR
+    Range["Literal range или RESIDENT MIN/MAX"] --> Validate["Date range validation"]
+    Validate --> Generator["numbers + addDays"]
+    Generator --> Calendar["MergeTree ORDER BY column1"]
+    Calendar --> Metadata["LoadedTable: 28 logical fields"]
+    Calendar -. drop only on failed materialization .-> DropCalendar["DROP final"]
+```
+
 Важные правила:
 
 - Temp table хранит физические имена `column1`, `column2`, ... .
 - `QuerySource.Field.Template` связывает логические source names с физическими temp columns.
 - Final table получает результат `Query -> Resolve -> Compile -> ClickHouse reader -> ClickHouseWriter`.
 - `LoadedTable.Name` хранит физическое имя final table в БД.
-- `LoadedTable.Alias` хранит имя таблицы из script (`table_name: LOAD`).
+- `LoadedTable.Alias` хранит имя таблицы из script (`table_name: LOAD/CALENDAR`).
+- Для `CALENDAR` физические `column1`–`column28` соответствуют фиксированному порядку логических полей;
+  `column1` — логическое поле `Date` и sorting key календаря.
 
 ## Source abstraction
 

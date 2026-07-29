@@ -49,8 +49,49 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     public override Statement VisitStatement(LangParser.StatementContext context)
     {
-        // 1. Пока в языке есть только LOAD statement.
-        return Visit(context.load_statement());
+        if (context.load_statement() is not null)
+        {
+            return Visit(context.load_statement());
+        }
+
+        return Visit(context.calendar_statement());
+    }
+
+    /// <summary>
+    /// CALENDAR statement целиком.
+    /// Примеры:
+    /// <c>Calendar: CALENDAR FROM '2024-01-01' TO '2024-12-31';</c>,
+    /// <c>Calendar: CALENDAR FROM FIELD [CreatedAt] RESIDENT Orders;</c>.
+    /// </summary>
+    public override Statement VisitCalendar_statement(LangParser.Calendar_statementContext context)
+    {
+        var tableName = VisitLoadTableName(context.load_table_name())
+            ?? throw new InvalidOperationException("CALENDAR table name is required.");
+        var range = context.calendar_range();
+
+        CalendarRange calendarRange;
+        if (range.FIELD() is null)
+        {
+            calendarRange = new CalendarLiteralRange
+            {
+                StartDate = VisitCalendarDate(range.@string(0)),
+                EndDate = VisitCalendarDate(range.@string(1))
+            };
+        }
+        else
+        {
+            calendarRange = new CalendarResidentRange
+            {
+                FieldName = UnescapeName(range.name(0).GetText()),
+                TableName = UnescapeName(range.name(1).GetText())
+            };
+        }
+
+        return new CalendarStatement
+        {
+            TableName = tableName,
+            Range = calendarRange
+        };
     }
 
     /// <summary>
@@ -117,8 +158,8 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             return null;
         }
 
-        // 2. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
-        return context.NAME().GetText();
+        // 2. CALENDAR разрешен отдельно, чтобы естественная форма "Calendar: CALENDAR ..." не требовала escaping.
+        return context.NAME()?.GetText() ?? context.CALENDAR().GetText();
     }
 
     /// <summary>
@@ -287,6 +328,30 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         // 2. OFFSET принимает только INTEGER и по грамматике разрешен только после LIMIT.
         return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
+    }
+
+    private DateOnly VisitCalendarDate(LangParser.StringContext context)
+    {
+        var expression = expressionParser.VisitString(context);
+        if (expression is not StringLiteral literal ||
+            !DateOnly.TryParseExact(
+                literal.Value,
+                "yyyy-MM-dd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var date))
+        {
+            throw new LangErrorException(new FormatException("Invalid CALENDAR date literal."))
+            {
+                Error = new LangError
+                {
+                    Span = Span(context),
+                    Message = "Дата CALENDAR должна быть строковым литералом в формате yyyy-MM-dd."
+                }
+            };
+        }
+
+        return date;
     }
 
     /// <summary>

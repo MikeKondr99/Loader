@@ -19,6 +19,7 @@ Script/materialization контракт:
 
 ```text
 LOAD statement -> provider reader -> temp ClickHouse -> Query -> final ClickHouse -> LoadedTable
+CALENDAR statement -> date range -> ClickHouse generator -> final ClickHouse -> LoadedTable
 ```
 
 ## Основные понятия Core
@@ -100,6 +101,14 @@ Query -> QueryResolver -> ResolvedQuery -> ClickHouseQueryCompiler -> SQL
 4. `LoadStatement` превращается в `Query` над temp table.
 5. Query выполняется в ClickHouse и результат пишется в final table.
 6. Возвращается `LoadedTable`.
+
+`CalendarStatementExecutor` использует отдельный путь без provider и staging:
+
+1. Берет явные даты либо разрешает `RESIDENT` table через ранее зарегистрированный `LoadedTable`.
+2. Для `RESIDENT` вычисляет `MIN/MAX(toDate(columnN))`, игнорируя `NULL`.
+3. Проверяет включительный диапазон ClickHouse `Date`.
+4. Выполняет прямой `CREATE TABLE ... ENGINE = MergeTree ORDER BY column1 AS SELECT`.
+5. Регистрирует фиксированную логическую схему из 28 полей в `LoadedTable`.
 
 Temp table удаляется best-effort.
 Final table удаляется только если materialization не была успешно committed.

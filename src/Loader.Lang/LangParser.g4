@@ -12,7 +12,20 @@ full_script:
 
 
 statement
-    : load_statement;
+    : load_statement
+    | calendar_statement
+    ;
+
+calendar_statement
+    : load_table_name
+    CALENDAR calendar_range
+    SEMICOLON
+    ;
+
+calendar_range
+    : FROM string TO string
+    | FROM FIELD name RESIDENT name
+    ;
 
 load_statement
     : load_table_name?
@@ -26,7 +39,7 @@ load_statement
     ;
 
 load_table_name
-    : NAME COLON
+    : (NAME | CALENDAR) COLON
     ;
 
 load_where
@@ -122,7 +135,7 @@ null: NULL;
 
 boolean: BOOLEAN;
 
-name: NAME | BLOCKED_NAME;
+name: NAME | BLOCKED_NAME | CALENDAR | TO | FIELD | RESIDENT;
 
 integer: INTEGER;
 

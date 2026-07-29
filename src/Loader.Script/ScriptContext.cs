@@ -37,4 +37,24 @@ public sealed class ScriptContext
     {
         _loadedTables.Add(table);
     }
+
+    /// <summary>
+    /// Возвращает единственную ранее загруженную таблицу с указанным логическим именем.
+    /// </summary>
+    public LoadedTable GetLoadedTable(string alias)
+    {
+        var matches = _loadedTables
+            .Where(table => string.Equals(table.Alias, alias, StringComparison.Ordinal))
+            .Take(2)
+            .ToArray();
+
+        return matches.Length switch
+        {
+            1 => matches[0],
+            0 => throw new QueryResolutionException(
+                $"Таблица RESIDENT '{alias}' не найдена среди ранее загруженных таблиц."),
+            _ => throw new QueryResolutionException(
+                $"Имя таблицы RESIDENT '{alias}' неоднозначно.")
+        };
+    }
 }
