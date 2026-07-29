@@ -274,24 +274,40 @@ static PlaygroundError ToPlaygroundError(LangError error)
     {
         Type = nameof(LangError),
         Message = error.Message,
-        Span = new PlaygroundSpan
-        {
-            StartRow = error.Span.StartRow,
-            StartColumn = error.Span.StartColumn,
-            EndRow = error.Span.EndRow,
-            EndColumn = error.Span.EndColumn
-        }
+        Span = ToPlaygroundSpan(error.Span)
     };
 }
 
 static PlaygroundError ToPlaygroundException(Exception exception)
 {
+    var scriptException = exception as LoadScriptException;
+    var stageException = exception as LoadScriptStageException;
+
     return new PlaygroundError
     {
         Type = exception.GetType().FullName ?? exception.GetType().Name,
         Message = exception.Message,
+        ScriptStage = scriptException?.Stage.ToString() ?? stageException?.Stage.ToString(),
+        StatementIndex = scriptException?.StatementIndex,
+        StatementType = scriptException?.StatementType,
+        Span = scriptException?.Span is { } scriptSpan
+            ? ToPlaygroundSpan(scriptSpan)
+            : stageException?.Span is { } stageSpan
+                ? ToPlaygroundSpan(stageSpan)
+                : null,
         StackTrace = exception.ToString(),
         Inner = exception.InnerException is null ? null : ToPlaygroundException(exception.InnerException)
+    };
+}
+
+static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
+{
+    return new PlaygroundSpan
+    {
+        StartRow = span.StartRow,
+        StartColumn = span.StartColumn,
+        EndRow = span.EndRow,
+        EndColumn = span.EndColumn
     };
 }
 
@@ -443,6 +459,12 @@ internal sealed record PlaygroundError
     public required string Type { get; init; }
 
     public required string Message { get; init; }
+
+    public string? ScriptStage { get; init; }
+
+    public int? StatementIndex { get; init; }
+
+    public string? StatementType { get; init; }
 
     public PlaygroundSpan? Span { get; init; }
 

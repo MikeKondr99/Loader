@@ -162,6 +162,7 @@ public class LoadStatementExecutor
             .SetTag("load.table_name", statement.TableName)
             .SetTag("load.temp_table", tempTable.TableName.Table);
 
+        ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, tempTable);
         var resolvedQuery = ResolveQuery(query);
         var querySql = CompileQuery(resolvedQuery);
@@ -243,9 +244,11 @@ public class LoadStatementExecutor
             return result.Value!;
         }
 
-        throw new InvalidOperationException(
+        var firstError = result.Errors[0];
+        throw new QueryResolutionException(
             "Не удалось разрешить LOAD query:" + Environment.NewLine +
-            string.Join(Environment.NewLine, result.Errors.Select(static error => error.Message)));
+            string.Join(Environment.NewLine, result.Errors.Select(static error => error.Message)),
+            firstError.Span);
     }
 
     private static string CompileQuery(ResolvedQuery query)
@@ -441,7 +444,28 @@ public class LoadStatementExecutor
             .FirstOrDefault(static group => group.Count() > 1);
         if (duplicate is not null)
         {
-            throw new InvalidOperationException($"LOAD source field '{duplicate.Key}' is duplicated.");
+            throw new QueryResolutionException($"LOAD source field '{duplicate.Key}' is duplicated.");
+        }
+    }
+
+    private static void ThrowIfDuplicateSelectAliases(LoadStatement statement)
+    {
+        if (statement.Fields is null)
+        {
+            return;
+        }
+
+        var aliases = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var field in statement.Fields)
+        {
+            if (aliases.Add(field.Name))
+            {
+                continue;
+            }
+
+            throw new QueryResolutionException(
+                $"LOAD select alias '{field.Name}' is duplicated.",
+                field.Span);
         }
     }
 

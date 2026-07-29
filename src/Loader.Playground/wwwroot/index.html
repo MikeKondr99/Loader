@@ -220,7 +220,8 @@
       background: var(--danger-soft);
     }
 
-    pre {
+    pre,
+    .output-text {
       margin: 0;
       padding: 14px;
       overflow: auto;
@@ -239,8 +240,55 @@
       background: #fbfcfa;
     }
 
-    .result-body pre {
+    .result-body .output-text {
       border-bottom: 1px solid var(--border);
+    }
+
+    .error-report {
+      padding: 14px;
+      font: 13px "Segoe UI", sans-serif;
+      line-height: 1.45;
+      color: var(--text);
+    }
+
+    .error-row {
+      margin: 0 0 8px;
+    }
+
+    .error-label {
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .error-message {
+      margin: 0 0 10px;
+      padding: 10px;
+      border: 1px solid var(--danger-soft);
+      border-radius: 10px;
+      background: #fff8f7;
+      color: var(--danger);
+      font: 12px Consolas, monospace;
+      white-space: pre-wrap;
+    }
+
+    .error-details {
+      margin-top: 10px;
+    }
+
+    .error-details summary {
+      cursor: pointer;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .error-stack {
+      margin: 8px 0 0;
+      padding: 10px;
+      border-radius: 10px;
+      background: #f2f3ef;
+      color: #3d4239;
+      font: 11px Consolas, monospace;
+      white-space: pre-wrap;
     }
 
     .preview {
@@ -398,7 +446,15 @@ LIMIT 10;`;
     let decorations = [];
 
     const status = document.getElementById('status');
-    const output = document.getElementById('output');
+    let output = document.getElementById('output');
+    if (output.tagName === 'PRE') {
+      const replacement = document.createElement('div');
+      replacement.id = output.id;
+      replacement.className = 'output-text';
+      replacement.textContent = output.textContent;
+      output.replaceWith(replacement);
+      output = replacement;
+    }
     const preview = document.getElementById('preview');
     const runButton = document.getElementById('run');
     const parseButton = document.getElementById('parse');
@@ -512,7 +568,7 @@ LIMIT 10;`;
         } else {
           markError(json.error);
           clearPreview();
-          setResult(`FAIL: ${json.stage || 'unknown'}`, JSON.stringify(json, null, 2), false);
+          setResultHtml(`FAIL: ${json.stage || 'unknown'}`, formatFailure(json), false);
         }
       } catch (error) {
         setResult('REQUEST FAIL', error.stack || error.message, false);
@@ -530,6 +586,85 @@ LIMIT 10;`;
       status.textContent = text;
       status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
       output.textContent = body;
+    }
+
+    function setResultHtml(text, body, ok) {
+      status.textContent = text;
+      status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
+      output.innerHTML = body;
+    }
+
+    function formatFailure(response) {
+      if (!response || !response.error) {
+        return `<div class="error-report"><pre>${escapeHtml(JSON.stringify(response, null, 2))}</pre></div>`;
+      }
+
+      const error = response.error;
+      const loadError = error.type === 'Loader.Script.LoadScriptException';
+      if (!loadError) {
+        return formatException(error, true);
+      }
+
+      const parts = [
+        '<div class="error-report">',
+        `<div class="error-row"><span class="error-label">Message:</span> ${escapeHtml(error.message)}</div>`,
+        `<div class="error-row"><span class="error-label">Statement:</span> ${escapeHtml(formatStatement(error))}</div>`,
+        `<div class="error-row"><span class="error-label">Stage:</span> ${escapeHtml(error.scriptStage || 'unknown')}</div>`
+      ];
+
+      if (error.span) {
+        parts.push(`<div class="error-row"><span class="error-label">Span:</span> ${escapeHtml(formatSpan(error.span))}</div>`);
+      }
+
+      if (error.inner) {
+        parts.push('<div class="error-message">');
+        parts.push(escapeHtml(error.inner.message || error.message));
+        parts.push('</div>');
+        parts.push(formatException(error.inner, true));
+      }
+
+      parts.push('</div>');
+      return parts.join('');
+    }
+
+    function formatException(error, includeDetails) {
+      const parts = ['<div class="error-report">'];
+      parts.push(`<div class="error-row"><span class="error-label">Type:</span> ${escapeHtml(error.type || 'unknown')}</div>`);
+      parts.push(`<div class="error-message">${escapeHtml(error.message || '')}</div>`);
+      if (error.scriptStage) {
+        parts.push(`<div class="error-row"><span class="error-label">Stage:</span> ${escapeHtml(error.scriptStage)}</div>`);
+      }
+      if (error.span) {
+        parts.push(`<div class="error-row"><span class="error-label">Span:</span> ${escapeHtml(formatSpan(error.span))}</div>`);
+      }
+      if (includeDetails && error.stackTrace) {
+        parts.push(formatStackTrace(error.stackTrace));
+      }
+      if (error.inner) {
+        parts.push(formatException(error.inner, true));
+      }
+      parts.push('</div>');
+      return parts.join('');
+    }
+
+    function formatStackTrace(stackTrace) {
+      return [
+        '<details class="error-details">',
+        '<summary>Stack trace</summary>',
+        `<pre class="error-stack">${escapeHtml(stackTrace)}</pre>`,
+        '</details>'
+      ].join('');
+    }
+
+    function formatStatement(error) {
+      const index = error.statementIndex === undefined || error.statementIndex === null
+        ? '?'
+        : `#${error.statementIndex}`;
+      return `${index} ${error.statementType || ''}`.trim();
+    }
+
+    function formatSpan(span) {
+      return `${span.startRow}:${span.startColumn + 1}-${span.endRow}:${span.endColumn + 1}`;
     }
 
     function formatSuccess(data) {
@@ -716,17 +851,18 @@ LIMIT 10;`;
 
     function markError(error) {
       if (!editor || !error) return;
-      const span = findSpan(error);
+      const markerError = findErrorWithSpan(error);
+      const span = markerError?.span;
       if (!span) return;
       const range = new monaco.Range(
-        Math.max(1, span.startRow + 1),
+        Math.max(1, span.startRow),
         Math.max(1, span.startColumn + 1),
-        Math.max(1, span.endRow + 1),
+        Math.max(1, span.endRow),
         Math.max(1, span.endColumn + 1)
       );
       monaco.editor.setModelMarkers(editor.getModel(), 'loader', [{
         severity: monaco.MarkerSeverity.Error,
-        message: error.message,
+        message: markerError.message,
         startLineNumber: range.startLineNumber,
         startColumn: range.startColumn,
         endLineNumber: range.endLineNumber,
@@ -742,13 +878,14 @@ LIMIT 10;`;
       editor.revealRangeInCenter(range);
     }
 
-    function findSpan(error) {
+    function findErrorWithSpan(error) {
       let current = error;
+      let found = null;
       while (current) {
-        if (current.span) return current.span;
+        if (current.span) found = current;
         current = current.inner;
       }
-      return null;
+      return found;
     }
 
     async function refreshFiles() {

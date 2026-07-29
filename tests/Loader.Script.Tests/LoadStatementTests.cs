@@ -3,6 +3,7 @@ using System.Data.Common;
 using Loader.Core.Decorators;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
+using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
@@ -68,6 +69,7 @@ public sealed class LoadStatementTests
                 new LoadField
                 {
                     Name = "city",
+                    Span = Span(),
                     Expression = Expr.Parse("name").Value
                 }
             ],
@@ -143,6 +145,40 @@ public sealed class LoadStatementTests
         await Assert.That(context.LoadedTables).IsEmpty();
     }
 
+    [Test]
+    public async Task Execute_load_wraps_duplicate_select_alias_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD
+                name AS city,
+                id AS city
+            FROM [orders.csv];
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+        var duplicateSpan = statement.Fields![1].Span;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(duplicateSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("LOAD select alias 'city' is duplicated.");
+    }
+
     private static ScriptContext CreateContext()
     {
         return new ScriptContext
@@ -151,6 +187,11 @@ public sealed class LoadStatementTests
             TargetConnectionString = "Host=localhost",
             Logger = NullLogger.Instance
         };
+    }
+
+    private static LangSpan Span()
+    {
+        return new LangSpan(1, 1, 1, 1);
     }
 
     private sealed class FakeProviderResolver : ILoadProviderResolver

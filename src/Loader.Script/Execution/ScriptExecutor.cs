@@ -25,7 +25,18 @@ public sealed class ScriptExecutor
                     .SetSanitizedTag("load.source", load.Source);
             }
 
-            await ExecuteStatementAsync(context, statement, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await ExecuteStatementAsync(context, statement, cancellationToken).ConfigureAwait(false);
+            }
+            catch (LoadScriptException)
+            {
+                throw;
+            }
+            catch (LoadScriptStageException exception)
+            {
+                throw new LoadScriptException(index, statement, exception);
+            }
         }
 
         return context.LoadedTables;

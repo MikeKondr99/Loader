@@ -13,6 +13,8 @@ public sealed record LoadField
     /// </summary>
     public required string Name { get; init; }
 
+    public required LangSpan Span { get; init; }
+
     /// <summary>
     /// Expression, которое будет вычисляться для поля.
     /// </summary>

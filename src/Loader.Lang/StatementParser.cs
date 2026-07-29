@@ -143,6 +143,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             return new LoadField
             {
                 Name = fieldName,
+                Span = Span(context.name()),
                 Expression = new NameExpr(fieldName)
                 {
                     Span = Span(context.name())
@@ -159,6 +160,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         return new LoadField
         {
             Name = name,
+            Span = Span(context.name()),
             Expression = expression
         };
     }
