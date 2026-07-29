@@ -32,7 +32,7 @@ public sealed class ClickHouseColumnTypeResolverTests
     public async Task Nullable_is_resolved_from_meta_density_or_schema_flag(
         DataType dataType,
         Type clrType,
-        bool allowDbNull,
+        bool? allowDbNull,
         DataColumnMeta? meta,
         string expected)
     {
@@ -120,10 +120,11 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (int.MinValue - 1m, long.MaxValue, "Int64");
     }
 
-    public static IEnumerable<(DataType DataType, Type ClrType, bool AllowDbNull, DataColumnMeta? Meta, string Expected)> NullableCases()
+    public static IEnumerable<(DataType DataType, Type ClrType, bool? AllowDbNull, DataColumnMeta? Meta, string Expected)> NullableCases()
     {
         yield return (DataType.Integer, typeof(int), false, null, "Int32");
         yield return (DataType.Integer, typeof(int), true, null, "Nullable(Int32)");
+        yield return (DataType.Integer, typeof(int), null, null, "Nullable(Int32)");
         yield return (DataType.Integer, typeof(int), true, NotNullableMeta(DataType.Integer), "UInt8");
         yield return (DataType.Integer, typeof(int), false, NullableMeta(DataType.Integer), "Nullable(UInt8)");
         yield return (DataType.Text, typeof(string), false, NullableMeta(DataType.Text), "LowCardinality(Nullable(String))");
@@ -175,7 +176,7 @@ public sealed class ClickHouseColumnTypeResolverTests
     private static DataField Field(
         DataType dataType,
         Type clrType,
-        bool allowDbNull = false,
+        bool? allowDbNull = false,
         int? precision = null,
         int? scale = null)
     {

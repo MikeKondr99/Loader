@@ -185,6 +185,7 @@ public sealed class ClickHouseSqlTests
                     Name = field.Name,
                     DataType = field.DataType,
                     ClrType = field.ClrType,
+                    AllowDBNull = false,
                     Convert = null,
                     ReadValue = true
                 })

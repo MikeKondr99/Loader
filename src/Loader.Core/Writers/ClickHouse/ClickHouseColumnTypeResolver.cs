@@ -145,11 +145,6 @@ internal sealed class ClickHouseColumnTypeResolver
             return meta.Density < 1m;
         }
 
-        if (field.AllowDBNull is true)
-        {
-            return true;
-        }
-
-        return false;
+        return field.AllowDBNull ?? true;
     }
 }
