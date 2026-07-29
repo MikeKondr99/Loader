@@ -179,6 +179,42 @@ public sealed class LoadStatementTests
         await Assert.That(exception.InnerException!.Message).Contains("LOAD select alias 'city' is duplicated.");
     }
 
+    [Test]
+    [DisplayName("ScriptExecutor оборачивает LIMIT 0 как QueryResolution ошибку")]
+    public async Task Execute_load_wraps_limit_zero_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD
+                name AS city
+            FROM [orders.csv]
+            LIMIT 0;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.LimitSpan);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message)
+            .Contains("LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT.");
+    }
+
     private static ScriptContext CreateContext()
     {
         return new ScriptContext

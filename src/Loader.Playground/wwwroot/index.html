@@ -612,38 +612,54 @@ LIMIT 10;`;
         `<div class="error-row"><span class="error-label">Stage:</span> ${escapeHtml(error.scriptStage || 'unknown')}</div>`
       ];
 
-      if (error.span) {
+      const diagnostics = collectOwnDiagnostics(error);
+      if (diagnostics.length === 0 && error.span) {
         parts.push(`<div class="error-row"><span class="error-label">Span:</span> ${escapeHtml(formatSpan(error.span))}</div>`);
       }
 
+      if (diagnostics.length > 0) {
+        parts.push(formatDiagnostics(diagnostics));
+      }
+
       if (error.inner) {
-        parts.push('<div class="error-message">');
-        parts.push(escapeHtml(error.inner.message || error.message));
-        parts.push('</div>');
-        parts.push(formatException(error.inner, true));
+        parts.push(formatException(error.inner, true, false));
       }
 
       parts.push('</div>');
       return parts.join('');
     }
 
-    function formatException(error, includeDetails) {
+    function formatException(error, includeDetails, includeDiagnostics = true) {
       const parts = ['<div class="error-report">'];
       parts.push(`<div class="error-row"><span class="error-label">Type:</span> ${escapeHtml(error.type || 'unknown')}</div>`);
       parts.push(`<div class="error-message">${escapeHtml(error.message || '')}</div>`);
       if (error.scriptStage) {
         parts.push(`<div class="error-row"><span class="error-label">Stage:</span> ${escapeHtml(error.scriptStage)}</div>`);
       }
-      if (error.span) {
+      const diagnostics = includeDiagnostics ? collectOwnDiagnostics(error) : [];
+      if (diagnostics.length === 0 && error.span) {
         parts.push(`<div class="error-row"><span class="error-label">Span:</span> ${escapeHtml(formatSpan(error.span))}</div>`);
+      }
+      if (diagnostics.length > 0) {
+        parts.push(formatDiagnostics(diagnostics));
       }
       if (includeDetails && error.stackTrace) {
         parts.push(formatStackTrace(error.stackTrace));
       }
       if (error.inner) {
-        parts.push(formatException(error.inner, true));
+        parts.push(formatException(error.inner, true, includeDiagnostics));
       }
       parts.push('</div>');
+      return parts.join('');
+    }
+
+    function formatDiagnostics(diagnostics) {
+      const parts = ['<div class="error-row"><span class="error-label">Errors:</span></div>'];
+      for (const diagnostic of diagnostics) {
+        parts.push('<div class="error-message">');
+        parts.push(escapeHtml(`${formatSpan(diagnostic.span)} ${diagnostic.message}`));
+        parts.push('</div>');
+      }
       return parts.join('');
     }
 
@@ -851,41 +867,86 @@ LIMIT 10;`;
 
     function markError(error) {
       if (!editor || !error) return;
-      const markerError = findErrorWithSpan(error);
-      const span = markerError?.span;
-      if (!span) return;
-      const range = new monaco.Range(
-        Math.max(1, span.startRow),
-        Math.max(1, span.startColumn + 1),
-        Math.max(1, span.endRow),
-        Math.max(1, span.endColumn + 1)
-      );
-      monaco.editor.setModelMarkers(editor.getModel(), 'loader', [{
+      const markerErrors = collectMarkerErrors(error);
+      if (markerErrors.length === 0) return;
+
+      const markers = markerErrors.map(markerError => {
+        const span = markerError.span;
+        const range = toMonacoRange(span);
+        return {
         severity: monaco.MarkerSeverity.Error,
         message: markerError.message,
         startLineNumber: range.startLineNumber,
         startColumn: range.startColumn,
         endLineNumber: range.endLineNumber,
         endColumn: range.endColumn
-      }]);
-      decorations = editor.deltaDecorations(decorations, [{
-        range,
+        };
+      });
+      const nextDecorations = markerErrors.map(markerError => ({
+        range: toMonacoRange(markerError.span),
         options: {
           isWholeLine: true,
           className: 'line-error'
         }
-      }]);
-      editor.revealRangeInCenter(range);
+      }));
+      monaco.editor.setModelMarkers(editor.getModel(), 'loader', markers);
+      decorations = editor.deltaDecorations(decorations, nextDecorations);
+      editor.revealRangeInCenter(toMonacoRange(markerErrors[0].span));
     }
 
-    function findErrorWithSpan(error) {
+    function collectMarkerErrors(error) {
+      const diagnostics = collectDiagnostics(error);
+      if (diagnostics.length > 0) {
+        return diagnostics;
+      }
+
+      const result = [];
       let current = error;
-      let found = null;
       while (current) {
-        if (current.span) found = current;
+        if (current.span) {
+          result.push({ message: current.message, span: current.span });
+        }
         current = current.inner;
       }
-      return found;
+      return result;
+    }
+
+    function collectDiagnostics(error) {
+      const result = [];
+      const seen = new Set();
+      let current = error;
+      while (current) {
+        for (const diagnostic of collectOwnDiagnostics(current)) {
+          const key = `${diagnostic.span.startRow}:${diagnostic.span.startColumn}:${diagnostic.span.endRow}:${diagnostic.span.endColumn}:${diagnostic.message}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          result.push(diagnostic);
+        }
+        current = current.inner;
+      }
+      return result;
+    }
+
+    function collectOwnDiagnostics(error) {
+      if (!Array.isArray(error?.errors)) {
+        return [];
+      }
+
+      return error.errors
+        .filter(diagnostic => diagnostic && diagnostic.span)
+        .map(diagnostic => ({
+          message: diagnostic.message || error.message,
+          span: diagnostic.span
+        }));
+    }
+
+    function toMonacoRange(span) {
+      return new monaco.Range(
+        Math.max(1, span.startRow),
+        Math.max(1, span.startColumn + 1),
+        Math.max(1, span.endRow),
+        Math.max(1, span.endColumn + 1)
+      );
     }
 
     async function refreshFiles() {

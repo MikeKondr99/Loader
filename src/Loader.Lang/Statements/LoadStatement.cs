@@ -50,6 +50,8 @@ public sealed record LoadStatement : Statement
     /// </summary>
     public long? Limit { get; init; }
 
+    public LangSpan? LimitSpan { get; init; }
+
     /// <summary>
     /// Смещение строк из части <c>OFFSET 100</c>. Допускается только после <c>LIMIT</c>.
     /// </summary>

@@ -477,25 +477,6 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query LIMIT 0 сейчас не применяется compiler-ом")]
-    public async Task Limit_zero_is_not_applied_yet()
-    {
-        // Arrange
-        var query = new Query.Models.Query
-        {
-            Source = AmountsSource(),
-            Select = [],
-            Limit = 0
-        };
-
-        // Act
-        var rows = await GetRowsAsync(query);
-
-        // Assert
-        await Assert.That(rows).Count().IsEqualTo(3);
-    }
-
-    [Test]
     [DisplayName("Query OFFSET за пределами строк возвращает пустой набор без ошибки")]
     public async Task Offset_beyond_row_count_returns_empty_rows()
     {

@@ -1,3 +1,4 @@
+using Loader.Lang;
 using Loader.Lang.Expressions;
 
 namespace Loader.Query.Models;
@@ -18,6 +19,8 @@ public sealed record Query
     public IReadOnlyList<OrderItem> OrderBy { get; init; } = [];
 
     public uint? Limit { get; init; }
+
+    public LangSpan? LimitSpan { get; init; }
 
     public uint? Offset { get; init; }
 }

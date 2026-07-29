@@ -98,4 +98,72 @@ public sealed class QueryResolverTests
         await Assert.That(result.Value!.OutputFields).IsSameReferenceAs(source.Fields);
         await Assert.That(result.Value.OutputFields[0].Alias).IsEqualTo("amount");
     }
+
+    [Test]
+    [DisplayName("QueryResolver запрещает LIMIT 0 до компиляции SQL")]
+    public async Task Limit_zero_is_rejected()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CreateAmountSource(),
+            Select = [],
+            Limit = 0
+        };
+        var functions = ClickHouseFunctions.CreateResolver();
+
+        var result = new QueryResolver().Resolve(query, functions);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .Contains("LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT.");
+    }
+
+    [Test]
+    [DisplayName("QueryResolver возвращает несколько ошибок resolve отдельно")]
+    public async Task Resolve_returns_multiple_errors()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CreateAmountSource(),
+            Select =
+            [
+                new SelectItem
+                {
+                    Alias = "bad",
+                    Expression = Expr.Parse("missing").Value
+                }
+            ],
+            Limit = 0
+        };
+        var functions = ClickHouseFunctions.CreateResolver();
+
+        var result = new QueryResolver().Resolve(query, functions);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors).Count().IsEqualTo(2);
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .Contains("LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT.");
+    }
+
+    private static QuerySource CreateAmountSource()
+    {
+        return new QuerySource
+        {
+            Sql = "stage",
+            Alias = "stage",
+            Fields =
+            [
+                new Field
+                {
+                    Alias = "amount",
+                    Template = QueryTemplate.Text("stage.column1"),
+                    Type = new FieldType
+                    {
+                        DataType = DataType.Number,
+                        CanBeNull = false
+                    }
+                }
+            ]
+        };
+    }
 }

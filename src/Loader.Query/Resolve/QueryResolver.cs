@@ -27,6 +27,8 @@ public sealed class QueryResolver
         var groupBy = ResolveExpressions(query.GroupBy, context);
         var orderBy = ResolveOrderBy(query, context);
 
+        ValidateLimit(query, context);
+
         if (context.Errors.Count > 0)
         {
             return ResolveResult<ResolvedQuery>.Failure(context.Errors);
@@ -113,5 +115,19 @@ public sealed class QueryResolver
         }
 
         return orderBy;
+    }
+
+    private static void ValidateLimit(QueryModel query, ResolutionContext context)
+    {
+        if (query.Limit is not 0)
+        {
+            return;
+        }
+
+        context.Errors.Add(new LangError
+        {
+            Span = query.LimitSpan ?? new LangSpan(1, 1, 1, 1),
+            Message = "LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT."
+        });
     }
 }

@@ -15,6 +15,7 @@ public sealed class LoadScriptException : Exception
         StatementType = statement.GetType().Name;
         Stage = innerException.Stage;
         Span = innerException.Span;
+        Errors = innerException.Errors;
     }
 
     public int StatementIndex { get; }
@@ -25,8 +26,10 @@ public sealed class LoadScriptException : Exception
 
     public LangSpan? Span { get; }
 
+    public IReadOnlyList<LangError> Errors { get; }
+
     private static string CreateMessage(int statementIndex, LoadScriptStageException innerException)
     {
-        return $"Ошибка script в statement #{statementIndex} на этапе {innerException.Stage}: {innerException.Message}";
+        return $"Ошибка script в statement #{statementIndex} на этапе {innerException.Stage}.";
     }
 }

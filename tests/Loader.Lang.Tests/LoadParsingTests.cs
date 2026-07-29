@@ -324,6 +324,19 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD LIMIT хранит span всего LIMIT clause")]
+    public async Task Load_limit_keeps_value_span()
+    {
+        var load = ParseLoad("LOAD id FROM [orders.csv] LIMIT 0;");
+
+        await Assert.That(load.Limit).IsEqualTo(0);
+        await Assert.That(load.LimitSpan).IsNotNull();
+        await Assert.That(load.LimitSpan!.Value.StartRow).IsEqualTo(1u);
+        await Assert.That(load.LimitSpan.Value.StartColumn).IsEqualTo(26u);
+        await Assert.That(load.LimitSpan.Value.EndColumn).IsEqualTo(33u);
+    }
+
+    [Test]
     [DisplayName("LOAD LIMIT OFFSET работает после WHERE GROUP BY ORDER BY")]
     public async Task Load_limit_offset_after_where_group_by_order_by()
     {

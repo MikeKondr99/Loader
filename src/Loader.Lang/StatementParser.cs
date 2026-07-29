@@ -81,8 +81,10 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
         // 8. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
-        var limit = VisitLoadLimit(context.load_limit());
-        var offset = VisitLoadOffset(context.load_limit()?.load_offset());
+        var limitContext = context.load_limit();
+        var limit = VisitLoadLimit(limitContext);
+        var limitSpan = VisitLoadLimitSpan(limitContext);
+        var offset = VisitLoadOffset(limitContext?.load_offset());
 
         return new LoadStatement
         {
@@ -94,6 +96,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             GroupBy = groupBy,
             OrderBy = orderBy,
             Limit = limit,
+            LimitSpan = limitSpan,
             Offset = offset
         };
     }
@@ -262,6 +265,11 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
     }
 
+    private static LangSpan? VisitLoadLimitSpan(LangParser.Load_limitContext? context)
+    {
+        return context is null ? null : Span(context);
+    }
+
     /// <summary>
     /// Optional OFFSET part of LOAD.
     /// Пример: <c>OFFSET 100</c>.
@@ -335,6 +343,16 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             (uint)context.Start.Column,
             (uint)context.Stop.Line,
             (uint)(context.Stop.Column + context.Stop.Text.Length));
+    }
+
+    private static LangSpan Span(ITerminalNode node)
+    {
+        var token = node.Symbol;
+        return new LangSpan(
+            (uint)token.Line,
+            (uint)token.Column,
+            (uint)token.Line,
+            (uint)(token.Column + token.Text.Length));
     }
 
     [GeneratedRegex(@"\\\]")]

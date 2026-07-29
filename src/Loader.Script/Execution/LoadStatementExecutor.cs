@@ -179,6 +179,7 @@ public class LoadStatementExecutor
             GroupBy = statement.GroupBy ?? [],
             OrderBy = BuildOrderBy(statement),
             Limit = ToUInt32(statement.Limit, nameof(statement.Limit)),
+            LimitSpan = statement.LimitSpan,
             Offset = ToUInt32(statement.Offset, nameof(statement.Offset))
         };
     }
@@ -244,11 +245,7 @@ public class LoadStatementExecutor
             return result.Value!;
         }
 
-        var firstError = result.Errors[0];
-        throw new QueryResolutionException(
-            "Не удалось разрешить LOAD query:" + Environment.NewLine +
-            string.Join(Environment.NewLine, result.Errors.Select(static error => error.Message)),
-            firstError.Span);
+        throw new QueryResolutionException(result.Errors);
     }
 
     private static string CompileQuery(ResolvedQuery query)

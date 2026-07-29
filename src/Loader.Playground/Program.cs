@@ -290,6 +290,7 @@ static PlaygroundError ToPlaygroundException(Exception exception)
         ScriptStage = scriptException?.Stage.ToString() ?? stageException?.Stage.ToString(),
         StatementIndex = scriptException?.StatementIndex,
         StatementType = scriptException?.StatementType,
+        Errors = ToPlaygroundDiagnostics(scriptException?.Errors ?? stageException?.Errors),
         Span = scriptException?.Span is { } scriptSpan
             ? ToPlaygroundSpan(scriptSpan)
             : stageException?.Span is { } stageSpan
@@ -298,6 +299,17 @@ static PlaygroundError ToPlaygroundException(Exception exception)
         StackTrace = exception.ToString(),
         Inner = exception.InnerException is null ? null : ToPlaygroundException(exception.InnerException)
     };
+}
+
+static IReadOnlyList<PlaygroundDiagnostic>? ToPlaygroundDiagnostics(IReadOnlyList<LangError>? errors)
+{
+    return errors is null || errors.Count == 0
+        ? null
+        : errors.Select(static error => new PlaygroundDiagnostic
+        {
+            Message = error.Message,
+            Span = ToPlaygroundSpan(error.Span)
+        }).ToArray();
 }
 
 static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
@@ -466,11 +478,20 @@ internal sealed record PlaygroundError
 
     public string? StatementType { get; init; }
 
+    public IReadOnlyList<PlaygroundDiagnostic>? Errors { get; init; }
+
     public PlaygroundSpan? Span { get; init; }
 
     public string? StackTrace { get; init; }
 
     public PlaygroundError? Inner { get; init; }
+}
+
+internal sealed record PlaygroundDiagnostic
+{
+    public required string Message { get; init; }
+
+    public required PlaygroundSpan Span { get; init; }
 }
 
 internal sealed record PlaygroundSpan
