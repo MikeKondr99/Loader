@@ -57,12 +57,14 @@ public class LoadStatementExecutor
         CancellationToken cancellationToken = default)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.Prepare");
-        activity?.SetTag("load.table_name", statement.TableName);
-        activity?.SetTag("load.source", LoadScriptTelemetry.RedactSource(statement.Source));
+        activity?
+            .SetTag("load.table_name", statement.TableName)
+            .SetSanitizedTag("load.source", statement.Source);
 
         // 1. По FROM и options выбираем provider.
         var source = await ResolveProviderAsync(context, statement, cancellationToken).ConfigureAwait(false);
-        activity?.SetTag("load.source_kind", source.Kind);
+        activity?
+            .SetTag("load.source_kind", source.Kind);
 
         // 2. Открываем provider reader.
         await using var providerReader = await OpenProviderReaderAsync(context, statement, source, cancellationToken)
@@ -76,15 +78,17 @@ public class LoadStatementExecutor
 
         // 5. Создаем temp table name.
         var tempTable = CreatePhysicalTempTableName();
-        activity?.SetTag("load.temp_table", tempTable.Table);
+        activity?
+            .SetTag("load.temp_table", tempTable.Table);
         activity?.Stop();
 
         // 6. Потоково пишем stage reader в temp table.
         using (var tempTableActivity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.TempTableWrite"))
         {
-            tempTableActivity?.SetTag("load.table_name", statement.TableName);
-            tempTableActivity?.SetTag("load.source_kind", source.Kind);
-            tempTableActivity?.SetTag("load.temp_table", tempTable.Table);
+            tempTableActivity?
+                .SetTag("load.table_name", statement.TableName)
+                .SetTag("load.source_kind", source.Kind)
+                .SetTag("load.temp_table", tempTable.Table);
 
             await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
         }
@@ -154,8 +158,9 @@ public class LoadStatementExecutor
         TemporaryClickHouseTable tempTable)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.QueryBuild");
-        activity?.SetTag("load.table_name", statement.TableName);
-        activity?.SetTag("load.temp_table", tempTable.TableName.Table);
+        activity?
+            .SetTag("load.table_name", statement.TableName)
+            .SetTag("load.temp_table", tempTable.TableName.Table);
 
         var query = BuildQuery(statement, tempTable);
         var resolvedQuery = ResolveQuery(query);
@@ -259,8 +264,9 @@ public class LoadStatementExecutor
         CancellationToken cancellationToken)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.FinalTableWrite");
-        activity?.SetTag("load.table_name", statement.TableName);
-        activity?.SetTag("load.final_table", finalTable.Table);
+        activity?
+            .SetTag("load.table_name", statement.TableName)
+            .SetTag("load.final_table", finalTable.Table);
 
         await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
     }

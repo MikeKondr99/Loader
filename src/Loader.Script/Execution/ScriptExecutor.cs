@@ -15,12 +15,14 @@ public sealed class ScriptExecutor
         {
             var statement = script.Statements[index];
             using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("Script.Statement");
-            activity?.SetTag("script.statement.index", index);
-            activity?.SetTag("script.statement.type", statement.GetType().Name);
+            activity?
+                .SetTag("script.statement.index", index)
+                .SetTag("script.statement.type", statement.GetType().Name);
             if (statement is LoadStatement load)
             {
-                activity?.SetTag("load.table_name", load.TableName);
-                activity?.SetTag("load.source", LoadScriptTelemetry.RedactSource(load.Source));
+                activity?
+                    .SetTag("load.table_name", load.TableName)
+                    .SetSanitizedTag("load.source", load.Source);
             }
 
             await ExecuteStatementAsync(context, statement, cancellationToken).ConfigureAwait(false);

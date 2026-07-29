@@ -7,7 +7,7 @@
   - [x] ClickHouse
   - [x] Microsoft SQL Server
   - [x] Oracle
-  - [ ] Apache Hive
+  - [x] Apache Hive
   - [ ] ODBC
 - [x]  Файлы
   - [x] Excel
@@ -34,7 +34,7 @@
 - [ ]  DROP TABLE
 - [ ] LINK - `shadow table`
 - [ ] LIB CONNECT
-- [ ] CALENDAR
+- [ ] CALENDAR (Федя)
 - [ ] LOAD FROM DATASET (возможно только уже внутри PIX?)
 - [ ] INDEX?
 - [ ] *Трейсы процесса загрузки \*OpenTelemetry (не обязательно но круто для дебага)*
