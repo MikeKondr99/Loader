@@ -1,5 +1,6 @@
 using Loader.Core.Exceptions;
 using Loader.Core.Sources;
+using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
@@ -171,7 +172,12 @@ public sealed class LoadProviderResolverTests
         {
             TableName = null,
             Fields = null,
-            Source = source,
+            FromSpan = Span(),
+            SourcePart = new SourcePart
+            {
+                Value = source,
+                Span = Span()
+            },
             Options = options ?? [],
             Where = null,
             GroupBy = null,
@@ -184,6 +190,7 @@ public sealed class LoadProviderResolverTests
         return new LoadOption
         {
             Name = name,
+            Span = Span(),
             Value = null
         };
     }
@@ -193,8 +200,14 @@ public sealed class LoadProviderResolverTests
         return new LoadOption
         {
             Name = name,
+            Span = Span(),
             Value = new StringLiteral(value)
         };
+    }
+
+    private static LangSpan Span()
+    {
+        return new LangSpan(1, 1, 1, 1);
     }
 
     private static ScriptContext CreateContext()

@@ -205,6 +205,22 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD хранит span FROM, source и source options")]
+    public async Task Load_from_and_options_keep_spans()
+    {
+        var load = ParseLoad("LOAD id FROM [orders.csv] (postgres, table='public.orders');");
+
+        await Assert.That(load.FromSpan.StartColumn).IsEqualTo(8u);
+        await Assert.That(load.FromSpan.EndColumn).IsEqualTo(12u);
+        await Assert.That(load.SourcePart.Span.StartColumn).IsEqualTo(13u);
+        await Assert.That(load.SourcePart.Span.EndColumn).IsEqualTo(25u);
+        await Assert.That(load.Options[0].Span.StartColumn).IsEqualTo(27u);
+        await Assert.That(load.Options[0].Span.EndColumn).IsEqualTo(35u);
+        await Assert.That(load.Options[1].Span.StartColumn).IsEqualTo(37u);
+        await Assert.That(load.Options[1].Span.EndColumn).IsEqualTo(58u);
+    }
+
+    [Test]
     [DisplayName("LOAD source options допускает пустые скобки")]
     public async Task Load_options_allow_empty_parentheses()
     {

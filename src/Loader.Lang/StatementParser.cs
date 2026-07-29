@@ -66,7 +66,8 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         var fields = VisitLoadFields(context.load_fields());
 
         // 3. Source хранится как blocked name, поэтому снимаем квадратные скобки и escape.
-        var source = UnescapeName(context.BLOCKED_NAME().GetText());
+        var sourceNode = context.BLOCKED_NAME();
+        var source = UnescapeName(sourceNode.GetText());
 
         // 4. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
         var options = VisitSourceOptions(context.source_options());
@@ -89,7 +90,12 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         {
             TableName = tableName,
             Fields = fields,
-            Source = source,
+            FromSpan = Span(context.FROM()),
+            SourcePart = new SourcePart
+            {
+                Value = source,
+                Span = Span(sourceNode)
+            },
             Options = options,
             Where = where,
             GroupBy = groupBy,
@@ -300,6 +306,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         return new LoadOption
         {
             Name = name,
+            Span = Span(context),
             Value = value
         };
     }

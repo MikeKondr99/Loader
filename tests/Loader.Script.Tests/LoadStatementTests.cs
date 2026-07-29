@@ -26,7 +26,8 @@ public sealed class LoadStatementTests
         {
             TableName = "orders",
             Fields = null,
-            Source = "orders.csv",
+            FromSpan = Span(),
+            SourcePart = SourcePart("orders.csv"),
             Options = [],
             Where = null,
             GroupBy = null,
@@ -73,7 +74,8 @@ public sealed class LoadStatementTests
                     Expression = Expr.Parse("name").Value
                 }
             ],
-            Source = "orders.csv",
+            FromSpan = Span(),
+            SourcePart = SourcePart("orders.csv"),
             Options = [],
             Where = Expr.Parse("id > 0").Value,
             GroupBy = null,
@@ -129,7 +131,8 @@ public sealed class LoadStatementTests
         {
             TableName = "orders",
             Fields = null,
-            Source = "orders.csv",
+            FromSpan = Span(),
+            SourcePart = SourcePart("orders.csv"),
             Options = [],
             Where = null,
             GroupBy = null,
@@ -232,6 +235,15 @@ public sealed class LoadStatementTests
     private static LangSpan Span()
     {
         return new LangSpan(1, 1, 1, 1);
+    }
+
+    private static SourcePart SourcePart(string value)
+    {
+        return new SourcePart
+        {
+            Value = value,
+            Span = Span()
+        };
     }
 
     private sealed class FakeProviderResolver : ILoadProviderResolver

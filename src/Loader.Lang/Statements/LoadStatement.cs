@@ -20,10 +20,14 @@ public sealed record LoadStatement : Statement
     /// </summary>
     public required List<LoadField>? Fields { get; init; }
 
+    public required LangSpan FromSpan { get; init; }
+
+    public required SourcePart SourcePart { get; init; }
+
     /// <summary>
     /// Source из части <c>FROM [source]</c> без квадратных скобок.
     /// </summary>
-    public required string Source { get; init; }
+    public string Source => SourcePart.Value;
 
     /// <summary>
     /// Provider/source options из части <c>(csv, delimiter=',')</c>.

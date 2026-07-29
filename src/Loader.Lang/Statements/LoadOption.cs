@@ -13,6 +13,8 @@ public sealed record LoadOption
     /// </summary>
     public required string Name { get; init; }
 
+    public required LangSpan Span { get; init; }
+
     /// <summary>
     /// Literal value после <c>=</c>. Для marker options вроде <c>csv</c> значения нет.
     /// </summary>
