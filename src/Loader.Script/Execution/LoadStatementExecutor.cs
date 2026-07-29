@@ -286,7 +286,8 @@ public class LoadStatementExecutor
         await using var rawReader = await new ClickHouseProvider()
             .OpenReaderAsync(source, new SqlTableConfig { Sql = querySql }, cancellationToken)
             .ConfigureAwait(false);
-        await using var finalReader = rawReader.Normalize();
+        await using var finalNameReader = rawReader.AbstractColumns();
+        await using var finalReader = finalNameReader.Normalize();
 
         await new ClickHouseWriter()
             .WriteAsync(

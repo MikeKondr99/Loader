@@ -58,7 +58,9 @@ internal static class ScriptIntegrationAssert
     {
         var rows = await ReadRowsAsync(database, table.Name, orderBySql).ConfigureAwait(false);
 
-        await Assert.That(rows.Columns).IsEquivalentTo(expectedColumns, CollectionOrdering.Matching);
+        await Assert.That(table.Fields.Select(static field => field.Name).ToArray())
+            .IsEquivalentTo(expectedColumns, CollectionOrdering.Matching);
+        await Assert.That(rows.Columns).IsEquivalentTo(AbstractColumnNames(expectedColumns.Count), CollectionOrdering.Matching);
         await Assert.That(rows.Rows).IsEquivalentTo(expectedRows, CollectionOrdering.Matching);
     }
 
@@ -160,6 +162,13 @@ internal static class ScriptIntegrationAssert
     private static string EscapeSqlString(string value)
     {
         return value.Replace("'", "''", StringComparison.Ordinal);
+    }
+
+    private static string[] AbstractColumnNames(int count)
+    {
+        return Enumerable.Range(1, count)
+            .Select(static ordinal => $"column{ordinal}")
+            .ToArray();
     }
 
     private sealed record QueryRows(string[] Columns, object?[][] Rows);

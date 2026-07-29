@@ -81,7 +81,7 @@ public sealed class LoadStatementMixedTests
                 ["Charlie", "CHARLIE"],
                 ["Alice", "ALICE"]
             ],
-            "ORDER BY `name` DESC");
+            "ORDER BY `column1` DESC");
 
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             database,
@@ -91,7 +91,7 @@ public sealed class LoadStatementMixedTests
                 ["Alice", "Moscow"],
                 ["Charlie", "Moscow"]
             ],
-            "ORDER BY `name` ASC");
+            "ORDER BY `column1` ASC");
 
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             database,
@@ -101,7 +101,7 @@ public sealed class LoadStatementMixedTests
                 ["anna", "London"],
                 ["mike", "Moscow"]
             ],
-            "ORDER BY `username` ASC");
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

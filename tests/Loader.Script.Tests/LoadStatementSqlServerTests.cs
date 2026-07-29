@@ -63,7 +63,7 @@ public sealed class LoadStatementSqlServerTests
                 ["1", "ALICE", "Moscow"],
                 ["3", "CHARLIE", "London"]
             ],
-            "ORDER BY `id` ASC");
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }
 

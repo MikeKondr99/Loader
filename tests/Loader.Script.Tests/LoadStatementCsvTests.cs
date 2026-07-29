@@ -44,7 +44,7 @@ public sealed class LoadStatementCsvTests
                 ["3", "CHARLIE", "London"],
                 ["2", "BOB", "Berlin"]
             ],
-            "ORDER BY `id` DESC");
+            "ORDER BY `column1` DESC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

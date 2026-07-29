@@ -44,7 +44,7 @@ public sealed class LoadStatementJsonTests
                 ["1", "Alice", "Moscow"],
                 ["3", "Charlie", "Moscow"]
             ],
-            "ORDER BY `id` ASC");
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

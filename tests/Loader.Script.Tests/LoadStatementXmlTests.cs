@@ -44,7 +44,7 @@ public sealed class LoadStatementXmlTests
                 ["1", "Alice", "crm"],
                 ["3", "Charlie", "crm"]
             ],
-            "ORDER BY `id` ASC");
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

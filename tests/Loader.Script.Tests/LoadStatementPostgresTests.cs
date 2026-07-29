@@ -60,7 +60,7 @@ public sealed class LoadStatementPostgresTests
                 ["1", "ALICE", "Moscow"],
                 ["3", "CHARLIE", "London"]
             ],
-            "ORDER BY `id` ASC");
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }
 
@@ -108,7 +108,56 @@ public sealed class LoadStatementPostgresTests
                 [2, null],
                 [3, 25.75m]
             ],
-            "ORDER BY `id` ASC");
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
+    }
+
+    [Test]
+    [DisplayName("LOAD из Postgres сохраняет final table с физическими columnN при пользовательских alias")]
+    public async Task Postgres_load_keeps_final_table_physical_columns_for_user_aliases()
+    {
+        // Arrange
+        await using var postgres = await PostgresTestDatabase.StartAsync();
+        var sourceTable = $"script_pg_alias_source_{Guid.NewGuid():N}";
+        await postgres.ExecuteAsync(
+            $$"""
+            CREATE TABLE public.{{sourceTable}}
+            (
+                city text not null,
+                amount numeric(10, 2) not null
+            );
+            INSERT INTO public.{{sourceTable}} (city, amount) VALUES
+            ('Kazan', 830.00),
+            ('Moscow', 1250.50),
+            ('Spb', 2100.75);
+            """);
+
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            clickHouse,
+            $$"""
+            pg_orders:
+            LOAD
+                city AS City,
+                city AS Город
+            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
+            WHERE amount > 0
+            ORDER BY city ASC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            clickHouse,
+            result[0],
+            ["City", "Город"],
+            [
+                ["Kazan", "Kazan"],
+                ["Moscow", "Moscow"],
+                ["Spb", "Spb"]
+            ],
+            "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }
 }
