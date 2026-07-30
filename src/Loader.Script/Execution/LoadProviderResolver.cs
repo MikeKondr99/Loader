@@ -33,7 +33,7 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
             "csv" => Csv(statement, context, options),
             "excel" or "xlsx" or "xls" or "xlsb" => Excel(statement, context, options),
             "json" => errors.Count == 0
-                ? await JsonAsync(statement, context, cancellationToken).ConfigureAwait(false)
+                ? await JsonAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false)
                 : null,
             "xml" => await XmlAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false),
             "qvd" => Qvd(statement, context),
@@ -158,11 +158,19 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
     private static async ValueTask<LoadProviderSource> JsonAsync(
         LoadStatement statement,
         ScriptContext context,
+        LoadOptionReader options,
+        List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        var arrayPath = JsonRootPath(options, errors);
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
         var provider = new JsonProvider();
         var schema = await provider
-            .AnalyzeSchemaAsync(context.FileStorage, statement.Source, [], cancellationToken: cancellationToken)
+            .AnalyzeSchemaAsync(context.FileStorage, statement.Source, arrayPath, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return new LoadProviderSource
@@ -174,11 +182,37 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
                 new JsonTableConfig
                 {
                     FileName = statement.Source,
-                    ArrayPath = [],
+                    ArrayPath = arrayPath,
                     Schema = schema
                 },
                 token)
         };
+    }
+
+    private static IReadOnlyList<string> JsonRootPath(
+        LoadOptionReader options,
+        List<LangError> errors)
+    {
+        var root = options.String("root");
+        if (root is null)
+        {
+            return [];
+        }
+
+        var path = root
+            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToArray();
+        if (path.Length > 0)
+        {
+            return path;
+        }
+
+        errors.Add(new LangError
+        {
+            Message = "Опция 'root' должна указывать путь к JSON-массиву.",
+            Span = options.GetOption("root")?.Span ?? new LangSpan(1, 1, 1, 1)
+        });
+        return [];
     }
 
     private static async ValueTask<LoadProviderSource> XmlAsync(

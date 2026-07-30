@@ -1,0 +1,12 @@
+{
+  "metadata": {
+    "source": "script-test"
+  },
+  "payload": {
+    "items": [
+      { "id": 1, "user": { "name": "Alice" }, "city": "Moscow", "amount": "10.50" },
+      { "id": 2, "user": { "name": "Bob" }, "city": "Berlin", "amount": "20.00" },
+      { "id": 3, "user": { "name": "Charlie" }, "city": "Moscow", "amount": "30.25" }
+    ]
+  }
+}

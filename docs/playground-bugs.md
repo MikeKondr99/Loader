@@ -1,6 +1,7 @@
 # Playground Bugs
 
 - [ ] `RowCount` не отображается в успешном результате. Сейчас `LoadedTable`/ответ playground не несет количество строк final table.
+- [ ] Если provider возвращает схему с `0` полей, Load не останавливается доменной ошибкой и доходит до `CREATE TABLE (...)` с пустым списком колонок. Нужно валидировать `FieldCount > 0`/schema columns до temp table write и выдавать понятную ошибку script/provider этапа.
 - [ ] ClickHouse `Variant(...)` надо обработать отдельной политикой. Сейчас смешение физических numeric types вроде `Decimal64` + `Float64` может дать `Variant(Decimal64, Float64)` или `NO_COMMON_TYPE` на старых CH; `DbDataReader` видит `System.Object`, а `Normalize`/mapper не знают, как безопасно мапить такой столбец. Нужно решить: запрещать, приводить на query layer или поддерживать Variant как отдельный DataType/edge case.
 - [x] Temp table без meta должна быть безопасной по nullability. Найдено на `DBNull` из Postgres/QVD: без анализа density ClickHouse writer может создать non-nullable колонку и упасть на insert.
 - [ ] Файловые providers должны разъединять одинаковые имена колонок при нормализации схемы. Например source `Поле`, `Поле`, `Поле` должен стать `Поле`, `Поле (2)`, `Поле (3)`, чтобы не ломались name-to-ordinal, ADO schema и дальнейший query mapping. Repro: Jira CSV export `PIX Jira 2026-07-30T00_01_28+0300.csv` содержит дубли `Исправить в версиях` и `Метки4`, из-за чего CSV load падает до загрузки данных.

@@ -112,6 +112,66 @@ public sealed class JsonProviderAnalyzeTests
     }
 
     [Test]
+    [DisplayName("Json AnalyzeSchema не читает соседний массив после найденного ArrayPath")]
+    public async Task Analyze_schema_stops_at_end_of_matched_array_path()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "response": {
+                "payload": {
+                  "items": [
+                    { "id": 1, "city": "Moscow" }
+                  ],
+                  "audit": [
+                    { "should_not": "appear" }
+                  ]
+                }
+              }
+            }
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(
+            source,
+            "inline.json",
+            ["response", "payload", "items"]);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "city"], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Json AnalyzeSchema ArrayPath поддерживает индекс массива в пути")]
+    public async Task Analyze_schema_reads_array_path_with_array_index()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "tables": [
+                {
+                  "name": "orders",
+                  "data": [
+                    { "id": 1, "city": "Moscow" },
+                    { "id": 2, "amount": 10.50 }
+                  ]
+                },
+                {
+                  "name": "ignored",
+                  "data": [
+                    { "should_not": "appear" }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        var schema = await Provider.AnalyzeSchemaAsync(source, "inline.json", ["tables", "0", "data"]);
+
+        await Assert.That(schema.Columns.Select(column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "city", "amount"], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Json AnalyzeSchema сохраняет порядок первого появления колонок")]
     public async Task Analyze_schema_preserves_first_seen_column_order()
     {
@@ -141,7 +201,7 @@ public sealed class JsonProviderAnalyzeTests
     }
 
     [Test]
-    [DisplayName("Json AnalyzeSchema пропускает не объектные элементы массива")]
+    [DisplayName("Json AnalyzeSchema пропускает не объектные элементы массива включая массивы")]
     public async Task Analyze_schema_skips_non_object_array_items()
     {
         var source = new InlineJson(
@@ -151,6 +211,7 @@ public sealed class JsonProviderAnalyzeTests
               "text",
               true,
               null,
+              ["array-row"],
               { "id": 1, "city": "Moscow" }
             ]
             """);

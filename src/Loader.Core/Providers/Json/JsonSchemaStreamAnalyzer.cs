@@ -78,6 +78,10 @@ internal static class JsonSchemaStreamAnalyzer
                 while (reader.Read())
                 {
                     analyzer.ProcessToken(reader);
+                    if (analyzer.Done)
+                    {
+                        return;
+                    }
                 }
 
                 // 5. Неполный хвост токена переносим в начало буфера для следующего чтения.
@@ -117,8 +121,15 @@ internal static class JsonSchemaStreamAnalyzer
 
         public bool FoundArray => _arrayPathNavigator.Found;
 
+        public bool Done { get; private set; }
+
         public void ProcessToken(Utf8JsonReader reader)
         {
+            if (Done)
+            {
+                return;
+            }
+
             // 1. До найденного массива занимаемся только навигацией по абсолютному ArrayPath.
             if (!_arrayPathNavigator.Found)
             {
@@ -130,6 +141,12 @@ internal static class JsonSchemaStreamAnalyzer
             }
 
             // 2. После найденного массива читаем только его содержимое; абсолютный путь уже не нужен.
+            if (reader.TokenType == JsonTokenType.EndArray && reader.CurrentDepth == _arrayPathNavigator.ArrayDepth)
+            {
+                Done = true;
+                return;
+            }
+
             _schemaCollector.ProcessToken(reader, _arrayPathNavigator.ArrayDepth);
         }
 

@@ -75,6 +75,78 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json ArrayPath поддерживает индекс массива в пути")]
+    public async Task Reads_array_path_with_array_index()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "tables": [
+                {
+                  "name": "orders",
+                  "data": [
+                    { "id": 1, "city": "Moscow" },
+                    { "id": 2, "city": "London" }
+                  ]
+                },
+                {
+                  "name": "ignored",
+                  "data": [
+                    { "id": 99, "city": "Berlin" }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = ["tables", "0", "data"],
+                Schema = Schema("id", "city")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "city"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Moscow"),
+                ("2", "London")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Json ArrayPath не ищет property внутри массива без явного индекса")]
+    public async Task Array_path_does_not_search_array_items_without_index()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "tables": [
+                {
+                  "data": [
+                    { "id": 1 }
+                  ]
+                }
+              ]
+            }
+            """);
+
+        await Assert.That(async () => await Provider.OpenReaderAsync(
+                source,
+                new JsonTableConfig
+                {
+                    FileName = "inline.json",
+                    ArrayPath = ["tables", "data"],
+                    Schema = Schema("id")
+                }))
+            .ThrowsExactly<JsonArrayPathNotFoundProviderException>();
+    }
+
+    [Test]
     [DisplayName("Json top-level схема использует flat reader")]
     public async Task Top_level_schema_uses_flat_reader()
     {
@@ -323,6 +395,44 @@ public sealed class JsonProviderTests
     }
 
     [Test]
+    [DisplayName("Json reader не читает соседний массив после найденного ArrayPath")]
+    public async Task Reader_stops_at_end_of_matched_array_path()
+    {
+        var source = new InlineJson(
+            """
+            {
+              "response": {
+                "payload": {
+                  "items": [
+                    { "id": 1, "city": "Moscow" }
+                  ],
+                  "audit": [
+                    { "id": 99, "city": "Berlin" }
+                  ]
+                }
+              }
+            }
+            """);
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new JsonTableConfig
+            {
+                FileName = "inline.json",
+                ArrayPath = ["response", "payload", "items"],
+                Schema = Schema("id", "city")
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "city"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Moscow")
+            ]);
+    }
+
+    [Test]
     [DisplayName("Json в UTF-16 LE пока не поддерживается и кидает provider exception")]
     public async Task Utf16_little_endian_json_throws_provider_exception()
     {
@@ -402,7 +512,8 @@ public sealed class JsonProviderTests
               1,
               "text",
               true,
-              null
+              null,
+              ["array-row"]
             ]
             """);
 
@@ -420,6 +531,7 @@ public sealed class JsonProviderTests
             columns: ["id"],
             types: [DataType.Text],
             rows: [
+                ValueTuple.Create(DBNull.Value),
                 ValueTuple.Create(DBNull.Value),
                 ValueTuple.Create(DBNull.Value),
                 ValueTuple.Create(DBNull.Value),

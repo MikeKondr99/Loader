@@ -271,6 +271,164 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver JSON root читает массив внутри объекта")]
+    public async Task Resolve_json_root_reads_array_inside_object()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "nested.json",
+                [
+                    Marker("json"),
+                    Option("root", "response.items")
+                ]),
+            CreateContext(new StubFileSource("""
+                {
+                  "response": {
+                    "items": [
+                      { "id": 1, "city": "Moscow" },
+                      { "id": 2, "city": "Berlin" }
+                    ]
+                  }
+                }
+                """)));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(source.Kind).IsEqualTo("json");
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("city");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Moscow");
+    }
+
+    [Test]
+    [DisplayName("Resolver JSON root может указывать на массив внутри элемента массива")]
+    public async Task Resolve_json_root_reads_array_inside_array_item()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "nested.json",
+                [
+                    Marker("json"),
+                    Option("root", "blocks.1.items")
+                ]),
+            CreateContext(new StubFileSource("""
+                {
+                  "blocks": [
+                    {
+                      "ignored": true
+                    },
+                    {
+                      "items": [
+                        { "id": 10 },
+                        { "id": 20 }
+                      ]
+                    }
+                  ]
+                }
+                """)));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("10");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("20");
+    }
+
+    [Test]
+    [DisplayName("Resolver JSON root поддерживает индекс массива в пути")]
+    public async Task Resolve_json_root_reads_array_index_path()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "tables.json",
+                [
+                    Marker("json"),
+                    Option("root", "tables.0.data")
+                ]),
+            CreateContext(new StubFileSource("""
+                {
+                  "tables": [
+                    {
+                      "data": [
+                        { "id": 1 }
+                      ]
+                    },
+                    {
+                      "data": [
+                        { "id": 99 }
+                      ]
+                    }
+                  ]
+                }
+                """)));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(await reader.ReadAsync()).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver JSON root пустой строки отклоняет как provider option")]
+    public async Task Resolve_json_rejects_empty_root_option()
+    {
+        var resolver = new LoadProviderResolver();
+        var rootSpan = Span(5, 20, 27);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "orders.json",
+                    [
+                        Marker("json"),
+                        Option("root", string.Empty, rootSpan)
+                    ]),
+                CreateContext(new StubFileSource("[]"))))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(rootSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("root");
+    }
+
+    [Test]
+    [DisplayName("Resolver JSON root должен быть строкой")]
+    public async Task Resolve_json_rejects_non_string_root_option()
+    {
+        var resolver = new LoadProviderResolver();
+        var rootSpan = Span(5, 20, 27);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "orders.json",
+                    [
+                        Marker("json"),
+                        Option("root", new IntegerLiteral(1), rootSpan)
+                    ]),
+                CreateContext(new StubFileSource("[]"))))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(rootSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("root");
+        await Assert.That(exception.Errors[0].Message).Contains("строкой");
+    }
+
+    [Test]
     [DisplayName("Resolver возвращает несколько ошибок provider options")]
     public async Task Resolve_returns_multiple_provider_option_errors()
     {
@@ -361,11 +519,11 @@ public sealed class LoadProviderResolverTests
         return new LangSpan(row, startColumn, row, endColumn);
     }
 
-    private static ScriptContext CreateContext()
+    private static ScriptContext CreateContext(IFileSource? fileSource = null)
     {
         return new ScriptContext
         {
-            FileStorage = new StubFileSource(),
+            FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=clickhouse",
             Logger = NullLogger.Instance
         };
@@ -373,9 +531,21 @@ public sealed class LoadProviderResolverTests
 
     private sealed class StubFileSource : IFileSource
     {
+        private readonly string content;
+
+        public StubFileSource()
+            : this(string.Empty)
+        {
+        }
+
+        public StubFileSource(string content)
+        {
+            this.content = content;
+        }
+
         public Stream OpenRead(string fileName)
         {
-            return new MemoryStream();
+            return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
         }
     }
 }
