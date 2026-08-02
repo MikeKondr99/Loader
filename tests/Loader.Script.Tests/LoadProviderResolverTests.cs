@@ -12,6 +12,158 @@ namespace Loader.Script.Tests;
 public sealed class LoadProviderResolverTests
 {
     [Test]
+    [DisplayName("Resolver выбирает ODBC provider по marker и table option")]
+    public async Task Resolve_uses_odbc_provider_marker_and_table_option()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=db",
+                [
+                    Marker("odbc"),
+                    Option("table", "dbo.orders")
+                ]),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC использует sql option как текст запроса")]
+    public async Task Resolve_uses_odbc_sql_option_as_query()
+    {
+        var resolver = new LoadProviderResolver();
+        const string sql = "select * from \"My Schema\".\"Orders\"";
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Driver={__loader_missing_odbc_driver__};Server=localhost;Database=db",
+                [
+                    Marker("odbc"),
+                    Option("sql", sql)
+                ]),
+            CreateContext());
+
+        var exception = await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
+            .ThrowsExactly<DbExecutionException>();
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(exception!.Sql).IsEqualTo(sql);
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC отклоняет одновременные table и sql options")]
+    public async Task Resolve_rejects_odbc_provider_with_table_and_sql_options()
+    {
+        var resolver = new LoadProviderResolver();
+        var sqlSpan = Span(3, 20, 52);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db",
+                    [
+                        Marker("odbc"),
+                        Option("table", "public.orders"),
+                        Option("sql", "select * from public.orders", sqlSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("table");
+        await Assert.That(exception.Errors[0].Message).Contains("sql");
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC отклоняет пустой sql option")]
+    public async Task Resolve_rejects_odbc_provider_with_empty_sql_option()
+    {
+        var resolver = new LoadProviderResolver();
+        var sqlSpan = Span(3, 20, 26);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db",
+                    [
+                        Marker("odbc"),
+                        Option("sql", "   ", sqlSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("sql");
+    }
+
+    [Test]
+    [DisplayName("Resolver читает ODBC provider marker без учета регистра")]
+    public async Task Resolve_uses_odbc_provider_marker_case_insensitive()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db",
+                [
+                    Marker("OdBc"),
+                    Option("table", "public.orders")
+                ]),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC требует table option")]
+    public async Task Resolve_rejects_odbc_provider_without_table_option()
+    {
+        var resolver = new LoadProviderResolver();
+        var fromSpan = Span(2, 5, 9);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db",
+                    [Marker("odbc")],
+                    fromSpan),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("table");
+        await Assert.That(exception.Errors[0].Message).Contains("sql");
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC отклоняет небезопасное имя таблицы")]
+    public async Task Resolve_rejects_odbc_provider_with_unsafe_table_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 10, 41);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db",
+                    [
+                        Marker("odbc"),
+                        Option("table", "public.orders;drop_table", tableSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("public.orders;drop_table");
+    }
+
+    [Test]
     [DisplayName("Resolver выбирает файловый provider по расширению если marker не указан")]
     public async Task Resolve_uses_file_extension_when_provider_marker_is_absent()
     {

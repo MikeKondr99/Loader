@@ -54,7 +54,30 @@ FROM [Host=localhost;Database=app;Username=postgres;Password=postgres]
 - `sqlserver`, `mssql`
 - `oracle`
 - `hive`, `apachehive`, `apache-hive`
+- `odbc`
 - `clickhouse`
+
+ODBC source:
+
+```text
+users:
+LOAD
+    id,
+    name
+FROM [Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Uid=sa;Pwd=secret]
+(odbc, table='dbo.users');
+```
+
+ODBC also supports a raw SQL query instead of `table`:
+
+```text
+users:
+LOAD
+    id,
+    name
+FROM [Dsn=analytics]
+(odbc, sql='select id, name from "My Schema"."Users"');
+```
 
 ## Telemetry
 
