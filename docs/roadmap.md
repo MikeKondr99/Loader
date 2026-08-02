@@ -8,7 +8,7 @@
   - [x] Microsoft SQL Server
   - [x] Oracle
   - [x] Apache Hive
-  - [ ] ODBC
+  - [x] ODBC
 - [x]  Файлы
   - [x] Excel
   - [x] CSV

@@ -5,6 +5,7 @@ using Loader.Core.Providers.Csv;
 using Loader.Core.Providers.Excel;
 using Loader.Core.Providers.Hive;
 using Loader.Core.Providers.Json;
+using Loader.Core.Providers.Odbc;
 using Loader.Core.Providers.Oracle;
 using Loader.Core.Providers.Postgres;
 using Loader.Core.Providers.Qvd;
@@ -65,6 +66,7 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
                 errors,
                 requiresBuffer: true,
                 static (source, config, token) => new HiveProvider().OpenReaderAsync(source, config, token)),
+            "odbc" => Odbc(statement, options, errors),
             "clickhouse" => Database(
                 "clickhouse",
                 statement,
@@ -288,6 +290,67 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         };
     }
 
+    private static LoadProviderSource Odbc(
+        LoadStatement statement,
+        LoadOptionReader options,
+        List<LangError> errors)
+    {
+        var table = options.String("table");
+        var sql = options.String("sql");
+        var tableOption = options.GetOption("table");
+        var sqlOption = options.GetOption("sql");
+
+        if (tableOption is null && sqlOption is null)
+        {
+            errors.Add(new LangError
+            {
+                Message = "Для provider-а БД 'odbc' требуется опция table='schema.table' или sql='select ...'.",
+                Span = statement.FromSpan
+            });
+        }
+
+        if (tableOption is not null && sqlOption is not null)
+        {
+            errors.Add(new LangError
+            {
+                Message = "Для provider-а БД 'odbc' нельзя указывать table и sql одновременно.",
+                Span = sqlOption.Span
+            });
+        }
+
+        if (table is not null && !QualifiedTableNameRegex().IsMatch(table))
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Имя таблицы '{table}' не поддерживается.",
+                Span = tableOption?.Span ?? statement.FromSpan
+            });
+        }
+
+        if (sql is not null && string.IsNullOrWhiteSpace(sql))
+        {
+            errors.Add(new LangError
+            {
+                Message = "Опция 'sql' для provider-а БД 'odbc' не должна быть пустой.",
+                Span = sqlOption?.Span ?? statement.FromSpan
+            });
+        }
+
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
+        var source = new ConnectionStringSource { ConnectionString = statement.Source };
+        var config = new SqlTableConfig { Sql = sql ?? $"SELECT * FROM {table}" };
+        return new LoadProviderSource
+        {
+            Kind = "odbc",
+            RequiresBuffer = true,
+            OpenReaderAsync = token => new OdbcProvider().OpenReaderAsync(source, config, token)
+        };
+    }
+
     private static string? ResolveProvider(
         LoadStatement statement,
         LoadOptionReader options,
@@ -371,6 +434,7 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
             "hive" or
             "apachehive" or
             "apache-hive" or
+            "odbc" or
             "clickhouse";
     }
 
