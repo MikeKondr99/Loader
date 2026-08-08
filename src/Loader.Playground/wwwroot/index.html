@@ -437,7 +437,7 @@
     id,
     city,
     amount.Num() AS amount
-FROM [orders.csv] (csv, delimiter=',', header=true)
+FROM Csv(path='orders.csv', delimiter=',', header=true)
 WHERE amount > 0
 ORDER BY city ASC
 LIMIT 10;`;

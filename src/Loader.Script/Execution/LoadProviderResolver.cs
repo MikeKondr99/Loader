@@ -1,78 +1,55 @@
-using System.Data.Common;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Csv;
-using Loader.Core.Providers.Excel;
-using Loader.Core.Providers.Hive;
-using Loader.Core.Providers.Json;
-using Loader.Core.Providers.Oracle;
-using Loader.Core.Providers.Postgres;
-using Loader.Core.Providers.Qvd;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Providers.SqlServer;
-using Loader.Core.Providers.Xml;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
-public sealed partial class LoadProviderResolver : ILoadProviderResolver
+public sealed class LoadProviderResolver : ILoadProviderResolver
 {
+    private static readonly IReadOnlyDictionary<string, ILoadSourceResolver> Resolvers = CreateResolvers();
+
     public async ValueTask<LoadProviderSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         CancellationToken cancellationToken = default)
     {
         var errors = new List<LangError>();
-        var options = new LoadOptionReader(statement.Options, errors);
-        var provider = ResolveProvider(statement, options, errors);
+        var options = new LoadOptionReader(statement.SourceCall.Options, errors);
 
-        var source = provider switch
+        if (!Resolvers.TryGetValue(statement.SourceCall.Name, out var resolver))
         {
-            "csv" => Csv(statement, context, options, errors),
-            "excel" or "xlsx" or "xls" or "xlsb" => Excel(statement, context, options, errors),
-            "json" => errors.Count == 0
-                ? await JsonAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false)
-                : null,
-            "xml" => await XmlAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false),
-            "qvd" => Qvd(statement, context, errors),
-            "postgres" or "postgresql" or "postgre" => Database(
-                "postgres",
-                statement,
-                options,
-                errors,
-                requiresBuffer: false,
-                static (source, config, token) => new PostgresProvider().OpenReaderAsync(source, config, token)),
-            "sqlserver" or "mssql" => Database(
-                "sqlserver",
-                statement,
-                options,
-                errors,
-                requiresBuffer: true,
-                static (source, config, token) => new SqlServerProvider().OpenReaderAsync(source, config, token)),
-            "oracle" => Database(
-                "oracle",
-                statement,
-                options,
-                errors,
-                requiresBuffer: true,
-                static (source, config, token) => new OracleProvider().OpenReaderAsync(source, config, token)),
-            "hive" or "apachehive" or "apache-hive" => Database(
-                "hive",
-                statement,
-                options,
-                errors,
-                requiresBuffer: true,
-                static (source, config, token) => new HiveProvider().OpenReaderAsync(source, config, token)),
-            "clickhouse" => Database(
-                "clickhouse",
-                statement,
-                options,
-                errors,
-                requiresBuffer: false,
-                static (source, config, token) => new ClickHouseProvider().OpenReaderAsync(source, config, token)),
-            _ => null
-        };
+            var message = NameSuggestion.AppendSuggestion(
+                $"Provider '{statement.SourceCall.Name.ToLowerInvariant()}' не поддерживается.",
+                statement.SourceCall.Name,
+                Resolvers.Keys);
+            errors.Add(new LangError
+            {
+                Message = message,
+                Span = statement.SourceCall.NameSpan
+            });
+        }
+
+        LoadProviderSource? source = null;
+        if (resolver is not null)
+        {
+            try
+            {
+                source = await resolver.ResolveAsync(statement, context, options, errors, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (ProviderResolutionException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                errors.Add(new LangError
+                {
+                    Message = $"Не удалось подготовить provider '{statement.SourceCall.Name}': {exception.Message}",
+                    Span = statement.SourceCall.Span
+                });
+                throw new ProviderResolutionException(errors, exception);
+            }
+        }
 
         if (errors.Count > 0)
         {
@@ -82,347 +59,25 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         return source!;
     }
 
-    private static LoadProviderSource Csv(
-        LoadStatement statement,
-        ScriptContext context,
-        LoadOptionReader options,
-        List<LangError> errors)
+    private static IReadOnlyDictionary<string, ILoadSourceResolver> CreateResolvers()
     {
-        RejectSqlForFileProvider("csv", statement, errors);
-        var delimiter = options.Character("delimiter", ',');
-        var hasHeader = options.Boolean("header", true);
-        if (errors.Count > 0)
-        {
-            return null!;
-        }
+        ILoadSourceResolver[] resolvers =
+        [
+            new CsvLoadSourceResolver(),
+            new ExcelLoadSourceResolver(),
+            new JsonLoadSourceResolver(),
+            new XmlLoadSourceResolver(),
+            new QvdLoadSourceResolver(),
+            new PostgresLoadSourceResolver(),
+            new SqlServerLoadSourceResolver(),
+            new OracleLoadSourceResolver(),
+            new HiveLoadSourceResolver(),
+            new ClickHouseLoadSourceResolver()
+        ];
 
-        return File(
-            "csv",
-            context.FileStorage,
-            statement.Source,
-            (source, fileName, token) => new CsvProvider().OpenReaderAsync(
-                source,
-                new CsvTableConfig
-                {
-                    FileName = fileName,
-                    Delimiter = delimiter,
-                    HasHeader = hasHeader
-                },
-                token));
-    }
-
-    private static LoadProviderSource Excel(
-        LoadStatement statement,
-        ScriptContext context,
-        LoadOptionReader options,
-        List<LangError> errors)
-    {
-        RejectSqlForFileProvider("excel", statement, errors);
-        var sheet = options.String("sheet");
-        var hasHeader = options.Boolean("header", true);
-        if (errors.Count > 0)
-        {
-            return null!;
-        }
-
-        return File(
-            "excel",
-            context.FileStorage,
-            statement.Source,
-            (source, fileName, token) => new ExcelProvider().OpenReaderAsync(
-                source,
-                new ExcelTableConfig
-                {
-                    FileName = fileName,
-                    WorksheetName = sheet,
-                    HasHeader = hasHeader
-                },
-                token));
-    }
-
-    private static LoadProviderSource Qvd(
-        LoadStatement statement,
-        ScriptContext context,
-        List<LangError> errors)
-    {
-        RejectSqlForFileProvider("qvd", statement, errors);
-        if (errors.Count > 0)
-        {
-            return null!;
-        }
-
-        return File(
-            "qvd",
-            context.FileStorage,
-            statement.Source,
-            static (source, fileName, token) => new QvdProvider().OpenReaderAsync(
-                source,
-                new QvdTableConfig { FileName = fileName },
-                token));
-    }
-
-    private static LoadProviderSource File(
-        string kind,
-        IFileSource source,
-        string fileName,
-        Func<IFileSource, string, CancellationToken, ValueTask<DbDataReader>> open)
-    {
-        return new LoadProviderSource
-        {
-            Kind = kind,
-            RequiresBuffer = false,
-            OpenReaderAsync = token => open(source, fileName, token)
-        };
-    }
-
-    private static async ValueTask<LoadProviderSource> JsonAsync(
-        LoadStatement statement,
-        ScriptContext context,
-        LoadOptionReader options,
-        List<LangError> errors,
-        CancellationToken cancellationToken)
-    {
-        RejectSqlForFileProvider("json", statement, errors);
-        var arrayPath = JsonRootPath(options, errors);
-        if (errors.Count > 0)
-        {
-            return null!;
-        }
-
-        var provider = new JsonProvider();
-        var schema = await provider
-            .AnalyzeSchemaAsync(context.FileStorage, statement.Source, arrayPath, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return new LoadProviderSource
-        {
-            Kind = "json",
-            RequiresBuffer = false,
-            OpenReaderAsync = token => provider.OpenReaderAsync(
-                context.FileStorage,
-                new JsonTableConfig
-                {
-                    FileName = statement.Source,
-                    ArrayPath = arrayPath,
-                    Schema = schema
-                },
-                token)
-        };
-    }
-
-    private static IReadOnlyList<string> JsonRootPath(
-        LoadOptionReader options,
-        List<LangError> errors)
-    {
-        var root = options.String("root");
-        if (root is null)
-        {
-            return [];
-        }
-
-        var path = root
-            .Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .ToArray();
-        if (path.Length > 0)
-        {
-            return path;
-        }
-
-        errors.Add(new LangError
-        {
-            Message = "Опция 'root' должна указывать путь к JSON-массиву.",
-            Span = options.GetOption("root")?.Span ?? new LangSpan(1, 1, 1, 1)
-        });
-        return [];
-    }
-
-    private static async ValueTask<LoadProviderSource> XmlAsync(
-        LoadStatement statement,
-        ScriptContext context,
-        LoadOptionReader options,
-        List<LangError> errors,
-        CancellationToken cancellationToken)
-    {
-        RejectSqlForFileProvider("xml", statement, errors);
-        var tableName = options.RequiredString(
-            "table",
-            statement.FromSpan,
-            "Для XML-источника требуется опция table='имя-строки'.");
-        if (tableName is null || errors.Count > 0)
-        {
-            return null!;
-        }
-
-        var provider = new XmlProvider();
-        var schema = await provider
-            .AnalyzeSchemaAsync(context.FileStorage, statement.Source, tableName, cancellationToken)
-            .ConfigureAwait(false);
-
-        return new LoadProviderSource
-        {
-            Kind = "xml",
-            RequiresBuffer = false,
-            OpenReaderAsync = token => provider.OpenReaderAsync(
-                context.FileStorage,
-                new XmlTableConfig
-                {
-                    FileName = statement.Source,
-                    TableName = tableName,
-                    Schema = schema
-                },
-                token)
-        };
-    }
-
-    private static LoadProviderSource Database(
-        string kind,
-        LoadStatement statement,
-        LoadOptionReader options,
-        List<LangError> errors,
-        bool requiresBuffer,
-        Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open)
-    {
-        var sql = SourceSql(kind, statement, errors);
-        if (errors.Count > 0)
-        {
-            return null!;
-        }
-
-        var source = new ConnectionStringSource { ConnectionString = statement.Source };
-        var config = new SqlTableConfig { Sql = sql! };
-        return new LoadProviderSource
-        {
-            Kind = kind,
-            RequiresBuffer = requiresBuffer,
-            OpenReaderAsync = token => open(source, config, token)
-        };
-    }
-
-    private static string? SourceSql(
-        string kind,
-        LoadStatement statement,
-        List<LangError> errors)
-    {
-        var sql = statement.Sql;
-        if (sql is not null && sql.Trim().Length == 0)
-        {
-            errors.Add(new LangError
-            {
-                Message = $"Для provider-а БД '{kind}' SQL не должен быть пустым.",
-                Span = statement.SqlPart?.Span ?? statement.FromSpan
-            });
-        }
-
-        if (sql is null)
-        {
-            errors.Add(new LangError
-            {
-                Message = $"Для provider-а БД '{kind}' требуется SQL после FROM.",
-                Span = statement.FromSpan
-            });
-        }
-
-        return sql;
-    }
-
-    private static void RejectSqlForFileProvider(
-        string kind,
-        LoadStatement statement,
-        List<LangError> errors)
-    {
-        if (statement.SqlPart is not null)
-        {
-            errors.Add(new LangError
-            {
-                Message = $"Файловый provider '{kind}' не поддерживает SQL после FROM.",
-                Span = statement.SqlPart.Span
-            });
-        }
-    }
-
-    private static string? ResolveProvider(
-        LoadStatement statement,
-        LoadOptionReader options,
-        List<LangError> errors)
-    {
-        var markers = options.Markers;
-        if (markers.Count > 1)
-        {
-            var first = markers[0];
-            foreach (var marker in markers.Skip(1))
-            {
-                errors.Add(new LangError
-                {
-                    Message = $"Provider marker '{marker.Name}' нельзя указывать вместе с '{first.Name}'.",
-                    Span = marker.Span
-                });
-            }
-        }
-
-        var provider = options.Provider;
-        if (provider is null)
-        {
-            return ProviderFromExtension(statement, errors);
-        }
-
-        if (!IsSupportedProvider(provider))
-        {
-            errors.Add(new LangError
-            {
-                Message = $"Provider '{provider}' не поддерживается.",
-                Span = markers[0].Span
-            });
-        }
-
-        return provider;
-    }
-
-    private static string? ProviderFromExtension(LoadStatement statement, List<LangError> errors)
-    {
-        var provider = Path.GetExtension(statement.Source).ToLowerInvariant() switch
-        {
-            ".csv" => "csv",
-            ".xlsx" => "xlsx",
-            ".xls" => "xls",
-            ".xlsb" => "xlsb",
-            ".json" => "json",
-            ".xml" => "xml",
-            ".qvd" => "qvd",
-            _ => null
-        };
-
-        if (provider is null)
-        {
-            errors.Add(new LangError
-            {
-                Message = "Нужно указать provider marker, если FROM не является поддерживаемым относительным путем к файлу.",
-                Span = statement.FromSpan
-            });
-        }
-
-        return provider;
-    }
-
-    private static bool IsSupportedProvider(string provider)
-    {
-        return provider is
-            "csv" or
-            "excel" or
-            "xlsx" or
-            "xls" or
-            "xlsb" or
-            "json" or
-            "xml" or
-            "qvd" or
-            "postgres" or
-            "postgresql" or
-            "postgre" or
-            "sqlserver" or
-            "mssql" or
-            "oracle" or
-            "hive" or
-            "apachehive" or
-            "apache-hive" or
-            "clickhouse";
+        return resolvers.ToDictionary(
+            static resolver => resolver.Name,
+            static resolver => resolver,
+            StringComparer.OrdinalIgnoreCase);
     }
 }

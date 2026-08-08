@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD из JSON анализирует схему, пишет temp и сохраняет final table")]
+    [DisplayName("LOAD РёР· JSON Р°РЅР°Р»РёР·РёСЂСѓРµС‚ СЃС…РµРјСѓ, РїРёС€РµС‚ temp Рё СЃРѕС…СЂР°РЅСЏРµС‚ final table")]
     public async Task Json_load_materializes_expected_final_table()
     {
         // Arrange
@@ -27,7 +27,7 @@ public sealed class LoadStatementJsonTests
                 Text(Int(id)) AS id,
                 [user.name] AS name,
                 city
-            FROM [inventory.json] (json)
+            FROM Json(path='inventory.json')
             WHERE city = 'Moscow'
             ORDER BY id ASC;
             """);
@@ -49,7 +49,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD из JSON с root читает массив внутри объекта")]
+    [DisplayName("LOAD РёР· JSON СЃ root С‡РёС‚Р°РµС‚ РјР°СЃСЃРёРІ РІРЅСѓС‚СЂРё РѕР±СЉРµРєС‚Р°")]
     public async Task Json_load_with_root_materializes_nested_array()
     {
         // Arrange
@@ -62,7 +62,7 @@ public sealed class LoadStatementJsonTests
                 Text(Int(id)) AS id,
                 [user.name] AS name,
                 city
-            FROM [nested-inventory.json] (json, root='payload.items')
+            FROM Json(path='nested-inventory.json', root='payload.items')
             WHERE city = 'Moscow'
             ORDER BY id ASC;
             """);
@@ -84,7 +84,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD из JSON с root работает без явного json marker")]
+    [DisplayName("LOAD РёР· JSON СЃ root СЂР°Р±РѕС‚Р°РµС‚ Р±РµР· СЏРІРЅРѕРіРѕ json marker")]
     public async Task Json_load_with_root_uses_file_extension_provider()
     {
         // Arrange
@@ -96,7 +96,7 @@ public sealed class LoadStatementJsonTests
             LOAD
                 city,
                 amount
-            FROM [nested-inventory.json] (root='payload.items')
+            FROM Json(path='nested-inventory.json', root='payload.items')
             WHERE city = 'Berlin';
             """);
 
@@ -115,7 +115,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD из JSON root поддерживает индекс массива в пути")]
+    [DisplayName("LOAD РёР· JSON root РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РёРЅРґРµРєСЃ РјР°СЃСЃРёРІР° РІ РїСѓС‚Рё")]
     public async Task Json_load_with_root_array_index_materializes_selected_table()
     {
         // Arrange
@@ -127,7 +127,7 @@ public sealed class LoadStatementJsonTests
             LOAD
                 Text(Int(id)) AS id,
                 city
-            FROM [indexed-tables.json] (json, root='tables.0.data')
+            FROM Json(path='indexed-tables.json', root='tables.0.data')
             ORDER BY id ASC;
             """);
 

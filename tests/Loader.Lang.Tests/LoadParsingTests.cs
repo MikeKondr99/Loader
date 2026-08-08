@@ -9,12 +9,12 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD * создает statement со всеми полями")]
     public async Task Load_all_fields()
     {
-        var load = ParseLoad("LOAD * FROM [orders.csv];");
+        var load = ParseLoad("LOAD * FROM Csv(path='orders.csv');");
 
         await Assert.That(load.TableName).IsNull();
         await Assert.That(load.Fields).IsNull();
-        await Assert.That(load.Source).IsEqualTo("orders.csv");
-        await Assert.That(load.Options).IsEmpty();
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Csv");
+        await AssertOption(load.SourceCall, "path", "orders.csv");
         await Assert.That(load.Where).IsNull();
         await Assert.That(load.GroupBy).IsNull();
         await Assert.That(load.OrderBy).IsNull();
@@ -23,26 +23,26 @@ public sealed class LoadParsingTests
     }
 
     [Test]
-    [Arguments("LOAD * FROM [orders.csv];")]
-    [Arguments("LOAD*FROM[orders.csv];")]
-    [Arguments("  LOAD \r\n * \t FROM \n [orders.csv] ; ")]
-    [Arguments("load * from [orders.csv];")]
-    [Arguments("Load * From [orders.csv];")]
-    [Arguments("LoAd * FrOm [orders.csv];")]
+    [Arguments("LOAD * FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD*FROM Csv(path='orders.csv');")]
+    [Arguments("  LOAD \r\n * \t FROM \n Csv(path='orders.csv') ; ")]
+    [Arguments("load * from Csv(path='orders.csv');")]
+    [Arguments("Load * From Csv(path='orders.csv');")]
+    [Arguments("LoAd * FrOm Csv(path='orders.csv');")]
     [DisplayName("LOAD * не зависит от пробелов и регистра ключевых слов")]
     public async Task Load_all_fields_ignores_whitespace_and_keyword_case(string text)
     {
         var load = ParseLoad(text);
 
         await Assert.That(load.Fields).IsNull();
-        await Assert.That(load.Source).IsEqualTo("orders.csv");
+        await AssertOption(load.SourceCall, "path", "orders.csv");
     }
 
     [Test]
-    [Arguments("orders: LOAD * FROM [orders.csv];", "orders")]
-    [Arguments("orders_2026: LOAD * FROM [orders.csv];", "orders_2026")]
-    [Arguments("_orders: LOAD * FROM [orders.csv];", "_orders")]
-    [Arguments("orders : LOAD * FROM [orders.csv];", "orders")]
+    [Arguments("orders: LOAD * FROM Csv(path='orders.csv');", "orders")]
+    [Arguments("orders_2026: LOAD * FROM Csv(path='orders.csv');", "orders_2026")]
+    [Arguments("_orders: LOAD * FROM Csv(path='orders.csv');", "_orders")]
+    [Arguments("orders : LOAD * FROM Csv(path='orders.csv');", "orders")]
     [DisplayName("LOAD table name prefix задает имя результирующей таблицы")]
     public async Task Load_table_name_prefix_parses_name_before_load(string text, string expectedTableName)
     {
@@ -50,15 +50,15 @@ public sealed class LoadParsingTests
 
         await Assert.That(load.TableName).IsEqualTo(expectedTableName);
         await Assert.That(load.Fields).IsNull();
-        await Assert.That(load.Source).IsEqualTo("orders.csv");
+        await AssertOption(load.SourceCall, "path", "orders.csv");
     }
 
     [Test]
-    [Arguments("LOAD id AS id FROM [orders.csv];")]
-    [Arguments("LOAD id AS id, FROM [orders.csv];")]
-    [Arguments("LOAD id as id FROM [orders.csv];")]
-    [Arguments("load id As id from [orders.csv];")]
-    [Arguments("LOAD   id   AS   id   FROM   [orders.csv]   ;")]
+    [Arguments("LOAD id AS id FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id AS id, FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id as id FROM Csv(path='orders.csv');")]
+    [Arguments("load id As id from Csv(path='orders.csv');")]
+    [Arguments("LOAD   id   AS   id   FROM   Csv(path='orders.csv')   ;")]
     [DisplayName("LOAD одно поле допускает разные пробелы регистр AS/FROM и trailing comma")]
     public async Task Load_single_field_variants(string text)
     {
@@ -70,9 +70,9 @@ public sealed class LoadParsingTests
     }
 
     [Test]
-    [Arguments("LOAD id FROM [orders.csv];", "id", "id")]
-    [Arguments("LOAD [gross amount] FROM [orders.csv];", "gross amount", "gross amount")]
-    [Arguments(@"LOAD [folder\]id] FROM [orders.csv];", "folder]id", "folder]id")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv');", "id", "id")]
+    [Arguments("LOAD [gross amount] FROM Csv(path='orders.csv');", "gross amount", "gross amount")]
+    [Arguments(@"LOAD [folder\]id] FROM Csv(path='orders.csv');", "folder]id", "folder]id")]
     [DisplayName("LOAD поле без AS превращается в name AS name")]
     public async Task Load_field_without_alias_becomes_same_name_alias(string text, string expectedName, string expectedExpressionName)
     {
@@ -93,7 +93,7 @@ public sealed class LoadParsingTests
                 id,
                 amount * 1.2 AS gross_amount,
                 city,
-            FROM [orders.csv];
+            FROM Csv(path='orders.csv');
             """);
 
         var fields = ExplicitFields(load);
@@ -114,7 +114,7 @@ public sealed class LoadParsingTests
                 id AS id,
                 name AS name,
                 amount AS amount
-            FROM [orders.csv];
+            FROM Csv(path='orders.csv');
             """);
 
         var fields = ExplicitFields(load);
@@ -133,7 +133,7 @@ public sealed class LoadParsingTests
             LOAD
                 amount * 1.2 AS gross_amount,
                 city.Lower() AS city,
-            FROM [orders.csv];
+            FROM Csv(path='orders.csv');
             """);
 
         var fields = ExplicitFields(load);
@@ -148,9 +148,9 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD поле поддерживает blocked alias и escaped source")]
     public async Task Load_field_supports_blocked_alias_and_escaped_source()
     {
-        var load = ParseLoad(@"LOAD amount AS [gross amount] FROM [folder\]name/orders.csv];");
+        var load = ParseLoad(@"LOAD amount AS [gross amount] FROM Csv(path='folder]name/orders.csv');");
 
-        await Assert.That(load.Source).IsEqualTo("folder]name/orders.csv");
+        await AssertOption(load.SourceCall, "path", "folder]name/orders.csv");
         await AssertField(ExplicitFields(load)[0], "gross amount", "amount");
     }
 
@@ -165,7 +165,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD поле поддерживает разные expression формы")]
     public async Task Load_field_supports_expression_variants(string expression, string alias, string rootFunction)
     {
-        var load = ParseLoad($"LOAD {expression} AS {alias} FROM [orders.csv];");
+        var load = ParseLoad($"LOAD {expression} AS {alias} FROM Csv(path='orders.csv');");
 
         var fields = ExplicitFields(load);
         await Assert.That(fields).Count().IsEqualTo(1);
@@ -176,48 +176,47 @@ public sealed class LoadParsingTests
     }
 
     [Test]
-    [Arguments("(csv)")]
-    [Arguments("(csv,)")]
-    [Arguments("(csv, delimiter=',')")]
-    [Arguments("(csv, delimiter=',', header=true, batch=100, ratio=10.5,)")]
+    [Arguments("Csv(path='orders.csv')")]
+    [Arguments("Csv(path='orders.csv',)")]
+    [Arguments("Csv(path='orders.csv', delimiter=',')")]
+    [Arguments("Csv(path='orders.csv', delimiter=',', header=true, batch=100, ratio=10.5,)")]
     [DisplayName("LOAD options допускают comma-separated options и trailing comma")]
     public async Task Load_options_separator_variants(string options)
     {
-        var load = ParseLoad($"LOAD id AS id FROM [orders.csv] {options};");
+        var load = ParseLoad($"LOAD id AS id FROM {options};");
 
-        await Assert.That(load.Options[0].Name).IsEqualTo("csv");
-        await Assert.That(load.Options[0].Value).IsNull();
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Csv");
+        await AssertOption(load.SourceCall, "path", "orders.csv");
     }
 
     [Test]
-    [DisplayName("LOAD source options разбирает marker и literal values")]
+    [DisplayName("LOAD source options разбирает literal values без marker-ов")]
     public async Task Load_options()
     {
-        var load = ParseLoad("LOAD id AS id FROM [orders.csv] (csv, delimiter=',', header=true, batch=100, ratio=10.5);");
+        var load = ParseLoad("LOAD id AS id FROM Csv(path='orders.csv', delimiter=',', header=true, batch=100, ratio=10.5);");
 
-        await Assert.That(load.Options).Count().IsEqualTo(5);
-        await Assert.That(load.Options[0].Name).IsEqualTo("csv");
-        await Assert.That(load.Options[0].Value).IsNull();
-        await AssertOption<StringLiteral, string>(load.Options[1], "delimiter", literal => literal.Value, ",");
-        await AssertOption<BooleanLiteral, bool>(load.Options[2], "header", literal => literal.Value, true);
-        await AssertOption<IntegerLiteral, long>(load.Options[3], "batch", literal => literal.Value, 100);
-        await AssertOption<NumberLiteral, double>(load.Options[4], "ratio", literal => literal.Value, 10.5);
+        await Assert.That(load.SourceCall.Options).Count().IsEqualTo(5);
+        await AssertOption(load.SourceCall, "path", "orders.csv");
+        await AssertOption(load.SourceCall, "delimiter", ",");
+        await AssertOption(load.SourceCall, "header", true);
+        await AssertOption(load.SourceCall, "batch", 100L);
+        await AssertOption(load.SourceCall, "ratio", 10.5);
     }
 
     [Test]
     [DisplayName("LOAD хранит span FROM, source и source options")]
     public async Task Load_from_and_options_keep_spans()
     {
-        var load = ParseLoad("LOAD id FROM [orders.csv] (postgres, table='public.orders');");
+        var load = ParseLoad("LOAD id FROM Postgres(connection='orders.csv', table='public.orders');");
 
         await Assert.That(load.FromSpan.StartColumn).IsEqualTo(8u);
         await Assert.That(load.FromSpan.EndColumn).IsEqualTo(12u);
-        await Assert.That(load.SourcePart.Span.StartColumn).IsEqualTo(13u);
-        await Assert.That(load.SourcePart.Span.EndColumn).IsEqualTo(25u);
-        await Assert.That(load.Options[0].Span.StartColumn).IsEqualTo(27u);
-        await Assert.That(load.Options[0].Span.EndColumn).IsEqualTo(35u);
-        await Assert.That(load.Options[1].Span.StartColumn).IsEqualTo(37u);
-        await Assert.That(load.Options[1].Span.EndColumn).IsEqualTo(58u);
+        await Assert.That(load.SourceCall.NameSpan.StartColumn).IsEqualTo(13u);
+        await Assert.That(load.SourceCall.NameSpan.EndColumn).IsEqualTo(21u);
+        await Assert.That(load.SourceCall.Options[0].Span.StartColumn).IsEqualTo(22u);
+        await Assert.That(load.SourceCall.Options[0].Span.EndColumn).IsEqualTo(45u);
+        await Assert.That(load.SourceCall.Options[1].Span.StartColumn).IsEqualTo(47u);
+        await Assert.That(load.SourceCall.Options[1].Span.EndColumn).IsEqualTo(68u);
     }
 
     [Test]
@@ -229,7 +228,7 @@ public sealed class LoadParsingTests
             LOAD
                 id,
                 amount
-            FROM [postgres_connection] (postgres)
+            FROM Postgres(connection='postgres_connection')
             SQL
                 SELECT id, amount
                 FROM public.orders
@@ -252,10 +251,10 @@ public sealed class LoadParsingTests
 
     [Test]
     [DisplayName("LOAD SQL после FROM взаимоисключен с WHERE GROUP ORDER LIMIT")]
-    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders WHERE id > 0;")]
-    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders GROUP BY id;")]
-    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders ORDER BY id;")]
-    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders LIMIT 10;")]
+    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders WHERE id > 0;")]
+    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders GROUP BY id;")]
+    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders ORDER BY id;")]
+    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders LIMIT 10;")]
     public async Task Load_sql_keeps_sql_keywords_inside_source_sql(string text)
     {
         var load = ParseLoad(text);
@@ -271,9 +270,9 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD source options допускает пустые скобки")]
     public async Task Load_options_allow_empty_parentheses()
     {
-        var load = ParseLoad("LOAD id AS id FROM [orders.csv] ();");
+        var load = ParseLoad("LOAD id AS id FROM Csv();");
 
-        await Assert.That(load.Options).IsEmpty();
+        await Assert.That(load.SourceCall.Options).IsEmpty();
     }
 
     [Test]
@@ -283,7 +282,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD WHERE разбирает expression после source")]
     public async Task Load_where_parses_expression(string where, string rootFunction)
     {
-        var load = ParseLoad($"LOAD id FROM [orders.csv] {where};");
+        var load = ParseLoad($"LOAD id FROM Csv(path='orders.csv') {where};");
 
         await Assert.That(load.Where).IsNotNull();
         await Assert.That(load.Where).IsTypeOf<FuncExpr>();
@@ -294,9 +293,9 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD WHERE работает после source options")]
     public async Task Load_where_after_source_options()
     {
-        var load = ParseLoad("LOAD id FROM [orders.csv] (csv, header=true) WHERE active = true;");
+        var load = ParseLoad("LOAD id FROM Csv(path='orders.csv', header=true) WHERE active = true;");
 
-        await Assert.That(load.Options).Count().IsEqualTo(2);
+        await Assert.That(load.SourceCall.Options).Count().IsEqualTo(2);
         await Assert.That(load.Where).IsNotNull();
         await Assert.That(load.Where).IsTypeOf<FuncExpr>();
         await Assert.That(((FuncExpr)load.Where!).Name).IsEqualTo("=");
@@ -309,7 +308,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD GROUP BY разбирает список expressions после source или WHERE")]
     public async Task Load_group_by_parses_expression_list(string groupBy, int expectedCount)
     {
-        var load = ParseLoad($"LOAD city FROM [orders.csv] {groupBy};");
+        var load = ParseLoad($"LOAD city FROM Csv(path='orders.csv') {groupBy};");
 
         await Assert.That(load.GroupBy!).Count().IsEqualTo(expectedCount);
         await Assert.That(load.GroupBy![0]).IsTypeOf<NameExpr>();
@@ -320,7 +319,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD GROUP BY работает после WHERE и перед ORDER BY")]
     public async Task Load_group_by_after_where_and_before_order_by()
     {
-        var load = ParseLoad("LOAD city FROM [orders.csv] WHERE active = true GROUP BY city ORDER BY city DESC;");
+        var load = ParseLoad("LOAD city FROM Csv(path='orders.csv') WHERE active = true GROUP BY city ORDER BY city DESC;");
 
         await Assert.That(load.Where).IsNotNull();
         await Assert.That(load.GroupBy!).Count().IsEqualTo(1);
@@ -338,7 +337,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD ORDER BY разбирает одно поле и направление сортировки")]
     public async Task Load_order_by_single_field(string orderBy, LoadOrderDirection expectedDirection)
     {
-        var load = ParseLoad($"LOAD id FROM [orders.csv] {orderBy};");
+        var load = ParseLoad($"LOAD id FROM Csv(path='orders.csv') {orderBy};");
 
         await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
         await Assert.That(load.OrderBy![0].Direction).IsEqualTo(expectedDirection);
@@ -350,7 +349,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD ORDER BY несколько полей сохраняет порядок и допускает trailing comma")]
     public async Task Load_order_by_multiple_fields_preserves_order()
     {
-        var load = ParseLoad("LOAD id FROM [orders.csv] ORDER BY city ASC, amount * 2 DESC, id,;");
+        var load = ParseLoad("LOAD id FROM Csv(path='orders.csv') ORDER BY city ASC, amount * 2 DESC, id,;");
 
         await Assert.That(load.OrderBy!).Count().IsEqualTo(3);
         await Assert.That(((NameExpr)load.OrderBy![0].Expression).Value).IsEqualTo("city");
@@ -365,7 +364,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD ORDER BY работает после WHERE")]
     public async Task Load_order_by_after_where()
     {
-        var load = ParseLoad("LOAD id FROM [orders.csv] WHERE active = true ORDER BY amount DESC;");
+        var load = ParseLoad("LOAD id FROM Csv(path='orders.csv') WHERE active = true ORDER BY amount DESC;");
 
         await Assert.That(load.Where).IsNotNull();
         await Assert.That(load.OrderBy!).Count().IsEqualTo(1);
@@ -380,7 +379,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD LIMIT OFFSET разбирается после source clauses")]
     public async Task Load_limit_offset_parses_integer_values(string clause, long expectedLimit, long? expectedOffset)
     {
-        var load = ParseLoad($"LOAD id FROM [orders.csv] {clause};");
+        var load = ParseLoad($"LOAD id FROM Csv(path='orders.csv') {clause};");
 
         await Assert.That(load.Limit).IsEqualTo(expectedLimit);
         await Assert.That(load.Offset).IsEqualTo(expectedOffset);
@@ -390,13 +389,13 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD LIMIT хранит span всего LIMIT clause")]
     public async Task Load_limit_keeps_value_span()
     {
-        var load = ParseLoad("LOAD id FROM [orders.csv] LIMIT 0;");
+        var load = ParseLoad("LOAD id FROM Csv(path='orders.csv') LIMIT 0;");
 
         await Assert.That(load.Limit).IsEqualTo(0);
         await Assert.That(load.LimitPart).IsNotNull();
         await Assert.That(load.LimitPart!.Span.StartRow).IsEqualTo(1u);
-        await Assert.That(load.LimitPart.Span.StartColumn).IsEqualTo(26u);
-        await Assert.That(load.LimitPart.Span.EndColumn).IsEqualTo(33u);
+        await Assert.That(load.LimitPart.Span.StartColumn).IsEqualTo(36u);
+        await Assert.That(load.LimitPart.Span.EndColumn).IsEqualTo(43u);
     }
 
     [Test]
@@ -406,7 +405,7 @@ public sealed class LoadParsingTests
         var load = ParseLoad(
             """
             LOAD city
-            FROM [orders.csv]
+            FROM Csv(path='orders.csv')
             WHERE active = true
             GROUP BY city
             ORDER BY city DESC
@@ -422,10 +421,10 @@ public sealed class LoadParsingTests
     }
 
     [Test]
-    [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=name);")]
-    [Arguments("LOAD id AS id FROM [orders.csv] (delimiter=null);")]
-    [Arguments("LOAD id AS id FROM [orders.csv] (csv delimiter=',');")]
-    [Arguments("LOAD id AS id FROM [orders.csv] (csv delimiter=',' header=true);")]
+    [Arguments("LOAD id AS id FROM Csv(path='orders.csv', delimiter=name);")]
+    [Arguments("LOAD id AS id FROM Csv(path='orders.csv', delimiter=null);")]
+    [Arguments("LOAD id AS id FROM Csv(path='orders.csv' delimiter=',');")]
+    [Arguments("LOAD id AS id FROM Csv(path='orders.csv') (csv delimiter=',' header=true);")]
     [DisplayName("LOAD source options запрещает name null и пропущенные запятые")]
     public async Task Load_options_reject_invalid_values_and_missing_commas(string text)
     {
@@ -434,54 +433,55 @@ public sealed class LoadParsingTests
 
     [Test]
     [Arguments("")]
-    [Arguments("LOAD * FROM [orders.csv]")]
-    [Arguments("LOAD id FROM [orders.csv]")]
-    [Arguments("LOAD FROM [orders.csv];")]
+    [Arguments("LOAD * FROM Csv(path='orders.csv')")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv')")]
+    [Arguments("LOAD FROM Csv(path='orders.csv');")]
     [Arguments("LOAD id [orders.csv];")]
     [Arguments("LOAD id FROM;")]
     [Arguments("LOAD id FROM orders.csv;")]
-    [Arguments("LOAD * id FROM [orders.csv];")]
-    [Arguments("LOAD *, id FROM [orders.csv];")]
-    [Arguments("LOAD id,, name FROM [orders.csv];")]
-    [Arguments("LOAD id AS FROM [orders.csv];")]
-    [Arguments("LOAD amount + 1 FROM [orders.csv];")]
-    [Arguments("LOAD amount + 1 AS FROM [orders.csv];")]
-    [Arguments("LOAD amount + 1 AS 123 FROM [orders.csv];")]
-    [Arguments("LOAD id FROM [orders.csv] (csv,, delimiter=',');")]
-    [Arguments("LOAD id FROM [orders.csv] (csv delimiter=',');")]
-    [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=);")]
-    [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=null);")]
-    [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=name);")]
-    [Arguments("LOAD id FROM [orders.csv] (csv, delimiter=',',); extra")]
-    [Arguments("LOAD id WHERE active FROM [orders.csv];")]
-    [Arguments("LOAD id FROM [orders.csv] WHERE;")]
-    [Arguments("LOAD id FROM [orders.csv] WHERE amount > 10 WHERE active;")]
-    [Arguments("LOAD id FROM [orders.csv] WHERE amount > 10 (csv);")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER;")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER BY;")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER BY id,, name;")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER BY id WHERE active;")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER id;")]
-    [Arguments("LOAD id FROM [orders.csv] GROUP;")]
-    [Arguments("LOAD id FROM [orders.csv] GROUP BY;")]
-    [Arguments("LOAD id FROM [orders.csv] GROUP BY id,, name;")]
-    [Arguments("LOAD id FROM [orders.csv] GROUP BY id WHERE active;")]
-    [Arguments("LOAD id FROM [orders.csv] ORDER BY id GROUP BY id;")]
-    [Arguments("LOAD id FROM [orders.csv] OFFSET 10;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10.5;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT -1;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 OFFSET;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 OFFSET 2.5;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 LIMIT 20;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 WHERE active;")]
-    [Arguments("LOAD id FROM [orders.csv] LIMIT 10 ORDER BY id;")]
-    [Arguments("[orders]: LOAD id FROM [orders.csv];")]
-    [Arguments("where: LOAD id FROM [orders.csv];")]
-    [Arguments("123orders: LOAD id FROM [orders.csv];")]
-    [Arguments("orders-table: LOAD id FROM [orders.csv];")]
-    [Arguments("orders.table: LOAD id FROM [orders.csv];")]
-    [Arguments("orders LOAD id FROM [orders.csv];")]
+    [Arguments("LOAD * id FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD *, id FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id,, name FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id AS FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD amount + 1 FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD amount + 1 AS FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD amount + 1 AS 123 FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv',, delimiter=',');")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv' delimiter=',');")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv', header);")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv', delimiter=);")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv', delimiter=null);")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv', delimiter=name);")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv', delimiter=',',); extra")]
+    [Arguments("LOAD id WHERE active FROM Csv(path='orders.csv');")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') WHERE;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') WHERE amount > 10 WHERE active;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') WHERE amount > 10 (csv);")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER BY;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER BY id,, name;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER BY id WHERE active;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER id;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') GROUP;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') GROUP BY;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') GROUP BY id,, name;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') GROUP BY id WHERE active;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') ORDER BY id GROUP BY id;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') OFFSET 10;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10.5;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT -1;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 OFFSET;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 OFFSET 2.5;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 LIMIT 20;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 WHERE active;")]
+    [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 ORDER BY id;")]
+    [Arguments("[orders]: LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("where: LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("123orders: LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("orders-table: LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("orders.table: LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("orders LOAD id FROM Csv(path='orders.csv');")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {
@@ -496,10 +496,80 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD boolean option value не зависит от регистра")]
     public async Task Load_boolean_option_case_variants(string value, bool expected)
     {
-        var load = ParseLoad($"LOAD id AS id FROM [orders.csv] (header={value});");
+        var load = ParseLoad($"LOAD id AS id FROM Csv(path='orders.csv', header={value});");
 
-        await Assert.That(load.Options).Count().IsEqualTo(1);
-        await AssertOption<BooleanLiteral, bool>(load.Options[0], "header", literal => literal.Value, expected);
+        await Assert.That(load.SourceCall.Options).Count().IsEqualTo(2);
+        await AssertOption(load.SourceCall, "header", expected);
+    }
+
+    [Test]
+    [DisplayName("Script.Parse разбирает несколько LOAD statement и сохраняет порядок")]
+    public async Task Script_parse_multiple_load_statements_preserves_order()
+    {
+        var result = Script.Parse(
+            """
+            LOAD * FROM Csv(path='orders.csv');
+            LOAD id, amount AS amount FROM Excel(path='customers.xlsx', sheet='Sheet1');
+            """);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Statements).Count().IsEqualTo(2);
+
+        var first = (LoadStatement)result.Value.Statements[0];
+        var second = (LoadStatement)result.Value.Statements[1];
+
+        await AssertOption(first.SourceCall, "path", "orders.csv");
+        await Assert.That(first.Fields).IsNull();
+        await AssertOption(second.SourceCall, "path", "customers.xlsx");
+        await Assert.That(second.Fields).IsNotNull();
+        await Assert.That(second.Fields!).Count().IsEqualTo(2);
+    }
+
+    [Test]
+    [DisplayName("Script.Parse допускает комментарии и переносы между statement")]
+    public async Task Script_parse_allows_comments_and_whitespace_between_statements()
+    {
+        var result = Script.Parse(
+            """
+            // first source
+            LOAD id FROM Csv(path='orders.csv');
+
+            /*
+              second source
+            */
+            LOAD name FROM Csv(path='users.csv');
+            """);
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value.Statements).Count().IsEqualTo(2);
+        await AssertOption(((LoadStatement)result.Value.Statements[0]).SourceCall, "path", "orders.csv");
+        await AssertOption(((LoadStatement)result.Value.Statements[1]).SourceCall, "path", "users.csv");
+    }
+
+    [Test]
+    [DisplayName("Script.Parse пустой скрипт считает ошибкой")]
+    public async Task Script_parse_rejects_empty_script()
+    {
+        var result = Script.Parse("");
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error.Message).IsNotEmpty();
+    }
+
+    [Test]
+    [DisplayName("Script.Parse если один statement невалиден возвращает LangError")]
+    public async Task Script_parse_returns_error_when_any_statement_is_invalid()
+    {
+        var result = Script.Parse(
+            """
+            LOAD id FROM Csv(path='orders.csv');
+            LOAD id FROM Csv(path='broken.csv')
+            LOAD name FROM Csv(path='users.csv');
+            """);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).IsTypeOf<LangError>();
+        await Assert.That(result.Error.Message).IsNotEmpty();
     }
 
     [Test]
@@ -532,17 +602,30 @@ public sealed class LoadParsingTests
         return load.Fields ?? throw new InvalidOperationException("Expected explicit LOAD fields, got LOAD *.");
     }
 
-    private static async Task AssertOption<TLiteral, TValue>(
-        LoadOption option,
-        string name,
-        Func<TLiteral, TValue> getValue,
-        TValue expected)
-        where TLiteral : Literal
+    private static async Task AssertOption(LoadSourceCall sourceCall, string name, object expected)
     {
+        var option = sourceCall.Options.SingleOrDefault(option => option.Name == name);
+        await Assert.That(option).IsNotNull();
+        await AssertOption(option!, name, expected);
+    }
+
+    private static async Task AssertOption(LoadOption option, string name, object expected)
+    {
+        var actual = LiteralValue(option.Value);
         await Assert.That(option.Name).IsEqualTo(name);
-        await Assert.That(option.Value).IsTypeOf<TLiteral>();
-        var literal = (TLiteral)option.Value!;
-        await Assert.That(getValue(literal)).IsEqualTo(expected);
+        await Assert.That(actual).IsEqualTo(expected);
+    }
+
+    private static object LiteralValue(Literal literal)
+    {
+        return literal switch
+        {
+            StringLiteral value => value.Value,
+            BooleanLiteral value => value.Value,
+            IntegerLiteral value => value.Value,
+            NumberLiteral value => value.Value,
+            _ => throw new InvalidOperationException($"Unexpected option literal type '{literal.GetType().Name}'.")
+        };
     }
 
     private static async Task AssertInvalidStatement(string text)

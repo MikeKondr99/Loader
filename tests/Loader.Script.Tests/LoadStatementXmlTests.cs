@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -27,7 +27,7 @@ public sealed class LoadStatementXmlTests
                 Text(Int(id)) AS id,
                 name,
                 source
-            FROM [people.xml] (xml, table='person')
+            FROM Xml(path='people.xml', table='person')
             WHERE city != 'Berlin'
             ORDER BY id ASC;
             """);

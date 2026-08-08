@@ -59,7 +59,7 @@ public class LoadStatementExecutor
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.Prepare");
         activity?
             .SetTag("load.table_name", statement.TableName)
-            .SetSanitizedTag("load.source", statement.Source);
+            .SetTag("load.source_provider", statement.SourceCall.Name);
 
         // 1. По FROM и options выбираем provider.
         var source = await ResolveProviderAsync(context, statement, cancellationToken).ConfigureAwait(false);
@@ -117,7 +117,7 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken)
     {
-        context.Logger.ResolvingLoadProvider(statement.Source);
+        context.Logger.ResolvingLoadProvider(statement.SourceCall.Name);
         var source = await ProviderResolver
             .ResolveAsync(statement, context, cancellationToken)
             .ConfigureAwait(false);
@@ -131,7 +131,7 @@ public class LoadStatementExecutor
         LoadProviderSource source,
         CancellationToken cancellationToken)
     {
-        context.Logger.OpeningLoadReader(statement.Source);
+        context.Logger.OpeningLoadReader(statement.SourceCall.Name);
         try
         {
             return await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);

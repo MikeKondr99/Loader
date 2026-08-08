@@ -21,5 +21,5 @@ orders: LOAD
    [sepal.width].Num() as sepal_width,
    [petal.length].Num() as petal_length,
    [petal.width].Num() as petal_width,
-FROM [iris.csv] (csv, delimiter=',', header=true);
+FROM Csv(path='iris.csv', delimiter=',', header=true);
 ```

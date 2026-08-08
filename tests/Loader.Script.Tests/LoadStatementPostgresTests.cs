@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres source перегружает данные через temp в final table")]
+    [DisplayName("LOAD РёР· Postgres source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
     public async Task Postgres_load_materializes_expected_final_table()
     {
         // Arrange
@@ -43,7 +43,7 @@ public sealed class LoadStatementPostgresTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{postgres.ConnectionString}}] (postgres)
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
             SQL SELECT * FROM public.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 
@@ -64,7 +64,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres nullable numeric не падает при записи temp table")]
+    [DisplayName("LOAD РёР· Postgres nullable numeric РЅРµ РїР°РґР°РµС‚ РїСЂРё Р·Р°РїРёСЃРё temp table")]
     public async Task Postgres_load_allows_null_numeric_in_temp_table()
     {
         // Arrange
@@ -91,7 +91,7 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 id,
                 amount
-            FROM [{{postgres.ConnectionString}}] (postgres)
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
             SQL SELECT * FROM public.{{sourceTable}} ORDER BY id ASC;
             """);
 
@@ -112,7 +112,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres сохраняет final table с физическими columnN при пользовательских alias")]
+    [DisplayName("LOAD РёР· Postgres СЃРѕС…СЂР°РЅСЏРµС‚ final table СЃ С„РёР·РёС‡РµСЃРєРёРјРё columnN РїСЂРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… alias")]
     public async Task Postgres_load_keeps_final_table_physical_columns_for_user_aliases()
     {
         // Arrange
@@ -139,7 +139,7 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 city AS City,
                 city AS Город
-            FROM [{{postgres.ConnectionString}}] (postgres)
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
             SQL SELECT * FROM public.{{sourceTable}} WHERE amount > 0 ORDER BY city ASC;
             """);
 

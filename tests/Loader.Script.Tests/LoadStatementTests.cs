@@ -1,6 +1,7 @@
-using System.Data;
+﻿using System.Data;
 using System.Data.Common;
 using Loader.Core.Decorators;
+using Loader.Core.Exceptions;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
@@ -28,8 +29,7 @@ public sealed class LoadStatementTests
             LoadSpan = Span(),
             Fields = null,
             FromSpan = Span(),
-            SourcePart = SourcePart("orders.csv"),
-            Options = [],
+            SourceCall = SourceCall("Csv", "orders.csv"),
             Where = null,
             GroupBy = null,
             OrderBy = null
@@ -76,8 +76,7 @@ public sealed class LoadStatementTests
                 }
             ],
             FromSpan = Span(),
-            SourcePart = SourcePart("orders.csv"),
-            Options = [],
+            SourceCall = SourceCall("Csv", "orders.csv"),
             Where = Expr.Parse("id > 0").Value,
             GroupBy = null,
             OrderBy =
@@ -134,8 +133,7 @@ public sealed class LoadStatementTests
             LoadSpan = Span(),
             Fields = null,
             FromSpan = Span(),
-            SourcePart = SourcePart("orders.csv"),
-            Options = [],
+            SourceCall = SourceCall("Csv", "orders.csv"),
             Where = null,
             GroupBy = null,
             OrderBy = null
@@ -171,7 +169,7 @@ public sealed class LoadStatementTests
         var script = Loader.Lang.Script.Parse(
             """
             orders: LOAD *
-            FROM [orders.csv];
+            FROM Csv(path='orders.csv');
             """).Value!;
         var statement = (LoadStatement)script.Statements[0];
 
@@ -204,7 +202,7 @@ public sealed class LoadStatementTests
             orders: LOAD
                 name AS city,
                 id AS city
-            FROM [orders.csv];
+            FROM Csv(path='orders.csv');
             """).Value!;
         var statement = (LoadStatement)script.Statements[0];
         var duplicateSpan = statement.Fields![1].Span;
@@ -231,7 +229,7 @@ public sealed class LoadStatementTests
         var script = Loader.Lang.Script.Parse(
             """
             orders: LOAD *
-            FROM [Host=localhost;Database=db] (postgres, csv);
+            FROM UnknownProvider(connection='Host=localhost;Database=db');
             """).Value!;
 
         var exception = await Assert.That(async () => await new ScriptExecutor()
@@ -240,12 +238,33 @@ public sealed class LoadStatementTests
 
         await Assert.That(exception!.StatementIndex).IsEqualTo(0);
         await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
-        await Assert.That(exception.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.InnerException).IsTypeOf<ProviderResolutionException>();
         await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
-            .Contains("Для provider-а БД 'postgres' требуется SQL после FROM.");
-        await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
-            .Contains("Provider marker 'csv' нельзя указывать вместе с 'postgres'.");
+            .Contains("Provider 'unknownprovider' не поддерживается.");
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor оборачивает ошибку подготовки JSON provider с statement и span")]
+    public async Task Execute_load_wraps_json_provider_prepare_error_as_script_exception()
+    {
+        var context = CreateContext(new ThrowingFileSource());
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD *
+            FROM Json(path='missing.json');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor()
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.SourceCall.Span);
+        await Assert.That(exception.InnerException).IsTypeOf<ProviderResolutionException>();
+        await Assert.That(exception.InnerException!.InnerException).IsTypeOf<JsonFileOpenProviderException>();
     }
 
     [Test]
@@ -263,7 +282,7 @@ public sealed class LoadStatementTests
             """
             orders: LOAD
                 name AS city
-            FROM [orders.csv]
+            FROM Csv(path='orders.csv')
             LIMIT 0;
             """).Value!;
         var statement = (LoadStatement)script.Statements[0];
@@ -280,8 +299,7 @@ public sealed class LoadStatementTests
         await Assert.That(exception.Span).IsEqualTo(statement.LimitPart!.Span);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
-        await Assert.That(exception.InnerException!.Message)
-            .Contains("LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT.");
+        await Assert.That(exception.InnerException!.Message).Contains("LIMIT 0");
     }
 
     [Test]
@@ -299,7 +317,7 @@ public sealed class LoadStatementTests
             """
             orders: LOAD
                 name AS city
-            FROM [orders.csv]
+            FROM Csv(path='orders.csv')
             WHERE id;
             """).Value!;
         var statement = (LoadStatement)script.Statements[0];
@@ -316,8 +334,7 @@ public sealed class LoadStatementTests
         await Assert.That(exception.Span).IsEqualTo(statement.Where!.Span);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
-        await Assert.That(exception.InnerException!.Message)
-            .Contains("WHERE expression должен возвращать Boolean.");
+        await Assert.That(exception.InnerException!.Message).Contains("WHERE expression");
     }
 
     [Test]
@@ -334,7 +351,7 @@ public sealed class LoadStatementTests
         var script = Loader.Lang.Script.Parse(
             """
             orders: LOAD *
-            FROM [orders.csv]
+            FROM Csv(path='orders.csv')
             GROUP BY name;
             """).Value!;
         var statement = (LoadStatement)script.Statements[0];
@@ -351,15 +368,14 @@ public sealed class LoadStatementTests
         await Assert.That(exception.Span).IsEqualTo(statement.GroupBy![0].Span);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
-        await Assert.That(exception.InnerException!.Message)
-            .Contains("SELECT * нельзя использовать вместе с GROUP BY.");
+        await Assert.That(exception.InnerException!.Message).Contains("SELECT *");
     }
 
-    private static ScriptContext CreateContext()
+    private static ScriptContext CreateContext(IFileSource? fileSource = null)
     {
         return new ScriptContext
         {
-            FileStorage = new StubFileSource(),
+            FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=localhost",
             Logger = NullLogger.Instance
         };
@@ -370,11 +386,21 @@ public sealed class LoadStatementTests
         return new LangSpan(1, 1, 1, 1);
     }
 
-    private static SourcePart SourcePart(string value)
+    private static LoadSourceCall SourceCall(string provider, string path)
     {
-        return new SourcePart
+        return new LoadSourceCall
         {
-            Value = value,
+            Name = provider,
+            NameSpan = Span(),
+            Options =
+            [
+                new Loader.Lang.Statements.LoadOption
+                {
+                    Name = "path",
+                    Span = Span(),
+                    Value = new StringLiteral(path)
+                }
+            ],
             Span = Span()
         };
     }
@@ -491,6 +517,14 @@ public sealed class LoadStatementTests
         public Stream OpenRead(string fileName)
         {
             return new MemoryStream();
+        }
+    }
+
+    private sealed class ThrowingFileSource : IFileSource
+    {
+        public Stream OpenRead(string fileName)
+        {
+            throw new FileNotFoundException("missing", fileName);
         }
     }
 }

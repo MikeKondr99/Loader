@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementClickHouseTests
     }
 
     [Test]
-    [DisplayName("LOAD из ClickHouse source перегружает данные через temp в final table")]
+    [DisplayName("LOAD РёР· ClickHouse source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
     public async Task ClickHouse_load_materializes_expected_final_table()
     {
         // Arrange
@@ -48,7 +48,7 @@ public sealed class LoadStatementClickHouseTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{database.ConnectionString}}] (clickhouse)
+            FROM ClickHouse(connection='{{database.ConnectionString}}')
             SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 

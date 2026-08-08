@@ -12,13 +12,13 @@ namespace Loader.Script.Tests;
 public sealed class LoadProviderResolverTests
 {
     [Test]
-    [DisplayName("Resolver выбирает файловый provider по расширению если marker не указан")]
-    public async Task Resolve_uses_file_extension_when_provider_marker_is_absent()
+    [DisplayName("Resolver выбирает файловый provider по имени SourceCall")]
+    public async Task Resolve_uses_file_provider_name()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
-            CreateStatement("orders.csv"),
+            CreateStatement("Csv", [Option("path", "orders.csv")]),
             CreateContext());
 
         await Assert.That(source.Kind).IsEqualTo("csv");
@@ -26,15 +26,15 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает DB provider по marker и SQL инструкции")]
-    public async Task Resolve_uses_database_provider_marker_and_sql()
+    [DisplayName("Resolver выбирает DB provider по имени SourceCall и SQL инструкции")]
+    public async Task Resolve_uses_database_provider_name_and_sql()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Host=localhost;Database=db",
-                [Marker("postgres")],
+                "Postgres",
+                [Option("connection", "Host=localhost;Database=db")],
                 sql: "SELECT * FROM public.orders"),
             CreateContext());
 
@@ -43,15 +43,15 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает Hive provider по marker и SQL инструкции")]
-    public async Task Resolve_uses_hive_provider_marker_and_sql()
+    [DisplayName("Resolver выбирает Hive provider по имени SourceCall и SQL инструкции")]
+    public async Task Resolve_uses_hive_provider_name_and_sql()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [Marker("hive")],
+                "Hive",
+                [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
                 sql: "SELECT * FROM default.orders"),
             CreateContext());
 
@@ -60,35 +60,38 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver для Hive поддерживает алиасы provider marker")]
-    [Arguments("hive")]
+    [DisplayName("Resolver для Hive отклоняет aliases provider name")]
     [Arguments("apachehive")]
     [Arguments("apache-hive")]
-    public async Task Resolve_uses_hive_provider_aliases(string providerMarker)
+    public async Task Resolve_rejects_hive_provider_aliases(string providerName)
     {
         var resolver = new LoadProviderResolver();
+        var providerSpan = Span(4, 12, 20);
 
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [Marker(providerMarker)],
-                sql: "SELECT * FROM analytics.orders"),
-            CreateContext());
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    providerName,
+                    [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
+                    providerSpan: providerSpan,
+                    sql: "SELECT * FROM analytics.orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
 
-        await Assert.That(source.Kind).IsEqualTo("hive");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(providerSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
     }
 
     [Test]
-    [DisplayName("Resolver для Hive читает marker без учета регистра")]
-    public async Task Resolve_uses_hive_provider_marker_case_insensitive()
+    [DisplayName("Resolver для Hive читает provider name без учета регистра")]
+    public async Task Resolve_uses_hive_provider_name_case_insensitive()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [Marker("HiVe")],
+                "HiVe",
+                [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
                 sql: "SELECT * FROM default.orders"),
             CreateContext());
 
@@ -105,8 +108,8 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                    [Marker("hive")],
+                    "Hive",
+                    [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
                     fromSpan),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
@@ -125,9 +128,9 @@ public sealed class LoadProviderResolverTests
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Driver={Hive};Host=localhost;Port=10000;Schema=default",
+                "Hive",
                 [
-                    Marker("hive"),
+                    Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default"),
                     Option("table", "default.orders")
                 ],
                 sql: "SELECT * FROM default.orders"),
@@ -145,8 +148,8 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Driver={__loader_missing_hive_driver__};Host=localhost;Port=10000;Schema=default",
-                [Marker("hive")],
+                "Hive",
+                [Option("connection", "Driver={__loader_missing_hive_driver__};Host=localhost;Port=10000;Schema=default")],
                 sql: "SELECT * FROM default.orders"),
             CreateContext());
 
@@ -156,20 +159,21 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver отклоняет неизвестный source без provider marker")]
-    public async Task Resolve_rejects_unknown_source_without_provider_marker()
+    [DisplayName("Resolver отклоняет неизвестный provider name и подсказывает ближайший")]
+    public async Task Resolve_rejects_unknown_provider_name_with_suggestion()
     {
         var resolver = new LoadProviderResolver();
-        var fromSpan = Span(4, 1, 5);
+        var providerSpan = Span(4, 12, 20);
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement("orders.unknown", fromSpan: fromSpan),
+                CreateStatement("Postgre", [Option("connection", "Host=localhost")], providerSpan: providerSpan),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("Нужно указать provider marker");
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(providerSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
+        await Assert.That(exception.Errors[0].Message).Contains("Возможно вы имели в виду 'Postgres'");
     }
 
     [Test]
@@ -180,7 +184,8 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.csv",
+                    "Csv",
+                    [Option("path", "orders.csv")],
                     sql: "SELECT * FROM orders"),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
@@ -197,8 +202,8 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "Host=localhost;Database=db",
-                    [Marker("postgres")],
+                    "Postgres",
+                    [Option("connection", "Host=localhost;Database=db")],
                     sql: "   "),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
@@ -216,8 +221,11 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.csv",
-                    [Option("header", "yes", headerSpan)]),
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("header", "yes", headerSpan)
+                    ]),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
 
@@ -236,8 +244,11 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.csv",
-                    [Option("delimiter", "||", delimiterSpan)]),
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("delimiter", "||", delimiterSpan)
+                    ]),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
 
@@ -256,8 +267,9 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.csv",
+                    "Csv",
                     [
+                        Option("path", "orders.csv"),
                         Option("header", new BooleanLiteral(true), Span(5, 20, 31)),
                         Option("header", new BooleanLiteral(false), duplicateSpan)
                     ]),
@@ -278,9 +290,9 @@ public sealed class LoadProviderResolverTests
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "nested.json",
+                "Json",
                 [
-                    Marker("json"),
+                    Option("path", "nested.json"),
                     Option("root", "response.items")
                 ]),
             CreateContext(new StubFileSource("""
@@ -313,9 +325,9 @@ public sealed class LoadProviderResolverTests
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "nested.json",
+                "Json",
                 [
-                    Marker("json"),
+                    Option("path", "nested.json"),
                     Option("root", "blocks.1.items")
                 ]),
             CreateContext(new StubFileSource("""
@@ -352,9 +364,9 @@ public sealed class LoadProviderResolverTests
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "tables.json",
+                "Json",
                 [
-                    Marker("json"),
+                    Option("path", "tables.json"),
                     Option("root", "tables.0.data")
                 ]),
             CreateContext(new StubFileSource("""
@@ -392,9 +404,9 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.json",
+                    "Json",
                     [
-                        Marker("json"),
+                        Option("path", "orders.json"),
                         Option("root", string.Empty, rootSpan)
                     ]),
                 CreateContext(new StubFileSource("[]"))))
@@ -414,9 +426,9 @@ public sealed class LoadProviderResolverTests
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "orders.json",
+                    "Json",
                     [
-                        Marker("json"),
+                        Option("path", "orders.json"),
                         Option("root", new IntegerLiteral(1), rootSpan)
                     ]),
                 CreateContext(new StubFileSource("[]"))))
@@ -429,19 +441,40 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver JSON ошибку открытия файла оборачивает как ProviderResolution ошибку")]
+    public async Task Resolve_json_wraps_file_open_error_as_provider_resolution()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceCallSpan = Span(5, 10, 42);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Json",
+                    [Option("path", "missing.json")],
+                    sourceCallSpan: sourceCallSpan),
+                CreateContext(new ThrowingFileSource())))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceCallSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("Не удалось подготовить provider 'Json'");
+        await Assert.That(exception.InnerException).IsTypeOf<JsonFileOpenProviderException>();
+    }
+
+    [Test]
     [DisplayName("Resolver возвращает несколько ошибок provider options")]
     public async Task Resolve_returns_multiple_provider_option_errors()
     {
         var resolver = new LoadProviderResolver();
         var fromSpan = Span(6, 1, 5);
-        var csvSpan = Span(6, 48, 51);
+        var duplicateConnectionSpan = Span(6, 48, 51);
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "Host=localhost;Database=db",
+                    "Postgres",
                     [
-                        Marker("postgres"),
-                        Marker("csv", csvSpan)
+                        Option("connection", "Host=localhost;Database=db", Span(6, 10, 46)),
+                        Option("connection", "Host=localhost;Database=other", duplicateConnectionSpan)
                     ],
                     fromSpan),
                 CreateContext()))
@@ -449,13 +482,15 @@ public sealed class LoadProviderResolverTests
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(2);
         await Assert.That(exception.Errors.Select(static error => error.Span).ToArray())
-            .IsEquivalentTo([csvSpan, fromSpan], CollectionOrdering.Matching);
+            .IsEquivalentTo([duplicateConnectionSpan, fromSpan], CollectionOrdering.Matching);
     }
 
     private static LoadStatement CreateStatement(
-        string source,
+        string provider,
         List<LoadOption>? options = null,
         LangSpan? fromSpan = null,
+        LangSpan? providerSpan = null,
+        LangSpan? sourceCallSpan = null,
         string? sql = null)
     {
         return new LoadStatement
@@ -463,12 +498,13 @@ public sealed class LoadProviderResolverTests
             TableName = null,
             Fields = null,
             FromSpan = fromSpan ?? Span(),
-            SourcePart = new SourcePart
+            SourceCall = new LoadSourceCall
             {
-                Value = source,
-                Span = Span()
+                Name = provider,
+                NameSpan = providerSpan ?? Span(),
+                Options = options ?? [],
+                Span = sourceCallSpan ?? Span()
             },
-            Options = options ?? [],
             SqlPart = sql is null
                 ? null
                 : new SqlPart
@@ -479,21 +515,6 @@ public sealed class LoadProviderResolverTests
             Where = null,
             GroupBy = null,
             OrderBy = null
-        };
-    }
-
-    private static LoadOption Marker(string name)
-    {
-        return Marker(name, Span());
-    }
-
-    private static LoadOption Marker(string name, LangSpan span)
-    {
-        return new LoadOption
-        {
-            Name = name,
-            Span = span,
-            Value = null
         };
     }
 
@@ -554,6 +575,14 @@ public sealed class LoadProviderResolverTests
         public Stream OpenRead(string fileName)
         {
             return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
+        }
+    }
+
+    private sealed class ThrowingFileSource : IFileSource
+    {
+        public Stream OpenRead(string fileName)
+        {
+            throw new FileNotFoundException("missing", fileName);
         }
     }
 }

@@ -17,7 +17,7 @@ statement
 load_statement
     : load_table_name?
     LOAD load_fields
-    FROM BLOCKED_NAME source_options?
+    FROM source_call
     (
         load_sql
         |
@@ -66,8 +66,8 @@ load_sql
     : SQL SQL_TEXT?
     ;
 
-source_options
-    : LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+source_call
+    : NAME LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
     ;
 
 option_list
@@ -75,8 +75,7 @@ option_list
     ;
 
 load_option
-    : NAME
-    | NAME EQUAL option_literal
+    : NAME EQUAL option_literal
     ;
 
 option_literal

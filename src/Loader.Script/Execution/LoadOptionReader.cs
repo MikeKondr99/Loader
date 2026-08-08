@@ -6,25 +6,14 @@ namespace Loader.Script;
 
 internal sealed class LoadOptionReader
 {
-    private readonly IReadOnlyList<LoadOption> _options;
     private readonly IReadOnlyDictionary<string, LoadOption> _optionsByName;
     private readonly List<LangError> _errors;
 
     public LoadOptionReader(IReadOnlyList<LoadOption> options, List<LangError> errors)
     {
-        _options = options;
         _errors = errors;
         _optionsByName = BuildOptionMap(options, errors);
     }
-
-    public IReadOnlyList<LoadOption> Markers => _options
-        .Where(static option => option.Value is null)
-        .ToArray();
-
-    public string? Provider => Markers
-        .FirstOrDefault()
-        ?.Name
-        .ToLowerInvariant();
 
     public string? String(string name)
     {
@@ -91,7 +80,7 @@ internal sealed class LoadOptionReader
         List<LangError> errors)
     {
         var map = new Dictionary<string, LoadOption>(StringComparer.OrdinalIgnoreCase);
-        foreach (var option in options.Where(static option => option.Value is not null))
+        foreach (var option in options)
         {
             if (map.TryAdd(option.Name, option))
             {

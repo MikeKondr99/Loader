@@ -31,7 +31,7 @@
   - [x] GROUP BY и Аггрегации
   - [x] LIMIT OFFSET
 - [ ] LOAD: стабилизация MVP
-  - [x] `ProviderResolution`: покрыты unknown marker/source, конфликт markers, неверный тип option, отсутствующая обязательная option.
+  - [x] `ProviderResolution`: покрыты unknown provider, неверный тип option, duplicate option, отсутствующая обязательная option.
   - [x] `ProviderResolution` и `QueryResolution` возвращают `LangError[]`; где позиция известна, у ошибки есть `LangSpan`.
   - [x] `QueryResolution`: покрыты duplicate alias, non-boolean `WHERE`, invalid aggregate/group by, `LIMIT 0`; unknown fields покрыты на query layer.
   - [x] Есть base `LoadScriptException` wrapper для `LoadScriptStageException` со `StatementIndex`, `Stage`, `Span`, `Errors`.

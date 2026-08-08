@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
-    [DisplayName("Script выполняет несколько LOAD из разных источников и возвращает final tables по порядку")]
+    [DisplayName("Script РІС‹РїРѕР»РЅСЏРµС‚ РЅРµСЃРєРѕР»СЊРєРѕ LOAD РёР· СЂР°Р·РЅС‹С… РёСЃС‚РѕС‡РЅРёРєРѕРІ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ final tables РїРѕ РїРѕСЂСЏРґРєСѓ")]
     public async Task Execute_script_loads_multiple_sources_into_clickhouse()
     {
         // Arrange
@@ -46,7 +46,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 name,
                 Upper(name) AS upper_name
-            FROM [orders.csv] (csv)
+            FROM Csv(path='orders.csv')
             WHERE name != 'Bob'
             ORDER BY name DESC;
 
@@ -54,7 +54,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 [user.name] AS name,
                 city
-            FROM [inventory.json] (json)
+            FROM Json(path='inventory.json')
             WHERE city = 'Moscow'
             ORDER BY [user.name] ASC;
 
@@ -62,7 +62,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 username,
                 city
-            FROM [{{database.ConnectionString}}] (clickhouse)
+            FROM ClickHouse(connection='{{database.ConnectionString}}')
             SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY username ASC;
             """);
 

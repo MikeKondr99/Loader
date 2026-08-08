@@ -10,7 +10,7 @@
 `LOAD` сейчас парсится в `LoadStatement`.
 
 ```text
-LOAD * FROM [orders.csv];
+LOAD * FROM Csv(path='orders.csv');
 ```
 
 Для формы `LOAD *` поле `LoadStatement.Fields` равно `null`. Это означает “взять все поля из source”.
@@ -19,7 +19,7 @@ LOAD * FROM [orders.csv];
 
 ```text
 orders:
-LOAD * FROM [orders.csv];
+LOAD * FROM Csv(path='orders.csv');
 ```
 
 В AST это `LoadStatement.TableName = "orders"`.
@@ -28,7 +28,7 @@ LOAD * FROM [orders.csv];
 LOAD
     amount * 1.2 AS gross_amount,
     city.Lower() AS city,
-FROM [orders.csv] (csv, delimiter=',', header=true);
+FROM Csv(path='orders.csv', delimiter=',', header=true);
 ```
 
 Для явного списка `LoadStatement.Fields` содержит поля в порядке из скрипта. Trailing comma разрешена.
@@ -36,18 +36,18 @@ FROM [orders.csv] (csv, delimiter=',', header=true);
 Короткая форма поля разворачивается на уровне парсинга:
 
 ```text
-LOAD id FROM [orders.csv];
+LOAD id FROM Csv(path='orders.csv');
 ```
 
 В AST это становится полем `id AS id`: `Name = "id"`, `Expression = NameExpr("id")`.
 
-`LoadStatement.Options` содержит provider/source options. Как в Qlik, options внутри скобок разделяются запятыми:
+`LoadStatement.SourceCall` содержит provider name и provider/source options. Как в Qlik, options внутри скобок разделяются запятыми:
 
 ```text
-(csv, delimiter=',', header=true)
+Csv(path='orders.csv', delimiter=',', header=true)
 ```
 
-- marker option: `csv` -> `Value = null`
+- provider name: `Csv` -> `LoadStatement.SourceCall.Name`
 - value option: `delimiter=','` -> `Value = StringLiteral(",")`
 - option value может быть только `string`, `integer`, `number`, `boolean`
 - `name` и `null` как option value запрещены
@@ -62,7 +62,7 @@ orders:
 LOAD
     id,
     Num(amount) AS amount
-FROM [orders.csv] (csv)
+FROM Csv(path='orders.csv')
 WHERE amount > 0
 GROUP BY id
 ORDER BY id DESC
@@ -82,5 +82,5 @@ OFFSET 10;
 Если нужно имя, совпадающее с keyword, используется blocked name:
 
 ```text
-LOAD [where] FROM [orders.csv];
+LOAD [where] FROM Csv(path='orders.csv');
 ```

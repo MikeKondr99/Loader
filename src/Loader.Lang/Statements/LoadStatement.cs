@@ -4,7 +4,7 @@ namespace Loader.Lang.Statements;
 
 /// <summary>
 /// LOAD statement: читает поля из source.
-/// Пример: <c>LOAD amount AS amount, city.Lower() AS city FROM [orders.csv] (csv, delimiter=',');</c>
+/// Пример: <c>LOAD amount AS amount, city.Lower() AS city FROM Csv(path='orders.csv', delimiter=',');</c>
 /// </summary>
 public sealed record LoadStatement : Statement
 {
@@ -24,17 +24,10 @@ public sealed record LoadStatement : Statement
 
     public required LangSpan FromSpan { get; init; }
 
-    public required SourcePart SourcePart { get; init; }
-
     /// <summary>
-    /// Source из части <c>FROM [source]</c> без квадратных скобок.
+    /// Provider call из части <c>FROM Csv(path='orders.csv')</c>.
     /// </summary>
-    public string Source => SourcePart.Value;
-
-    /// <summary>
-    /// Provider/source options из части <c>(csv, delimiter=',')</c>.
-    /// </summary>
-    public required List<LoadOption> Options { get; init; }
+    public required LoadSourceCall SourceCall { get; init; }
 
     /// <summary>
     /// Source SQL из части <c>SQL SELECT ...</c> после <c>FROM</c>.

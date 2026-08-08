@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 using Microsoft.Data.SqlClient;
 
 namespace Loader.Script.Tests;
@@ -16,7 +16,7 @@ public sealed class LoadStatementSqlServerTests
     }
 
     [Test]
-    [DisplayName("LOAD из SqlServer source перегружает данные через temp в final table")]
+    [DisplayName("LOAD РёР· SqlServer source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
     public async Task SqlServer_load_materializes_expected_final_table()
     {
         // Arrange
@@ -46,7 +46,7 @@ public sealed class LoadStatementSqlServerTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{sqlServer.ConnectionString}}] (sqlserver)
+            FROM SqlServer(connection='{{sqlServer.ConnectionString}}')
             SQL SELECT * FROM dbo.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 

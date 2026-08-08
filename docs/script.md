@@ -27,7 +27,7 @@ orders:
 LOAD
     id,
     Upper(name) AS name
-FROM [orders.csv] (csv, delimiter=',', header=true)
+FROM Csv(path='orders.csv', delimiter=',', header=true)
 WHERE id != '0'
 ORDER BY id;
 ```
@@ -39,23 +39,22 @@ users:
 LOAD
     id,
     name
-FROM [Host=localhost;Database=app;Username=postgres;Password=postgres]
-(postgres)
+FROM Postgres(connection='Host=localhost;Database=app;Username=postgres;Password=postgres')
 SQL SELECT id, name FROM public.users;
 ```
 
-Поддерживаемые markers в `LoadProviderResolver`:
+Поддерживаемые provider calls в `LoadProviderResolver`:
 
-- `csv`
-- `excel`, `xlsx`, `xls`, `xlsb`
-- `json`
-- `xml`
-- `qvd`
-- `postgres`, `postgresql`, `postgre`
-- `sqlserver`, `mssql`
-- `oracle`
-- `hive`, `apachehive`, `apache-hive`
-- `clickhouse`
+- `Csv(path='...')`
+- `Excel(path='...', sheet='...')`
+- `Json(path='...', root='...')`
+- `Xml(path='...', table='...')`
+- `Qvd(path='...')`
+- `Postgres(connection='...')`
+- `SqlServer(connection='...')`
+- `Oracle(connection='...')`
+- `Hive(connection='...')`
+- `ClickHouse(connection='...')`
 
 ## Telemetry
 

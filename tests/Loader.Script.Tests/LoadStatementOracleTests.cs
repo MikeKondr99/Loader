@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 using Oracle.ManagedDataAccess.Client;
 
 namespace Loader.Script.Tests;
@@ -16,7 +16,7 @@ public sealed class LoadStatementOracleTests
     }
 
     [Test]
-    [DisplayName("LOAD из Oracle source перегружает данные через temp в final table")]
+    [DisplayName("LOAD РёР· Oracle source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
     public async Task Oracle_load_materializes_expected_final_table()
     {
         // Arrange
@@ -51,7 +51,7 @@ public sealed class LoadStatementOracleTests
                 Text(ID) AS id,
                 Upper(NAME) AS name,
                 CITY AS city
-            FROM [{{oracle.ConnectionString}}] (oracle)
+            FROM Oracle(connection='{{oracle.ConnectionString}}')
             SQL SELECT * FROM {{sourceTable}} WHERE CITY != 'Berlin' ORDER BY ID ASC;
             """);
 
