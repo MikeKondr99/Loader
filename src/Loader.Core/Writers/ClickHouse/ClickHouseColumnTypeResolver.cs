@@ -126,8 +126,9 @@ internal sealed class ClickHouseColumnTypeResolver
             return "Float64";
         }
 
-        var precision = meta?.DecimalPrecision ?? field.NumericPrecision;
-        var scale = meta?.DecimalScale ?? field.NumericScale;
+        var shape = ResolveDecimalShape(field, meta);
+        var precision = shape.Precision;
+        var scale = shape.Scale;
         if (precision is not null && scale is not null)
         {
             return $"Decimal({precision.Value}, {scale.Value})";
@@ -136,6 +137,17 @@ internal sealed class ClickHouseColumnTypeResolver
         return field.ClrType == typeof(decimal)
             ? "Decimal(38, 10)"
             : "Float64";
+    }
+
+    private static (int? Precision, int? Scale) ResolveDecimalShape(DataField field, DataColumnMeta? meta)
+    {
+        var metaShape = NumericShape.Normalize(meta?.DecimalPrecision, meta?.DecimalScale);
+        if (metaShape.Precision is not null && metaShape.Scale is not null)
+        {
+            return metaShape;
+        }
+
+        return NumericShape.Normalize(field.NumericPrecision, field.NumericScale);
     }
 
     private static bool ShouldBeNullable(DataField field, DataColumnMeta? meta)

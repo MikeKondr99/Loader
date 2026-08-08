@@ -295,6 +295,29 @@ public sealed class ClickHouseProviderTests
         await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
     }
 
+    [Test]
+    [DisplayName("ClickHouse SUM decimal не возвращает invalid Decimal(0,0) shape")]
+    public async Task Sum_decimal_does_not_expose_invalid_decimal_shape()
+    {
+        await using var rawReader = await OpenReaderAsync(
+            """
+            select sum(amount) as total_amount
+            from values('amount Decimal64(2)', (12.34), (20.01))
+            """);
+        await using var reader = rawReader.Normalize();
+        var field = reader.DataSchema.Fields[0];
+
+        await Assert.That(field.DataType).IsEqualTo(DataType.Number);
+        await Assert.That(field.ClrType).IsEqualTo(typeof(decimal));
+        await AssertValidDecimalShape(field.NumericPrecision, field.NumericScale);
+        await Assert.That(reader).HaveData(
+            columns: ["total_amount"],
+            types: [DataType.Number],
+            rows: [
+                ValueTuple.Create(32.35m)
+            ]);
+    }
+
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("toString('example')", DataType.Text, "example");
@@ -349,5 +372,12 @@ public sealed class ClickHouseProviderTests
             {
                 Sql = sql
             });
+    }
+
+    private static async Task AssertValidDecimalShape(int? precision, int? scale)
+    {
+        await Assert.That(precision is null or > 0).IsTrue();
+        await Assert.That(scale is null or >= 0).IsTrue();
+        await Assert.That(precision == 0 && scale == 0).IsFalse();
     }
 }

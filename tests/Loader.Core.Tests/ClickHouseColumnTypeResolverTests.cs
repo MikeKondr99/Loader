@@ -66,6 +66,18 @@ public sealed class ClickHouseColumnTypeResolverTests
     }
 
     [Test]
+    [DisplayName("ClickHouse type resolver Number игнорирует invalid meta decimal shape")]
+    public async Task Number_invalid_meta_decimal_shape_falls_back_to_schema_decimal_shape()
+    {
+        var field = Field(DataType.Number, typeof(decimal), precision: 20, scale: 5);
+        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: 0, decimalScale: 0, maxCardinality: 20);
+
+        var actual = Resolve(field, meta);
+
+        await Assert.That(actual).IsEqualTo("Nullable(Decimal(20, 5))");
+    }
+
+    [Test]
     [MethodDataSource(nameof(TextCases))]
     [DisplayName("ClickHouse type resolver Text учитывает low cardinality cardinality exceeded и nullable")]
     public async Task Text_uses_low_cardinality_cardinality_exceeded_and_nullable(
@@ -136,6 +148,8 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (typeof(float), null, null, "Float32");
         yield return (typeof(double), null, null, "Float64");
         yield return (typeof(decimal), 9, 2, "Decimal(9, 2)");
+        yield return (typeof(decimal), 10, 0, "Decimal(10, 0)");
+        yield return (typeof(decimal), 0, 0, "Decimal(38, 10)");
         yield return (typeof(decimal), null, null, "Decimal(38, 10)");
         yield return (typeof(object), null, null, "Float64");
     }
