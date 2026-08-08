@@ -38,6 +38,11 @@ app.MapGet("/api/config", (IConfiguration configuration, IWebHostEnvironment env
         Environment = environment.EnvironmentName,
         config.TargetConnectionString,
         config.FileRoot,
+        PixBi = new
+        {
+            config.PixBi.Enabled,
+            BaseUri = config.PixBi.BaseUri?.ToString()
+        },
         Connections = config.Connections.Select(static connection => new
         {
             connection.Name,
@@ -137,7 +142,7 @@ app.MapPost("/api/run", async (
         FileStorage = new FileSystemSource(config.FileRoot),
         TargetConnectionString = config.TargetConnectionString,
         Logger = NullLogger.Instance,
-        ConnectionRegistry = new InMemoryConnectionRegistry(config.Connections)
+        ConnectionRegistry = config.CreateConnectionRegistry()
     };
 
     var stopwatch = Stopwatch.StartNew();
@@ -383,7 +388,8 @@ internal sealed record PlaygroundPreviewRows(string[] Columns, IReadOnlyList<obj
 internal sealed record PlaygroundConfig(
     string TargetConnectionString,
     string FileRoot,
-    IReadOnlyList<ScriptConnection> Connections)
+    IReadOnlyList<ScriptConnection> Connections,
+    PlaygroundPixBiConfig PixBi)
 {
     public static PlaygroundConfig From(IConfiguration configuration, IWebHostEnvironment environment)
     {
@@ -395,7 +401,31 @@ internal sealed record PlaygroundConfig(
         return new PlaygroundConfig(
             targetConnectionString,
             PlaygroundFiles.RootPath,
-            ReadConnections(configuration));
+            ReadConnections(configuration),
+            ReadPixBi(configuration));
+    }
+
+    public IConnectionRegistry CreateConnectionRegistry()
+    {
+        var registries = new List<IConnectionRegistry>
+        {
+            new InMemoryConnectionRegistry(Connections)
+        };
+
+        if (PixBi.Enabled)
+        {
+            registries.Add(new PixBiConnectionRegistry(
+                new HttpClient(),
+                new PixBiConnectionRegistryOptions
+                {
+                    BaseUri = PixBi.BaseUri ?? throw new InvalidOperationException("PixBi:BaseUri is required."),
+                    Username = PixBi.Username ?? throw new InvalidOperationException("PixBi:Username is required."),
+                    Password = PixBi.Password ?? throw new InvalidOperationException("PixBi:Password is required."),
+                    PageSize = PixBi.PageSize
+                }));
+        }
+
+        return new AggregateConnectionRegistry(registries);
     }
 
     private static IReadOnlyList<ScriptConnection> ReadConnections(IConfiguration configuration)
@@ -434,7 +464,33 @@ internal sealed record PlaygroundConfig(
             ConnectionString = connectionString
         };
     }
+
+    private static PlaygroundPixBiConfig ReadPixBi(IConfiguration configuration)
+    {
+        var section = configuration.GetSection("PixBi");
+        var enabled = section.GetValue("Enabled", false);
+        Uri? baseUri = null;
+        var baseUriText = section["BaseUri"];
+        if (!string.IsNullOrWhiteSpace(baseUriText))
+        {
+            baseUri = new Uri(baseUriText, UriKind.Absolute);
+        }
+
+        return new PlaygroundPixBiConfig(
+            enabled,
+            baseUri,
+            section["Username"],
+            section["Password"],
+            section.GetValue("PageSize", 50));
+    }
 }
+
+internal sealed record PlaygroundPixBiConfig(
+    bool Enabled,
+    Uri? BaseUri,
+    string? Username,
+    string? Password,
+    int PageSize);
 
 internal static class PlaygroundFiles
 {
