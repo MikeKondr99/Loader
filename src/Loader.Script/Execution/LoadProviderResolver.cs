@@ -1,5 +1,4 @@
 using System.Data.Common;
-using System.Text.RegularExpressions;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Providers.Excel;
@@ -30,13 +29,13 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
 
         var source = provider switch
         {
-            "csv" => Csv(statement, context, options),
-            "excel" or "xlsx" or "xls" or "xlsb" => Excel(statement, context, options),
+            "csv" => Csv(statement, context, options, errors),
+            "excel" or "xlsx" or "xls" or "xlsb" => Excel(statement, context, options, errors),
             "json" => errors.Count == 0
                 ? await JsonAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false)
                 : null,
             "xml" => await XmlAsync(statement, context, options, errors, cancellationToken).ConfigureAwait(false),
-            "qvd" => Qvd(statement, context),
+            "qvd" => Qvd(statement, context, errors),
             "postgres" or "postgresql" or "postgre" => Database(
                 "postgres",
                 statement,
@@ -86,10 +85,16 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
     private static LoadProviderSource Csv(
         LoadStatement statement,
         ScriptContext context,
-        LoadOptionReader options)
+        LoadOptionReader options,
+        List<LangError> errors)
     {
+        RejectSqlForFileProvider("csv", statement, errors);
         var delimiter = options.Character("delimiter", ',');
         var hasHeader = options.Boolean("header", true);
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
 
         return File(
             "csv",
@@ -109,10 +114,16 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
     private static LoadProviderSource Excel(
         LoadStatement statement,
         ScriptContext context,
-        LoadOptionReader options)
+        LoadOptionReader options,
+        List<LangError> errors)
     {
+        RejectSqlForFileProvider("excel", statement, errors);
         var sheet = options.String("sheet");
         var hasHeader = options.Boolean("header", true);
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
 
         return File(
             "excel",
@@ -129,8 +140,17 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
                 token));
     }
 
-    private static LoadProviderSource Qvd(LoadStatement statement, ScriptContext context)
+    private static LoadProviderSource Qvd(
+        LoadStatement statement,
+        ScriptContext context,
+        List<LangError> errors)
     {
+        RejectSqlForFileProvider("qvd", statement, errors);
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
         return File(
             "qvd",
             context.FileStorage,
@@ -162,6 +182,7 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectSqlForFileProvider("json", statement, errors);
         var arrayPath = JsonRootPath(options, errors);
         if (errors.Count > 0)
         {
@@ -222,6 +243,7 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectSqlForFileProvider("xml", statement, errors);
         var tableName = options.RequiredString(
             "table",
             statement.FromSpan,
@@ -260,32 +282,62 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
         bool requiresBuffer,
         Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open)
     {
-        var table = options.RequiredString(
-            "table",
-            statement.FromSpan,
-            $"Для provider-а БД '{kind}' требуется опция table='schema.table'.");
-        if (table is not null && !QualifiedTableNameRegex().IsMatch(table))
-        {
-            errors.Add(new LangError
-            {
-                Message = $"Имя таблицы '{table}' не поддерживается.",
-                Span = options.GetOption("table")?.Span ?? statement.FromSpan
-            });
-        }
-
+        var sql = SourceSql(kind, statement, errors);
         if (errors.Count > 0)
         {
             return null!;
         }
 
         var source = new ConnectionStringSource { ConnectionString = statement.Source };
-        var config = new SqlTableConfig { Sql = $"SELECT * FROM {table}" };
+        var config = new SqlTableConfig { Sql = sql! };
         return new LoadProviderSource
         {
             Kind = kind,
             RequiresBuffer = requiresBuffer,
             OpenReaderAsync = token => open(source, config, token)
         };
+    }
+
+    private static string? SourceSql(
+        string kind,
+        LoadStatement statement,
+        List<LangError> errors)
+    {
+        var sql = statement.Sql;
+        if (sql is not null && sql.Trim().Length == 0)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Для provider-а БД '{kind}' SQL не должен быть пустым.",
+                Span = statement.SqlPart?.Span ?? statement.FromSpan
+            });
+        }
+
+        if (sql is null)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Для provider-а БД '{kind}' требуется SQL после FROM.",
+                Span = statement.FromSpan
+            });
+        }
+
+        return sql;
+    }
+
+    private static void RejectSqlForFileProvider(
+        string kind,
+        LoadStatement statement,
+        List<LangError> errors)
+    {
+        if (statement.SqlPart is not null)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Файловый provider '{kind}' не поддерживает SQL после FROM.",
+                Span = statement.SqlPart.Span
+            });
+        }
     }
 
     private static string? ResolveProvider(
@@ -373,7 +425,4 @@ public sealed partial class LoadProviderResolver : ILoadProviderResolver
             "apache-hive" or
             "clickhouse";
     }
-
-    [GeneratedRegex(@"^[A-Za-z_][A-Za-z0-9_$]*(\.[A-Za-z_][A-Za-z0-9_$]*)*$", RegexOptions.CultureInvariant)]
-    private static partial Regex QualifiedTableNameRegex();
 }

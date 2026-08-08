@@ -72,22 +72,26 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 4. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
         var options = VisitSourceOptions(context.source_options());
 
-        // 5. WHERE необязателен и хранится как обычное expression tree.
+        // 5. SQL source query необязателен и взаимоисключен с LOAD-level WHERE/GROUP/ORDER/LIMIT.
+        var sql = VisitLoadSql(context.load_sql());
+
+        // 6. WHERE необязателен и хранится как обычное expression tree.
         var where = VisitLoadWhere(context.load_where());
 
-        // 6. GROUP BY необязателен и хранит список expression группировки.
+        // 7. GROUP BY необязателен и хранит список expression группировки.
         var groupBy = VisitLoadGroupBy(context.load_group_by());
 
-        // 7. ORDER BY необязателен и хранит список expression с направлением сортировки.
+        // 8. ORDER BY необязателен и хранит список expression с направлением сортировки.
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
-        // 8. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
+        // 9. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
         var limitContext = context.load_limit();
         var limit = VisitLoadLimit(limitContext);
         var offset = VisitLoadOffset(limitContext?.load_offset());
 
         return new LoadStatement
         {
+            LoadSpan = Span(context.LOAD()),
             TableName = tableName,
             Fields = fields,
             FromSpan = Span(context.FROM()),
@@ -97,11 +101,33 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
                 Span = Span(sourceNode)
             },
             Options = options,
+            SqlPart = sql,
             Where = where,
             GroupBy = groupBy,
             OrderBy = orderBy,
             LimitPart = limit,
             Offset = offset
+        };
+    }
+
+    /// <summary>
+    /// Optional source SQL after FROM.
+    /// Пример: <c>SQL SELECT * FROM public.orders WHERE amount &gt; 0</c>.
+    /// </summary>
+    private static SqlPart? VisitLoadSql(LangParser.Load_sqlContext? context)
+    {
+        // 1. SQL отсутствует: source задается provider-specific options.
+        if (context is null)
+        {
+            return null;
+        }
+
+        // 2. Lexer mode отдает весь текст до ; как SQL_TEXT, не пытаясь парсить SQL нашим языком.
+        var text = context.SQL_TEXT()?.GetText().Trim() ?? string.Empty;
+        return new SqlPart
+        {
+            Value = text,
+            Span = Span(context)
         };
     }
 
@@ -342,21 +368,39 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     private static LangSpan Span(ParserRuleContext context)
     {
-        return new LangSpan(
-            (uint)context.Start.Line,
-            (uint)context.Start.Column,
-            (uint)context.Stop.Line,
-            (uint)(context.Stop.Column + context.Stop.Text.Length));
+        return Span(context.Start, context.Stop);
     }
 
     private static LangSpan Span(ITerminalNode node)
     {
         var token = node.Symbol;
+        return Span(token, token);
+    }
+
+    private static LangSpan Span(IToken start, IToken stop)
+    {
+        var endRow = stop.Line;
+        var endColumn = stop.Column;
+        foreach (var character in stop.Text)
+        {
+            if (character == '\n')
+            {
+                endRow++;
+                endColumn = 0;
+                continue;
+            }
+
+            if (character != '\r')
+            {
+                endColumn++;
+            }
+        }
+
         return new LangSpan(
-            (uint)token.Line,
-            (uint)token.Column,
-            (uint)token.Line,
-            (uint)(token.Column + token.Text.Length));
+            (uint)start.Line,
+            (uint)start.Column,
+            (uint)endRow,
+            (uint)endColumn);
     }
 
     [GeneratedRegex(@"\\\]")]

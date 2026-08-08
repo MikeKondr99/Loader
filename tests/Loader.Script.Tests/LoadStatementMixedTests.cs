@@ -62,9 +62,8 @@ public sealed class LoadStatementMixedTests
             LOAD
                 username,
                 city
-            FROM [{{database.ConnectionString}}] (clickhouse, table='{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY username ASC;
+            FROM [{{database.ConnectionString}}] (clickhouse)
+            SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY username ASC;
             """);
 
         // Assert

@@ -48,9 +48,8 @@ public sealed class LoadStatementClickHouseTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{database.ConnectionString}}] (clickhouse, table='{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY id ASC;
+            FROM [{{database.ConnectionString}}] (clickhouse)
+            SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 
         // Assert

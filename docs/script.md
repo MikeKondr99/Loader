@@ -40,7 +40,8 @@ LOAD
     id,
     name
 FROM [Host=localhost;Database=app;Username=postgres;Password=postgres]
-(postgres, table='public.users');
+(postgres)
+SQL SELECT id, name FROM public.users;
 ```
 
 Поддерживаемые markers в `LoadProviderResolver`:

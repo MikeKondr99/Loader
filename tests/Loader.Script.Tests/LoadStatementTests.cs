@@ -25,6 +25,7 @@ public sealed class LoadStatementTests
         var statement = new LoadStatement
         {
             TableName = "orders",
+            LoadSpan = Span(),
             Fields = null,
             FromSpan = Span(),
             SourcePart = SourcePart("orders.csv"),
@@ -130,6 +131,7 @@ public sealed class LoadStatementTests
         var statement = new LoadStatement
         {
             TableName = "orders",
+            LoadSpan = Span(),
             Fields = null,
             FromSpan = Span(),
             SourcePart = SourcePart("orders.csv"),
@@ -139,9 +141,13 @@ public sealed class LoadStatementTests
             OrderBy = null
         };
 
-        await Assert.That(async () => await executor.ExecuteAsync(context, statement))
-            .ThrowsExactly<InvalidOperationException>()
-            .WithMessage("materialize failed");
+        var exception = await Assert.That(async () => await executor.ExecuteAsync(context, statement))
+            .ThrowsExactly<LoadScriptExecutionException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.FinalTableWrite);
+        await Assert.That(exception.Span).IsEqualTo(statement.LoadSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(exception.InnerException!.Message).IsEqualTo("materialize failed");
 
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
@@ -150,6 +156,37 @@ public sealed class LoadStatementTests
         await Assert.That(executor.DropFinalCalls).IsEqualTo(1);
         await Assert.That(executor.DropFinalTableName!.Table).IsEqualTo(executor.FinalTableName!.Table);
         await Assert.That(context.LoadedTables).IsEmpty();
+    }
+
+    [Test]
+    public async Task Execute_load_wraps_final_materialization_errors_as_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            TempTablePrefix = "tmp_",
+            ThrowOnMaterialize = true
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD *
+            FROM [orders.csv];
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.FinalTableWrite);
+        await Assert.That(exception.Span).IsEqualTo(statement.LoadSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<LoadScriptExecutionException>();
+        await Assert.That(exception.InnerException!.InnerException).IsTypeOf<InvalidOperationException>();
     }
 
     [Test]
@@ -206,7 +243,7 @@ public sealed class LoadStatementTests
         await Assert.That(exception.Errors).Count().IsEqualTo(2);
         await Assert.That(exception.InnerException).IsTypeOf<ProviderResolutionException>();
         await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
-            .Contains("Для provider-а БД 'postgres' требуется опция table='schema.table'.");
+            .Contains("Для provider-а БД 'postgres' требуется SQL после FROM.");
         await Assert.That(exception.Errors.Select(static error => error.Message).ToArray())
             .Contains("Provider marker 'csv' нельзя указывать вместе с 'postgres'.");
     }

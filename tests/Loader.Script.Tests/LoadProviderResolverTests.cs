@@ -26,18 +26,16 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает DB provider по marker и table option")]
-    public async Task Resolve_uses_database_provider_marker_and_table_option()
+    [DisplayName("Resolver выбирает DB provider по marker и SQL инструкции")]
+    public async Task Resolve_uses_database_provider_marker_and_sql()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
                 "Host=localhost;Database=db",
-                [
-                    Marker("postgres"),
-                    Option("table", "public.orders")
-                ]),
+                [Marker("postgres")],
+                sql: "SELECT * FROM public.orders"),
             CreateContext());
 
         await Assert.That(source.Kind).IsEqualTo("postgres");
@@ -45,18 +43,16 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает Hive provider по marker и table option")]
-    public async Task Resolve_uses_hive_provider_marker_and_table_option()
+    [DisplayName("Resolver выбирает Hive provider по marker и SQL инструкции")]
+    public async Task Resolve_uses_hive_provider_marker_and_sql()
     {
         var resolver = new LoadProviderResolver();
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
                 "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [
-                    Marker("hive"),
-                    Option("table", "default.orders")
-                ]),
+                [Marker("hive")],
+                sql: "SELECT * FROM default.orders"),
             CreateContext());
 
         await Assert.That(source.Kind).IsEqualTo("hive");
@@ -75,10 +71,8 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement(
                 "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [
-                    Marker(providerMarker),
-                    Option("table", "analytics.orders")
-                ]),
+                [Marker(providerMarker)],
+                sql: "SELECT * FROM analytics.orders"),
             CreateContext());
 
         await Assert.That(source.Kind).IsEqualTo("hive");
@@ -94,10 +88,8 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement(
                 "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                [
-                    Marker("HiVe"),
-                    Option("table", "default.orders")
-                ]),
+                [Marker("HiVe")],
+                sql: "SELECT * FROM default.orders"),
             CreateContext());
 
         await Assert.That(source.Kind).IsEqualTo("hive");
@@ -105,8 +97,8 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver для Hive требует table option")]
-    public async Task Resolve_rejects_hive_provider_without_table_option()
+    [DisplayName("Resolver для Hive требует SQL инструкции")]
+    public async Task Resolve_rejects_hive_provider_without_sql()
     {
         var resolver = new LoadProviderResolver();
         var fromSpan = Span(2, 5, 9);
@@ -122,29 +114,27 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("table='schema.table'");
+        await Assert.That(exception.Errors[0].Message).Contains("требуется SQL после FROM");
     }
 
     [Test]
-    [DisplayName("Resolver для Hive отклоняет небезопасное имя таблицы")]
-    public async Task Resolve_rejects_hive_provider_with_unsafe_table_name()
+    [DisplayName("Resolver для DB provider игнорирует table option если SQL указан")]
+    public async Task Resolve_ignores_database_provider_table_option_when_sql_is_present()
     {
         var resolver = new LoadProviderResolver();
-        var tableSpan = Span(3, 10, 41);
 
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Driver={Hive};Host=localhost;Port=10000;Schema=default",
-                    [
-                        Marker("hive"),
-                        Option("table", "default.orders;drop_table", tableSpan)
-                    ]),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Driver={Hive};Host=localhost;Port=10000;Schema=default",
+                [
+                    Marker("hive"),
+                    Option("table", "default.orders")
+                ],
+                sql: "SELECT * FROM default.orders"),
+            CreateContext());
 
-        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
+        await Assert.That(source.Kind).IsEqualTo("hive");
+        await Assert.That(source.RequiresBuffer).IsTrue();
     }
 
     [Test]
@@ -156,10 +146,8 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement(
                 "Driver={__loader_missing_hive_driver__};Host=localhost;Port=10000;Schema=default",
-                [
-                    Marker("hive"),
-                    Option("table", "default.orders")
-                ]),
+                [Marker("hive")],
+                sql: "SELECT * FROM default.orders"),
             CreateContext());
 
         await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
@@ -182,6 +170,41 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
         await Assert.That(exception.Errors[0].Message).Contains("Нужно указать provider marker");
+    }
+
+    [Test]
+    [DisplayName("Resolver отклоняет SQL инструкцию для файлового provider")]
+    public async Task Resolve_rejects_sql_for_file_provider()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "orders.csv",
+                    sql: "SELECT * FROM orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживает SQL");
+    }
+
+    [Test]
+    [DisplayName("Resolver отклоняет пустую SQL инструкцию для DB provider")]
+    public async Task Resolve_rejects_empty_sql_for_database_provider()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Host=localhost;Database=db",
+                    [Marker("postgres")],
+                    sql: "   "),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("SQL не должен быть пустым");
     }
 
     [Test]
@@ -222,29 +245,6 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception.Errors[0].Span).IsEqualTo(delimiterSpan);
         await Assert.That(exception.Errors[0].Message).Contains("delimiter");
         await Assert.That(exception.Errors[0].Message).Contains("один символ");
-    }
-
-    [Test]
-    [DisplayName("Resolver указывает span option если DB table не строка")]
-    public async Task Resolve_rejects_database_table_option_with_non_string_value()
-    {
-        var resolver = new LoadProviderResolver();
-        var tableSpan = Span(5, 20, 29);
-
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Host=localhost;Database=db",
-                    [
-                        Marker("postgres"),
-                        Option("table", new IntegerLiteral(123), tableSpan)
-                    ]),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
-
-        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("table");
-        await Assert.That(exception.Errors[0].Message).Contains("строкой");
     }
 
     [Test]
@@ -455,7 +455,8 @@ public sealed class LoadProviderResolverTests
     private static LoadStatement CreateStatement(
         string source,
         List<LoadOption>? options = null,
-        LangSpan? fromSpan = null)
+        LangSpan? fromSpan = null,
+        string? sql = null)
     {
         return new LoadStatement
         {
@@ -468,6 +469,13 @@ public sealed class LoadProviderResolverTests
                 Span = Span()
             },
             Options = options ?? [],
+            SqlPart = sql is null
+                ? null
+                : new SqlPart
+                {
+                    Value = sql,
+                    Span = Span()
+                },
             Where = null,
             GroupBy = null,
             OrderBy = null

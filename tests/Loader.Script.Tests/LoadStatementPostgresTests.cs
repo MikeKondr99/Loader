@@ -43,9 +43,8 @@ public sealed class LoadStatementPostgresTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY id ASC;
+            FROM [{{postgres.ConnectionString}}] (postgres)
+            SQL SELECT * FROM public.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 
         // Assert
@@ -92,8 +91,8 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 id,
                 amount
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            ORDER BY id ASC;
+            FROM [{{postgres.ConnectionString}}] (postgres)
+            SQL SELECT * FROM public.{{sourceTable}} ORDER BY id ASC;
             """);
 
         // Assert
@@ -140,9 +139,8 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 city AS City,
                 city AS Город
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            WHERE amount > 0
-            ORDER BY city ASC;
+            FROM [{{postgres.ConnectionString}}] (postgres)
+            SQL SELECT * FROM public.{{sourceTable}} WHERE amount > 0 ORDER BY city ASC;
             """);
 
         // Assert

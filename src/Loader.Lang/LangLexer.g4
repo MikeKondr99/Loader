@@ -11,6 +11,7 @@ ASC: [Aa] [Ss] [Cc];
 DESC: [Dd] [Ee] [Ss] [Cc];
 LIMIT: [Ll] [Ii] [Mm] [Ii] [Tt];
 OFFSET: [Oo] [Ff] [Ff] [Ss] [Ee] [Tt];
+SQL: [Ss] [Qq] [Ll] -> pushMode(IN_SQL);
 
 
 AND: [Aa] [Nn] [Dd];
@@ -63,3 +64,9 @@ CURLY_OPEN: '${' -> pushMode(DEFAULT_MODE);
 ESCAPE_SEQUENCE: '\\' . ;
 
 TEXT: ~[\\'$]+ | '$';
+
+mode IN_SQL;
+
+SQL_SEMICOLON: ';' -> type(SEMICOLON), popMode;
+
+SQL_TEXT: ~[;]+;

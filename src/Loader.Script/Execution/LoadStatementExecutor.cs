@@ -90,7 +90,22 @@ public class LoadStatementExecutor
                 .SetTag("load.source_kind", source.Kind)
                 .SetTag("load.temp_table", tempTable.Table);
 
-            await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
+            }
+            catch (LoadScriptStageException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw new LoadScriptExecutionException(
+                    LoadScriptStage.TempTableWrite,
+                    $"Не удалось загрузить данные во временную таблицу: {exception.Message}",
+                    statement.LoadSpan ?? statement.FromSpan,
+                    exception);
+            }
         }
 
         // 7. Возвращаем данные, нужные следующему шагу LOAD pipeline.
@@ -117,7 +132,22 @@ public class LoadStatementExecutor
         CancellationToken cancellationToken)
     {
         context.Logger.OpeningLoadReader(statement.Source);
-        return await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (LoadScriptStageException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new LoadScriptExecutionException(
+                LoadScriptStage.SourceOpen,
+                $"Не удалось открыть источник данных: {exception.Message}",
+                statement.SqlPart?.Span ?? statement.FromSpan,
+                exception);
+        }
     }
 
     private static DomainDataReader NormalizeForTempTable(
@@ -165,7 +195,7 @@ public class LoadStatementExecutor
         ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, tempTable);
         var resolvedQuery = ResolveQuery(query);
-        var querySql = CompileQuery(resolvedQuery);
+        var querySql = CompileQuery(statement, resolvedQuery);
         return new ResolvedQuerySql(resolvedQuery, querySql);
     }
 
@@ -248,12 +278,27 @@ public class LoadStatementExecutor
         throw new QueryResolutionException(result.Errors);
     }
 
-    private static string CompileQuery(ResolvedQuery query)
+    private static string CompileQuery(LoadStatement statement, ResolvedQuery query)
     {
-        return new ClickHouseQueryCompiler
+        try
         {
-            ExpressionCompiler = new ExpressionCompiler()
-        }.Compile(query);
+            return new ClickHouseQueryCompiler
+            {
+                ExpressionCompiler = new ExpressionCompiler()
+            }.Compile(query);
+        }
+        catch (LoadScriptStageException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new LoadScriptExecutionException(
+                LoadScriptStage.QueryCompilation,
+                $"Не удалось скомпилировать LOAD query: {exception.Message}",
+                statement.LoadSpan ?? statement.FromSpan,
+                exception);
+        }
     }
 
     private async ValueTask MaterializeFinalTableWithTelemetryAsync(
@@ -268,7 +313,22 @@ public class LoadStatementExecutor
             .SetTag("load.table_name", statement.TableName)
             .SetTag("load.final_table", finalTable.Table);
 
-        await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+        }
+        catch (LoadScriptStageException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            throw new LoadScriptExecutionException(
+                LoadScriptStage.FinalTableWrite,
+                $"Не удалось материализовать финальную таблицу: {exception.Message}",
+                statement.LoadSpan ?? statement.FromSpan,
+                exception);
+        }
     }
 
     protected virtual async ValueTask MaterializeFinalTableAsync(

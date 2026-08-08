@@ -8,6 +8,8 @@ namespace Loader.Lang.Statements;
 /// </summary>
 public sealed record LoadStatement : Statement
 {
+    public LangSpan? LoadSpan { get; init; }
+
     /// <summary>
     /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.
     /// <c>null</c> означает, что script execution должен выбрать имя сам.
@@ -33,6 +35,14 @@ public sealed record LoadStatement : Statement
     /// Provider/source options из части <c>(csv, delimiter=',')</c>.
     /// </summary>
     public required List<LoadOption> Options { get; init; }
+
+    /// <summary>
+    /// Source SQL из части <c>SQL SELECT ...</c> после <c>FROM</c>.
+    /// Если задан, обычные <c>WHERE/GROUP/ORDER/LIMIT</c> относятся к source SQL и не парсятся как LOAD-transform.
+    /// </summary>
+    public SqlPart? SqlPart { get; init; }
+
+    public string? Sql => SqlPart?.Value;
 
     /// <summary>
     /// Необязательный фильтр строк из части <c>WHERE expr</c>.

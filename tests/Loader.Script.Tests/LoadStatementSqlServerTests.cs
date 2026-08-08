@@ -46,9 +46,8 @@ public sealed class LoadStatementSqlServerTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{sqlServer.ConnectionString}}] (sqlserver, table='dbo.{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY id ASC;
+            FROM [{{sqlServer.ConnectionString}}] (sqlserver)
+            SQL SELECT * FROM dbo.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 
         // Assert

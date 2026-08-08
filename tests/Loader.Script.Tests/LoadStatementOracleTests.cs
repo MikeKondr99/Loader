@@ -51,9 +51,8 @@ public sealed class LoadStatementOracleTests
                 Text(ID) AS id,
                 Upper(NAME) AS name,
                 CITY AS city
-            FROM [{{oracle.ConnectionString}}] (oracle, table='{{sourceTable}}')
-            WHERE CITY != 'Berlin'
-            ORDER BY ID ASC;
+            FROM [{{oracle.ConnectionString}}] (oracle)
+            SQL SELECT * FROM {{sourceTable}} WHERE CITY != 'Berlin' ORDER BY ID ASC;
             """);
 
         // Assert

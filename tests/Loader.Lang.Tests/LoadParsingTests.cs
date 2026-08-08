@@ -221,6 +221,53 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD SQL после FROM сохраняется как source SQL до закрывающей точки с запятой")]
+    public async Task Load_sql_after_from_parses_source_sql_until_statement_semicolon()
+    {
+        var load = ParseLoad(
+            """
+            LOAD
+                id,
+                amount
+            FROM [postgres_connection] (postgres)
+            SQL
+                SELECT id, amount
+                FROM public.orders
+                WHERE amount > 0
+            ;
+            """);
+
+        await Assert.That(load.Sql).IsEqualTo(string.Join(
+            "\n",
+            "SELECT id, amount",
+            "    FROM public.orders",
+            "    WHERE amount > 0"));
+        await Assert.That(load.SqlPart!.Span.StartRow).IsEqualTo(5u);
+        await Assert.That(load.SqlPart.Span.EndRow).IsEqualTo(9u);
+        await Assert.That(load.Where).IsNull();
+        await Assert.That(load.GroupBy).IsNull();
+        await Assert.That(load.OrderBy).IsNull();
+        await Assert.That(load.Limit).IsNull();
+    }
+
+    [Test]
+    [DisplayName("LOAD SQL после FROM взаимоисключен с WHERE GROUP ORDER LIMIT")]
+    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders WHERE id > 0;")]
+    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders GROUP BY id;")]
+    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders ORDER BY id;")]
+    [Arguments("LOAD * FROM [db] (postgres) SQL SELECT * FROM orders LIMIT 10;")]
+    public async Task Load_sql_keeps_sql_keywords_inside_source_sql(string text)
+    {
+        var load = ParseLoad(text);
+
+        await Assert.That(load.Sql).IsNotNull();
+        await Assert.That(load.Where).IsNull();
+        await Assert.That(load.GroupBy).IsNull();
+        await Assert.That(load.OrderBy).IsNull();
+        await Assert.That(load.Limit).IsNull();
+    }
+
+    [Test]
     [DisplayName("LOAD source options допускает пустые скобки")]
     public async Task Load_options_allow_empty_parentheses()
     {

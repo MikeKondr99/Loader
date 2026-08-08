@@ -473,12 +473,24 @@ LIMIT 10;`;
           root: [
             [/\/\*/, 'comment', '@comment'],
             [/\/\/.*$/, 'comment'],
+            [/\bSQL\b/, 'keyword.sql', '@sql'],
             [/\b(LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|true|false|null)\b/, 'keyword'],
             [/\[[^\]]*\]/, 'string'],
             [/'([^'\\]|\\.)*'/, 'string'],
             [/[0-9]+(\.[0-9]+)?/, 'number'],
             [/--.*$/, 'comment'],
             [/[a-zA-Z_][a-zA-Z0-9_]*/, 'identifier']
+          ],
+          sql: [
+            [/;/, 'delimiter', '@pop'],
+            [/\/\*/, 'comment', '@comment'],
+            [/--.*$/, 'comment'],
+            [/'([^'\\]|\\.)*'/, 'string'],
+            [/"([^"\\]|\\.)*"/, 'string'],
+            [/`([^`\\]|\\.)*`/, 'string'],
+            [/[0-9]+(\.[0-9]+)?/, 'number'],
+            [/\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|ON|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|HAVING|UNION|ALL|DISTINCT|AS|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|NULL|IS|IN|LIKE|BETWEEN|EXISTS|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\b/, 'keyword.sql'],
+            [/[a-zA-Z_][a-zA-Z0-9_]*/, 'identifier.sql']
           ],
           comment: [
             [/[^/*]+/, 'comment'],
@@ -492,9 +504,12 @@ LIMIT 10;`;
         inherit: true,
         rules: [
           { token: 'keyword', foreground: '2f5f9f', fontStyle: 'bold' },
+          { token: 'keyword.sql', foreground: '0f6b5f', fontStyle: 'bold' },
+          { token: 'identifier.sql', foreground: '3f4b59' },
           { token: 'string', foreground: '8a4b00' },
           { token: 'number', foreground: '1f6f78' },
-          { token: 'comment', foreground: '7a8175' }
+          { token: 'comment', foreground: '7a8175' },
+          { token: 'delimiter', foreground: '52606d' }
         ],
         colors: {
           'editor.background': '#ffffff',

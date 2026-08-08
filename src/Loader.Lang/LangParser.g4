@@ -18,10 +18,14 @@ load_statement
     : load_table_name?
     LOAD load_fields
     FROM BLOCKED_NAME source_options?
-    load_where?
-    load_group_by?
-    load_order_by?
-    load_limit?
+    (
+        load_sql
+        |
+        load_where?
+        load_group_by?
+        load_order_by?
+        load_limit?
+    )
     SEMICOLON
     ;
 
@@ -56,6 +60,10 @@ load_limit
 
 load_offset
     : OFFSET INTEGER
+    ;
+
+load_sql
+    : SQL SQL_TEXT?
     ;
 
 source_options
