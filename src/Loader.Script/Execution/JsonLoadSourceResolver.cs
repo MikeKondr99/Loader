@@ -15,6 +15,7 @@ internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectUnknownOptions(Name, options, errors, ["path", "root"]);
         RejectSqlForFileProvider("json", statement, errors);
         var path = RequiredPath("json", statement, options, errors);
         var arrayPath = JsonRootPath(options, errors);

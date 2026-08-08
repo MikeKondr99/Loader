@@ -15,6 +15,7 @@ internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectUnknownOptions(Name, options, errors, ["path", "sheet", "header"]);
         RejectSqlForFileProvider("excel", statement, errors);
         var path = RequiredPath("excel", statement, options, errors);
         var sheet = options.String("sheet");

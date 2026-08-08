@@ -6,11 +6,13 @@ namespace Loader.Script;
 
 internal sealed class LoadOptionReader
 {
+    private readonly IReadOnlyList<LoadOption> _options;
     private readonly IReadOnlyDictionary<string, LoadOption> _optionsByName;
     private readonly List<LangError> _errors;
 
     public LoadOptionReader(IReadOnlyList<LoadOption> options, List<LangError> errors)
     {
+        _options = options;
         _errors = errors;
         _optionsByName = BuildOptionMap(options, errors);
     }
@@ -73,6 +75,36 @@ internal sealed class LoadOptionReader
     public LoadOption? GetOption(string name)
     {
         return _optionsByName.TryGetValue(name, out var option) ? option : null;
+    }
+
+    public void RejectUnknownOptions(string providerName, ReadOnlySpan<string> allowedNames)
+    {
+        foreach (var option in _options)
+        {
+            if (Contains(allowedNames, option.Name))
+            {
+                continue;
+            }
+
+            _errors.Add(new LangError
+            {
+                Message = $"Опция '{option.Name}' не поддерживается provider-ом '{providerName}'.",
+                Span = option.Span
+            });
+        }
+    }
+
+    private static bool Contains(ReadOnlySpan<string> values, string value)
+    {
+        foreach (var item in values)
+        {
+            if (string.Equals(item, value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IReadOnlyDictionary<string, LoadOption> BuildOptionMap(

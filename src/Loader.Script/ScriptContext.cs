@@ -28,6 +28,8 @@ public sealed class ScriptContext
     /// </summary>
     public required ILogger Logger { get; init; }
 
+    public IConnectionRegistry ConnectionRegistry { get; init; } = EmptyConnectionRegistry.Instance;
+
     /// <summary>
     /// Финальные таблицы, которые script execution уже успешно создал.
     /// </summary>

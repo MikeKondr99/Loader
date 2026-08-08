@@ -1,6 +1,3 @@
-using System.Data.Common;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Statements;
 
@@ -8,18 +5,14 @@ namespace Loader.Script.Execution;
 
 internal abstract class DatabaseLoadSourceResolver : LoadSourceResolverBase
 {
-    private readonly string kind;
-    private readonly bool requiresBuffer;
-    private readonly Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open;
+    private readonly DatabaseLoadProviderFactory factory;
 
-    protected DatabaseLoadSourceResolver(
-        string kind,
-        bool requiresBuffer,
-        Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open)
+    protected DatabaseLoadSourceResolver(ScriptConnectionType provider)
     {
-        this.kind = kind;
-        this.requiresBuffer = requiresBuffer;
-        this.open = open;
+        if (!DatabaseLoadProviderFactory.TryGet(provider, out factory))
+        {
+            throw new ArgumentException($"Unknown database load provider '{provider}'.", nameof(provider));
+        }
     }
 
     public override ValueTask<LoadProviderSource> ResolveAsync(
@@ -29,20 +22,14 @@ internal abstract class DatabaseLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
-        var connection = RequiredConnection(kind, statement, options, errors);
-        var sql = SourceSql(kind, statement, errors);
+        RejectUnknownOptions(statement.SourceCall.Name, options, errors, ["connection"]);
+        var connection = RequiredConnection(factory.Kind, statement, options, errors);
+        var sql = SourceSql(factory.Kind, statement, errors);
         if (connection is null || errors.Count > 0)
         {
             return ValueTask.FromResult<LoadProviderSource>(null!);
         }
 
-        var source = new ConnectionStringSource { ConnectionString = connection };
-        var config = new SqlTableConfig { Sql = sql! };
-        return ValueTask.FromResult(new LoadProviderSource
-        {
-            Kind = kind,
-            RequiresBuffer = requiresBuffer,
-            OpenReaderAsync = token => open(source, config, token)
-        });
+        return ValueTask.FromResult(factory.CreateSource(connection, sql!));
     }
 }

@@ -15,6 +15,7 @@ internal sealed class QvdLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectUnknownOptions(Name, options, errors, ["path"]);
         RejectSqlForFileProvider("qvd", statement, errors);
         var path = RequiredPath("qvd", statement, options, errors);
         if (path is null || errors.Count > 0)

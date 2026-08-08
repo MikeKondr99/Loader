@@ -1,0 +1,57 @@
+using Loader.Lang;
+using Loader.Lang.Statements;
+
+namespace Loader.Script.Execution;
+
+internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
+{
+    public override string Name => "Connect";
+
+    public override async ValueTask<LoadProviderSource> ResolveAsync(
+        LoadStatement statement,
+        ScriptContext context,
+        LoadOptionReader options,
+        List<LangError> errors,
+        CancellationToken cancellationToken)
+    {
+        RejectUnknownOptions(Name, options, errors, ["name"]);
+        var nameOption = options.GetOption("name");
+        var name = options.RequiredString(
+            "name",
+            statement.SourceCall.Span,
+            "Для Connect требуется опция name='connection_name'.");
+        var sql = SourceSql("connect", statement, errors);
+        if (name is null || sql is null || errors.Count > 0)
+        {
+            return null!;
+        }
+
+        var connection = await context.ConnectionRegistry.GetAsync(name, cancellationToken).ConfigureAwait(false);
+        if (connection is null)
+        {
+            var names = await context.ConnectionRegistry.FindNamesAsync(cancellationToken).ConfigureAwait(false);
+            var message = NameSuggestion.AppendSuggestion(
+                $"Connection '{name}' не найден.",
+                name,
+                names);
+            errors.Add(new LangError
+            {
+                Message = message,
+                Span = nameOption?.Span ?? statement.SourceCall.Span
+            });
+            return null!;
+        }
+
+        if (!DatabaseLoadProviderFactory.TryGet(connection.Provider, out var factory))
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Connection '{connection.Name}' использует неподдерживаемый provider '{connection.Provider}'.",
+                Span = nameOption?.Span ?? statement.SourceCall.Span
+            });
+            return null!;
+        }
+
+        return factory.CreateSource(connection.ConnectionString, sql);
+    }
+}

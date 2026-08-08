@@ -43,6 +43,212 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Connect берет connection string и provider type из registry")]
+    public async Task Resolve_connect_uses_registered_connection()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [Option("name", "main_pg")],
+                sql: "SELECT * FROM public.orders"),
+            CreateContext(registry: registry));
+
+        await Assert.That(source.Kind).IsEqualTo("postgres");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect поддерживает ClickHouse provider type")]
+    public async Task Resolve_connect_supports_clickhouse_provider_type()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "ch_dwh",
+                Provider = ScriptConnectionType.ClickHouse,
+                ConnectionString = "Host=localhost"
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [Option("name", "ch_dwh")],
+                sql: "SELECT * FROM events"),
+            CreateContext(registry: registry));
+
+        await Assert.That(source.Kind).IsEqualTo("clickhouse");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect требует name option")]
+    public async Task Resolve_connect_rejects_missing_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceCallSpan = Span(3, 12, 30);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    sourceCallSpan: sourceCallSpan,
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceCallSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("name='connection_name'");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect отклоняет name option не строкового типа")]
+    public async Task Resolve_connect_rejects_non_string_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var nameSpan = Span(3, 21, 28);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", new IntegerLiteral(1), nameSpan)],
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("name");
+        await Assert.That(exception.Errors[0].Message).Contains("строкой");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect подсказывает похожее имя connection")]
+    public async Task Resolve_connect_rejects_unknown_connection_with_suggestion()
+    {
+        var resolver = new LoadProviderResolver();
+        var nameSpan = Span(3, 21, 38);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_postgres",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", "main_postgre", nameSpan)],
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не найден");
+        await Assert.That(exception.Errors[0].Message).Contains("main_postgres");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect отклоняет неподдерживаемый provider type из registry")]
+    public async Task Resolve_connect_rejects_unknown_connection_provider_type()
+    {
+        var resolver = new LoadProviderResolver();
+        var nameSpan = Span(3, 21, 30);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = (ScriptConnectionType)999,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", "main_pg", nameSpan)],
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("неподдерживаемый provider");
+        await Assert.That(exception.Errors[0].Message).Contains("999");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect отклоняет лишнюю connection option")]
+    public async Task Resolve_connect_rejects_direct_connection_option()
+    {
+        var resolver = new LoadProviderResolver();
+        var connectionSpan = Span(3, 21, 55);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [
+                        Option("name", "main_pg"),
+                        Option("connection", "Host=localhost", connectionSpan)
+                    ],
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors.Select(static error => error.Span).ToArray())
+            .Contains(connectionSpan);
+        await Assert.That(exception.Errors.Any(static error => error.Message.Contains("не поддерживается")))
+            .IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect требует SQL инструкцию")]
+    public async Task Resolve_connect_rejects_missing_sql()
+    {
+        var resolver = new LoadProviderResolver();
+        var fromSpan = Span(3, 1, 5);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", "main_pg")],
+                    fromSpan),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("требуется SQL после FROM");
+    }
+
+    [Test]
     [DisplayName("Resolver выбирает Hive provider по имени SourceCall и SQL инструкции")]
     public async Task Resolve_uses_hive_provider_name_and_sql()
     {
@@ -121,23 +327,26 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver для DB provider игнорирует table option если SQL указан")]
-    public async Task Resolve_ignores_database_provider_table_option_when_sql_is_present()
+    [DisplayName("Resolver для DB provider отклоняет table option")]
+    public async Task Resolve_rejects_database_provider_table_option()
     {
         var resolver = new LoadProviderResolver();
+        var tableSpan = Span(5, 30, 52);
 
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "Hive",
-                [
-                    Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default"),
-                    Option("table", "default.orders")
-                ],
-                sql: "SELECT * FROM default.orders"),
-            CreateContext());
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Hive",
+                    [
+                        Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default"),
+                        Option("table", "default.orders", tableSpan)
+                    ],
+                    sql: "SELECT * FROM default.orders"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
 
-        await Assert.That(source.Kind).IsEqualTo("hive");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
     }
 
     [Test]
@@ -548,13 +757,16 @@ public sealed class LoadProviderResolverTests
         return new LangSpan(row, startColumn, row, endColumn);
     }
 
-    private static ScriptContext CreateContext(IFileSource? fileSource = null)
+    private static ScriptContext CreateContext(
+        IFileSource? fileSource = null,
+        IConnectionRegistry? registry = null)
     {
         return new ScriptContext
         {
             FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=clickhouse",
-            Logger = NullLogger.Instance
+            Logger = NullLogger.Instance,
+            ConnectionRegistry = registry ?? EmptyConnectionRegistry.Instance
         };
     }
 
@@ -585,4 +797,5 @@ public sealed class LoadProviderResolverTests
             throw new FileNotFoundException("missing", fileName);
         }
     }
+
 }

@@ -15,6 +15,7 @@ internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        RejectUnknownOptions(Name, options, errors, ["path", "delimiter", "header"]);
         RejectSqlForFileProvider("csv", statement, errors);
         var path = RequiredPath("csv", statement, options, errors);
         var delimiter = options.Character("delimiter", ',');

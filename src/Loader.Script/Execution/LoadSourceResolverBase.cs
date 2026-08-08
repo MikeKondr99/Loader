@@ -54,6 +54,15 @@ internal abstract class LoadSourceResolverBase : ILoadSourceResolver
             $"Для DB provider-а '{kind}' требуется опция connection='connection string'.");
     }
 
+    protected static void RejectUnknownOptions(
+        string providerName,
+        LoadOptionReader options,
+        List<LangError> errors,
+        ReadOnlySpan<string> allowedNames)
+    {
+        options.RejectUnknownOptions(providerName, allowedNames);
+    }
+
     protected static string? SourceSql(
         string kind,
         LoadStatement statement,
