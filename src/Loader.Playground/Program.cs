@@ -35,8 +35,14 @@ app.MapGet("/api/config", (IConfiguration configuration, IWebHostEnvironment env
     var config = PlaygroundConfig.From(configuration, environment);
     return Results.Ok(new
     {
+        Environment = environment.EnvironmentName,
         config.TargetConnectionString,
-        config.FileRoot
+        config.FileRoot,
+        Connections = config.Connections.Select(static connection => new
+        {
+            connection.Name,
+            Type = connection.Provider.ToString()
+        }).ToArray()
     });
 });
 
@@ -130,7 +136,8 @@ app.MapPost("/api/run", async (
     {
         FileStorage = new FileSystemSource(config.FileRoot),
         TargetConnectionString = config.TargetConnectionString,
-        Logger = NullLogger.Instance
+        Logger = NullLogger.Instance,
+        ConnectionRegistry = new InMemoryConnectionRegistry(config.Connections)
     };
 
     var stopwatch = Stopwatch.StartNew();
@@ -373,16 +380,59 @@ internal sealed class PlaygroundLastRunStore
 
 internal sealed record PlaygroundPreviewRows(string[] Columns, IReadOnlyList<object?[]> Rows);
 
-internal sealed record PlaygroundConfig(string TargetConnectionString, string FileRoot)
+internal sealed record PlaygroundConfig(
+    string TargetConnectionString,
+    string FileRoot,
+    IReadOnlyList<ScriptConnection> Connections)
 {
     public static PlaygroundConfig From(IConfiguration configuration, IWebHostEnvironment environment)
     {
         var targetConnectionString =
             configuration["TargetConnectionString"] ??
             Environment.GetEnvironmentVariable("LOADER_PLAYGROUND_CLICKHOUSE") ??
-            "Host=localhost;Port=8123;Protocol=http;Database=loader_bench;Username=loader;Password=loader";
+            "Host=localhost;Port=8123;Protocol=http;Database=loader_playground;Username=loader;Password=loader";
 
-        return new PlaygroundConfig(targetConnectionString, PlaygroundFiles.RootPath);
+        return new PlaygroundConfig(
+            targetConnectionString,
+            PlaygroundFiles.RootPath,
+            ReadConnections(configuration));
+    }
+
+    private static IReadOnlyList<ScriptConnection> ReadConnections(IConfiguration configuration)
+    {
+        return configuration
+            .GetSection("Connections")
+            .GetChildren()
+            .Select(ReadConnection)
+            .ToArray();
+    }
+
+    private static ScriptConnection ReadConnection(IConfigurationSection section)
+    {
+        var name = section["Name"];
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new InvalidOperationException("Playground connection requires non-empty Name.");
+        }
+
+        var typeText = section["Type"];
+        if (!Enum.TryParse<ScriptConnectionType>(typeText, ignoreCase: true, out var type))
+        {
+            throw new InvalidOperationException($"Playground connection '{name}' has unknown Type '{typeText}'.");
+        }
+
+        var connectionString = section["ConnectionString"];
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException($"Playground connection '{name}' requires non-empty ConnectionString.");
+        }
+
+        return new ScriptConnection
+        {
+            Name = name,
+            Provider = type,
+            ConnectionString = connectionString
+        };
     }
 }
 
