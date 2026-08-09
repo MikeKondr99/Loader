@@ -2,8 +2,16 @@ using System.Data.Odbc;
 
 namespace Loader.Core.Providers.Odbc;
 
+/// <summary>
+/// Нестрогий детектор для распространённых семейств ODBC-драйверов.
+/// </summary>
 public static class OdbcDriverDetector
 {
+    /// <summary>
+    /// Классифицирует имя ODBC-драйвера, полученное из <see cref="OdbcConnection.Driver"/>.
+    /// </summary>
+    /// <param name="driverName">Сырое имя драйвера, возможно обёрнутое в ODBC-скобки.</param>
+    /// <returns>Нормализованные метаданные драйвера для диагностики.</returns>
     public static OdbcDriverInfo FromDriverName(string? driverName)
     {
         var name = NormalizeDriverName(driverName);
@@ -42,6 +50,11 @@ public static class OdbcDriverDetector
         };
     }
 
+    /// <summary>
+    /// Читает и классифицирует необязательный параметр Driver из ODBC connection string.
+    /// </summary>
+    /// <param name="connectionString">ODBC connection string, переданный из скрипта.</param>
+    /// <returns>Метаданные драйвера или <see cref="OdbcDriverKind.Unknown"/>, если Driver отсутствует или невалиден.</returns>
     public static OdbcDriverInfo FromConnectionString(string connectionString)
     {
         try

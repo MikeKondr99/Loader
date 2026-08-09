@@ -79,6 +79,9 @@ FROM [Dsn=analytics]
 (odbc, sql='select id, name from "My Schema"."Users"');
 ```
 
+ODBC driver detection is best-effort and used for diagnostics. A recognized driver kind does not mean the driver has
+full integration-test coverage; actual compatibility depends on the installed ODBC driver and the SQL it accepts.
+
 ## Telemetry
 
 `Loader.Script` создает `ActivitySource` с именем `LoadScript`.

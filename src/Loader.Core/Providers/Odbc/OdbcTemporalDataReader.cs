@@ -4,13 +4,30 @@ using System.Globalization;
 
 namespace Loader.Core.Providers.Odbc;
 
+/// <summary>
+/// Нормализует временные ODBC-колонки до того, как общая нормализация Loader построит схему reader-а.
+/// </summary>
+/// <remarks>
+/// ADO.NET ODBC-драйверы не единообразны в CLR-типах date/time: date может прийти как
+/// <see cref="DateTime"/>, time как <see cref="TimeSpan"/> или <see cref="DateTime"/>, а offset-aware
+/// временные значения как <see cref="DateTimeOffset"/>, <see cref="DateTime"/> или текст. Loader строит
+/// <see cref="DataSchema"/> по CLR-типу, поэтому adapter использует ODBC provider type names и отдаёт
+/// стабильные CLR-формы для распространённых временных случаев.
+/// </remarks>
 public sealed class OdbcTemporalDataReader : DbDataReaderDecorator
 {
+    /// <summary>
+    /// Создаёт reader, который делегирует ODBC reader-у и корректирует временные типы и значения.
+    /// </summary>
+    /// <param name="inner">Открытый ODBC data reader.</param>
     public OdbcTemporalDataReader(DbDataReader inner)
         : base(inner)
     {
     }
 
+    /// <summary>
+    /// Возвращает скорректированные CLR-типы для ODBC date, time и timezone-aware колонок.
+    /// </summary>
     public override Type GetFieldType(int ordinal)
     {
         return GetTemporalKind(ordinal) switch
@@ -22,6 +39,9 @@ public sealed class OdbcTemporalDataReader : DbDataReaderDecorator
         };
     }
 
+    /// <summary>
+    /// Возвращает скорректированные значения, соответствующие <see cref="GetFieldType"/>, для временных ODBC-колонок.
+    /// </summary>
     public override object GetValue(int ordinal)
     {
         var value = Inner.GetValue(ordinal);
@@ -39,6 +59,9 @@ public sealed class OdbcTemporalDataReader : DbDataReaderDecorator
         };
     }
 
+    /// <summary>
+    /// Читает значения через <see cref="GetValue"/>, чтобы временные корректировки применялись единообразно.
+    /// </summary>
     public override int GetValues(object[] values)
     {
         var count = Math.Min(values.Length, FieldCount);
@@ -50,6 +73,9 @@ public sealed class OdbcTemporalDataReader : DbDataReaderDecorator
         return count;
     }
 
+    /// <summary>
+    /// Отражает скорректированные CLR-типы в schema table, которую читают последующие readers метаданных.
+    /// </summary>
     public override DataTable? GetSchemaTable()
     {
         var table = Inner.GetSchemaTable();
