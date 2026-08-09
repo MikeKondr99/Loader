@@ -15,13 +15,17 @@ statement
     : load_statement;
 
 load_statement
-    : load_table_name?
+    : load_table_name
     LOAD load_fields
-    FROM BLOCKED_NAME source_options?
-    load_where?
-    load_group_by?
-    load_order_by?
-    load_limit?
+    FROM load_source
+    (
+        load_sql
+        |
+        load_where?
+        load_group_by?
+        load_order_by?
+        load_limit?
+    )
     SEMICOLON
     ;
 
@@ -58,8 +62,21 @@ load_offset
     : OFFSET INTEGER
     ;
 
-source_options
-    : LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+load_sql
+    : SQL SQL_TEXT?
+    ;
+
+source_call
+    : NAME LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+    ;
+
+load_source
+    : source_call
+    | source_table
+    ;
+
+source_table
+    : NAME
     ;
 
 option_list
@@ -67,8 +84,7 @@ option_list
     ;
 
 load_option
-    : NAME
-    | NAME EQUAL option_literal
+    : NAME EQUAL option_literal
     ;
 
 option_literal

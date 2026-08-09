@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
-    [DisplayName("Script выполняет несколько LOAD из разных источников и возвращает final tables по порядку")]
+    [DisplayName("Script РІС‹РїРѕР»РЅСЏРµС‚ РЅРµСЃРєРѕР»СЊРєРѕ LOAD РёР· СЂР°Р·РЅС‹С… РёСЃС‚РѕС‡РЅРёРєРѕРІ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ final tables РїРѕ РїРѕСЂСЏРґРєСѓ")]
     public async Task Execute_script_loads_multiple_sources_into_clickhouse()
     {
         // Arrange
@@ -46,7 +46,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 name,
                 Upper(name) AS upper_name
-            FROM [orders.csv] (csv)
+            FROM Csv(path='orders.csv')
             WHERE name != 'Bob'
             ORDER BY name DESC;
 
@@ -54,7 +54,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 [user.name] AS name,
                 city
-            FROM [inventory.json] (json)
+            FROM Json(path='inventory.json')
             WHERE city = 'Moscow'
             ORDER BY [user.name] ASC;
 
@@ -62,9 +62,8 @@ public sealed class LoadStatementMixedTests
             LOAD
                 username,
                 city
-            FROM [{{database.ConnectionString}}] (clickhouse, table='{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY username ASC;
+            FROM ClickHouse(connection='{{database.ConnectionString}}')
+            SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY username ASC;
             """);
 
         // Assert
@@ -102,6 +101,50 @@ public sealed class LoadStatementMixedTests
                 ["mike", "Moscow"]
             ],
             "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script выполняет LOAD из результата предыдущего LOAD через Table provider")]
+    public async Task Execute_script_loads_from_previous_load_table()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            raw_names:
+            LOAD
+                id,
+                name,
+                Upper(name) AS [upper-name]
+            FROM Csv(path='orders.csv')
+            ORDER BY id ASC;
+
+            final_names:
+            LOAD
+                Text(Int(id)) AS id,
+                [upper-name] AS name
+            FROM raw_names
+            WHERE name != 'Bob'
+            ORDER BY id DESC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await Assert.That(result.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["raw_names", "final_names"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[1],
+            ["id", "name"],
+            [
+                ["3", "CHARLIE"],
+                ["1", "ALICE"]
+            ],
+            "ORDER BY `column1` DESC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

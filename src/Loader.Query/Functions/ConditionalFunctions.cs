@@ -48,7 +48,8 @@ public sealed class ConditionalFunctions : FunctionDescriptor
 
             if (type == DataType.Number)
             {
-                alt.Template($"COALESCE({0}, toDecimal64OrNull(toString({1}), 10))");
+                // TODO: Replace this workaround after Number is split into Decimal/Float or numeric resolution preserves exact CH type.
+                alt.Template($"COALESCE(CAST({0} AS Nullable(Decimal64(10))), CAST({1} AS Nullable(Decimal64(10))))");
             }
             else
             {

@@ -55,6 +55,7 @@ public sealed record DataSchema
             {
                 columnSchemaByOrdinal.TryGetValue(i, out var column);
                 var mapping = DataValueMapper.MapType(reader.GetFieldType(i));
+                var numericShape = NumericShape.Normalize(column?.NumericPrecision, column?.NumericScale);
                 return new DataField
                 {
                     Ordinal = i,
@@ -63,8 +64,8 @@ public sealed record DataSchema
                     ClrType = mapping.ClrType,
                     AllowDBNull = column?.AllowDBNull,
                     ColumnSize = column?.ColumnSize,
-                    NumericPrecision = column?.NumericPrecision,
-                    NumericScale = column?.NumericScale,
+                    NumericPrecision = numericShape.Precision,
+                    NumericScale = numericShape.Scale,
                     Convert = mapping.Convert,
                     ReadValue = mapping.ReadValue
                 };

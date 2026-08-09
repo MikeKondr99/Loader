@@ -755,6 +755,40 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query Alt numeric expression приводит source decimal и literal к одному Decimal scale")]
+    public async Task Numeric_alt_expression_unifies_source_decimal_and_literal_scale()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [new InlineField("amount", DataType.Number, CanBeNull: true)],
+            [
+                ["CAST(12.34 AS Nullable(Decimal(10, 2)))"],
+                ["CAST(NULL AS Nullable(Decimal(10, 2)))"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "amount.Alt(0.0)".As("amount"),
+                "RawType(amount.Alt(0.0))".As("amount_type")
+            ],
+            OrderBy = ["amount".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Numbers("amount").Order().ToArray())
+            .IsEquivalentTo([0.0, 12.34], CollectionOrdering.Matching);
+        await Assert.That(rows.Texts("amount_type"))
+            .IsEquivalentTo(
+                ["Nullable(Decimal(18, 10))", "Nullable(Decimal(18, 10))"],
+                CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query применяет implicit cast int и num в одном выражении")]
     public async Task Mixed_integer_number_expression_uses_implicit_casts()
     {

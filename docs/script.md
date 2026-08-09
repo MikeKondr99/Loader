@@ -27,7 +27,7 @@ orders:
 LOAD
     id,
     Upper(name) AS name
-FROM [orders.csv] (csv, delimiter=',', header=true)
+FROM Csv(path='orders.csv', delimiter=',', header=true)
 WHERE id != '0'
 ORDER BY id;
 ```
@@ -39,23 +39,23 @@ users:
 LOAD
     id,
     name
-FROM [Host=localhost;Database=app;Username=postgres;Password=postgres]
-(postgres, table='public.users');
+FROM Postgres(connection='Host=localhost;Database=app;Username=postgres;Password=postgres')
+SQL SELECT id, name FROM public.users;
 ```
 
-Поддерживаемые markers в `LoadProviderResolver`:
+Поддерживаемые provider calls в `LoadProviderResolver`:
 
-- `csv`
-- `excel`, `xlsx`, `xls`, `xlsb`
-- `json`
-- `xml`
-- `qvd`
-- `postgres`, `postgresql`, `postgre`
-- `sqlserver`, `mssql`
-- `oracle`
-- `hive`, `apachehive`, `apache-hive`
-- `odbc`
-- `clickhouse`
+- `Csv(path='...')`
+- `Excel(path='...', sheet='...')`
+- `Json(path='...', root='...')`
+- `Xml(path='...', table='...')`
+- `Qvd(path='...')`
+- `Postgres(connection='...')`
+- `SqlServer(connection='...')`
+- `Oracle(connection='...')`
+- `Hive(connection='...')`
+- `Odbc(connection='...')`
+- `ClickHouse(connection='...')`
 
 ODBC source:
 
@@ -64,19 +64,19 @@ users:
 LOAD
     id,
     name
-FROM [Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Uid=sa;Pwd=secret]
-(odbc, table='dbo.users');
+FROM Odbc(connection='Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Uid=sa;Pwd=secret')
+SQL SELECT id, name FROM dbo.users;
 ```
 
-ODBC also supports a raw SQL query instead of `table`:
+ODBC uses the same SQL block style as other DB providers:
 
 ```text
 users:
 LOAD
     id,
     name
-FROM [Dsn=analytics]
-(odbc, sql='select id, name from "My Schema"."Users"');
+FROM Odbc(connection='Dsn=analytics')
+SQL select id, name from "My Schema"."Users";
 ```
 
 ODBC driver detection is best-effort and used for diagnostics. A recognized driver kind does not mean the driver has

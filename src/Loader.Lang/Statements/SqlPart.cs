@@ -1,6 +1,6 @@
 namespace Loader.Lang.Statements;
 
-public sealed record SourcePart
+public sealed record SqlPart
 {
     public required string Value { get; init; }
 

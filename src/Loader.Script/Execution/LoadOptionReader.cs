@@ -17,15 +17,6 @@ internal sealed class LoadOptionReader
         _optionsByName = BuildOptionMap(options, errors);
     }
 
-    public IReadOnlyList<LoadOption> Markers => _options
-        .Where(static option => option.Value is null)
-        .ToArray();
-
-    public string? Provider => Markers
-        .FirstOrDefault()
-        ?.Name
-        .ToLowerInvariant();
-
     public string? String(string name)
     {
         var option = GetOption(name);
@@ -86,12 +77,42 @@ internal sealed class LoadOptionReader
         return _optionsByName.TryGetValue(name, out var option) ? option : null;
     }
 
+    public void RejectUnknownOptions(string providerName, ReadOnlySpan<string> allowedNames)
+    {
+        foreach (var option in _options)
+        {
+            if (Contains(allowedNames, option.Name))
+            {
+                continue;
+            }
+
+            _errors.Add(new LangError
+            {
+                Message = $"Опция '{option.Name}' не поддерживается provider-ом '{providerName}'.",
+                Span = option.Span
+            });
+        }
+    }
+
+    private static bool Contains(ReadOnlySpan<string> values, string value)
+    {
+        foreach (var item in values)
+        {
+            if (string.Equals(item, value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static IReadOnlyDictionary<string, LoadOption> BuildOptionMap(
         IReadOnlyList<LoadOption> options,
         List<LangError> errors)
     {
         var map = new Dictionary<string, LoadOption>(StringComparer.OrdinalIgnoreCase);
-        foreach (var option in options.Where(static option => option.Value is not null))
+        foreach (var option in options)
         {
             if (map.TryAdd(option.Name, option))
             {

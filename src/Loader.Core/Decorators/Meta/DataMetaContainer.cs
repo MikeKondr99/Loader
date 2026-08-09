@@ -39,12 +39,13 @@ public sealed class DataMetaContainer
         {
             var field = schema.Fields[ordinal];
             var dbColumn = ordinal < columnSchema.Count ? columnSchema[ordinal] : null;
+            var numericShape = NumericShape.Normalize(dbColumn?.NumericPrecision, dbColumn?.NumericScale);
             _columns.Add(new DataColumnMeta(
                 field.Ordinal,
                 field.Name,
                 field.DataType,
-                dbColumn?.NumericPrecision,
-                dbColumn?.NumericScale,
+                numericShape.Precision,
+                numericShape.Scale,
                 _options.MaxCardinality));
         }
     }

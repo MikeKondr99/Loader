@@ -95,7 +95,7 @@ Query -> QueryResolver -> ResolvedQuery -> ClickHouseQueryCompiler -> SQL
 
 `Loader.Script` связывает source/provider слой с Query:
 
-1. `LoadProviderResolver` выбирает provider по `FROM [source] (...)`.
+1. `LoadProviderResolver` выбирает provider по `FROM ProviderName(options)`.
 2. Provider reader переименовывается в физические `column1`, `column2`, ...
 3. Reader нормализуется и пишется в temp ClickHouse table.
 4. `LoadStatement` превращается в `Query` над temp table.

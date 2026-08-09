@@ -2,6 +2,8 @@
 
 - [ ] `RowCount` не отображается в успешном результате. Сейчас `LoadedTable`/ответ playground не несет количество строк final table.
 - [ ] Если provider возвращает схему с `0` полей, Load не останавливается доменной ошибкой и доходит до `CREATE TABLE (...)` с пустым списком колонок. Нужно валидировать `FieldCount > 0`/schema columns до temp table write и выдавать понятную ошибку script/provider этапа.
+- [ ] ClickHouse writer не должен генерировать `Decimal(0, 0)`, если provider/schema отдали decimal precision/scale как `0`. Repro: Postgres source SQL `SELECT city, COUNT(*) AS cnt, SUM(amount) AS total_amount FROM public.playground_orders GROUP BY city` падает на temp table write с `Wrong precision: it must be between 1 and 76, got 0`. Нужно игнорировать нулевые precision/scale или fallback на безопасный decimal default.
+- [ ] Playground нужен `Copy` button для error details, чтобы быстро копировать полный текст ошибки/stack trace из UI.
 - [ ] ClickHouse `Variant(...)` надо обработать отдельной политикой. Сейчас смешение физических numeric types вроде `Decimal64` + `Float64` может дать `Variant(Decimal64, Float64)` или `NO_COMMON_TYPE` на старых CH; `DbDataReader` видит `System.Object`, а `Normalize`/mapper не знают, как безопасно мапить такой столбец. Нужно решить: запрещать, приводить на query layer или поддерживать Variant как отдельный DataType/edge case.
 - [x] Temp table без meta должна быть безопасной по nullability. Найдено на `DBNull` из Postgres/QVD: без анализа density ClickHouse writer может создать non-nullable колонку и упасть на insert.
 - [ ] Файловые providers должны разъединять одинаковые имена колонок при нормализации схемы. Например source `Поле`, `Поле`, `Поле` должен стать `Поле`, `Поле (2)`, `Поле (3)`, чтобы не ломались name-to-ordinal, ADO schema и дальнейший query mapping. Repro: Jira CSV export `PIX Jira 2026-07-30T00_01_28+0300.csv` содержит дубли `Исправить в версиях` и `Метки4`, из-за чего CSV load падает до загрузки данных.
@@ -19,5 +21,5 @@ orders: LOAD
    [sepal.width].Num() as sepal_width,
    [petal.length].Num() as petal_length,
    [petal.width].Num() as petal_width,
-FROM [iris.csv] (csv, delimiter=',', header=true);
+FROM Csv(path='iris.csv', delimiter=',', header=true);
 ```

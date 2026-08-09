@@ -237,6 +237,33 @@ public sealed class PostgresProviderTests
         await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
     }
 
+    [Test]
+    [DisplayName("Postgres SUM numeric без typmod не превращается в Decimal(0,0) shape")]
+    public async Task Sum_numeric_without_typmod_exposes_unknown_decimal_shape()
+    {
+        await using var rawReader = await OpenReaderAsync(
+            """
+            select sum(amount) as total_amount
+            from (
+                values
+                    (12.34::numeric(10, 2)),
+                    (20.01::numeric(10, 2))
+            ) as rows(amount)
+            """);
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.DataSchema.Fields[0].DataType).IsEqualTo(DataType.Number);
+        await Assert.That(reader.DataSchema.Fields[0].ClrType).IsEqualTo(typeof(decimal));
+        await Assert.That(reader.DataSchema.Fields[0].NumericPrecision).IsNull();
+        await Assert.That(reader.DataSchema.Fields[0].NumericScale).IsNull();
+        await Assert.That(reader).HaveData(
+            columns: ["total_amount"],
+            types: [DataType.Number],
+            rows: [
+                ValueTuple.Create(32.35m)
+            ]);
+    }
+
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("'example'::text", DataType.Text, "example");

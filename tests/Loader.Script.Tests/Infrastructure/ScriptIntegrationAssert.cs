@@ -16,25 +16,29 @@ namespace Loader.Script.Tests.Infrastructure;
 
 internal static class ScriptIntegrationAssert
 {
-    public static ScriptContext CreateContext(ClickHouseTestDatabase database)
+    public static ScriptContext CreateContext(
+        ClickHouseTestDatabase database,
+        IConnectionRegistry? connectionRegistry = null)
     {
         return new ScriptContext
         {
             FileStorage = new FileSystemSource(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Script")),
             TargetConnectionString = database.ConnectionString,
-            Logger = NullLogger.Instance
+            Logger = NullLogger.Instance,
+            ConnectionRegistry = connectionRegistry ?? EmptyConnectionRegistry.Instance
         };
     }
 
     public static async Task<ScriptExecutionResult> ExecuteScriptAsync(
         ClickHouseTestDatabase database,
         string scriptText,
+        IConnectionRegistry? connectionRegistry = null,
         CancellationToken cancellationToken = default)
     {
         var executionId = Guid.NewGuid().ToString("N");
         var tempPrefix = $"script_test_temp_{executionId}_";
         var finalPrefix = $"script_test_final_{executionId}_";
-        var context = CreateContext(database);
+        var context = CreateContext(database, connectionRegistry);
         var executor = new ScriptExecutor
         {
             LoadStatementExecutor = new LoadStatementExecutor

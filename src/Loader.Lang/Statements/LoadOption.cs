@@ -4,7 +4,7 @@ namespace Loader.Lang.Statements;
 
 /// <summary>
 /// Одна option из source options.
-/// Примеры: <c>csv</c>, <c>delimiter=','</c>, <c>header=true</c>.
+/// Примеры: <c>path='orders.csv'</c>, <c>delimiter=','</c>, <c>header=true</c>.
 /// </summary>
 public sealed record LoadOption
 {
@@ -16,7 +16,7 @@ public sealed record LoadOption
     public required LangSpan Span { get; init; }
 
     /// <summary>
-    /// Literal value после <c>=</c>. Для marker options вроде <c>csv</c> значения нет.
+    /// Literal value после <c>=</c>.
     /// </summary>
-    public required Literal? Value { get; init; }
+    public required Literal Value { get; init; }
 }

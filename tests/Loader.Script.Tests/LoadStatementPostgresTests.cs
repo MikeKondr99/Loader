@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres source перегружает данные через temp в final table")]
+    [DisplayName("LOAD РёР· Postgres source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
     public async Task Postgres_load_materializes_expected_final_table()
     {
         // Arrange
@@ -43,9 +43,8 @@ public sealed class LoadStatementPostgresTests
                 Text(id) AS id,
                 Upper(name) AS name,
                 city
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            WHERE city != 'Berlin'
-            ORDER BY id ASC;
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
+            SQL SELECT * FROM public.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
             """);
 
         // Assert
@@ -65,7 +64,67 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres nullable numeric не падает при записи temp table")]
+    [DisplayName("LOAD из Connect Postgres source перегружает данные через temp в final table")]
+    public async Task Connect_postgres_load_materializes_expected_final_table()
+    {
+        // Arrange
+        await using var postgres = await PostgresTestDatabase.StartAsync();
+        var sourceTable = $"script_connect_pg_source_{Guid.NewGuid():N}";
+        await postgres.ExecuteAsync(
+            $$"""
+            CREATE TABLE public.{{sourceTable}}
+            (
+                id integer not null,
+                name text not null,
+                city text not null
+            );
+            INSERT INTO public.{{sourceTable}} (id, name, city) VALUES
+            (1, 'Alice', 'Moscow'),
+            (2, 'Bob', 'Berlin'),
+            (3, 'Charlie', 'London');
+            """);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "test_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = postgres.ConnectionString
+            }
+        ]);
+
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            clickHouse,
+            $$"""
+            pg_people:
+            LOAD
+                Text(id) AS id,
+                Upper(name) AS name,
+                city
+            FROM Connect(name='test_pg')
+            SQL SELECT * FROM public.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
+            """,
+            registry);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await Assert.That(result[0].Alias).IsEqualTo("pg_people");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            clickHouse,
+            result[0],
+            ["id", "name", "city"],
+            [
+                ["1", "ALICE", "Moscow"],
+                ["3", "CHARLIE", "London"]
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
+    }
+
+    [Test]
+    [DisplayName("LOAD РёР· Postgres nullable numeric РЅРµ РїР°РґР°РµС‚ РїСЂРё Р·Р°РїРёСЃРё temp table")]
     public async Task Postgres_load_allows_null_numeric_in_temp_table()
     {
         // Arrange
@@ -92,8 +151,8 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 id,
                 amount
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            ORDER BY id ASC;
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
+            SQL SELECT * FROM public.{{sourceTable}} ORDER BY id ASC;
             """);
 
         // Assert
@@ -113,7 +172,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из Postgres сохраняет final table с физическими columnN при пользовательских alias")]
+    [DisplayName("LOAD РёР· Postgres СЃРѕС…СЂР°РЅСЏРµС‚ final table СЃ С„РёР·РёС‡РµСЃРєРёРјРё columnN РїСЂРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… alias")]
     public async Task Postgres_load_keeps_final_table_physical_columns_for_user_aliases()
     {
         // Arrange
@@ -140,9 +199,8 @@ public sealed class LoadStatementPostgresTests
             LOAD
                 city AS City,
                 city AS Город
-            FROM [{{postgres.ConnectionString}}] (postgres, table='public.{{sourceTable}}')
-            WHERE amount > 0
-            ORDER BY city ASC;
+            FROM Postgres(connection='{{postgres.ConnectionString}}')
+            SQL SELECT * FROM public.{{sourceTable}} WHERE amount > 0 ORDER BY city ASC;
             """);
 
         // Assert

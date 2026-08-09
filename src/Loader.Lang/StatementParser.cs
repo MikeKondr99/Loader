@@ -35,7 +35,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     /// <summary>
     /// Корневой statement parser.
-    /// Пример: <c>LOAD * FROM [orders.csv];</c>
+    /// Пример: <c>LOAD * FROM Csv(path='orders.csv');</c>
     /// </summary>
     public override Statement VisitFull_statement(LangParser.Full_statementContext context)
     {
@@ -45,7 +45,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     /// <summary>
     /// Диспетчер statement.
-    /// Пример: <c>LOAD amount AS amount FROM [orders.csv];</c>
+    /// Пример: <c>LOAD amount AS amount FROM Csv(path='orders.csv');</c>
     /// </summary>
     public override Statement VisitStatement(LangParser.StatementContext context)
     {
@@ -55,7 +55,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     /// <summary>
     /// LOAD statement целиком.
-    /// Пример: <c>LOAD amount AS amount, city FROM [orders.csv] (csv, delimiter=',');</c>
+    /// Пример: <c>LOAD amount AS amount, city FROM Csv(path='orders.csv', delimiter=',');</c>
     /// </summary>
     public override Statement VisitLoad_statement(LangParser.Load_statementContext context)
     {
@@ -65,38 +65,34 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 2. Разбираем поля LOAD: либо "*", либо список полей.
         var fields = VisitLoadFields(context.load_fields());
 
-        // 3. Source хранится как blocked name, поэтому снимаем квадратные скобки и escape.
-        var sourceNode = context.BLOCKED_NAME();
-        var source = UnescapeName(sourceNode.GetText());
+        // 3. Source хранится как provider call: Csv(path='orders.csv').
+        var sourceCall = VisitLoadSource(context.load_source());
 
-        // 4. Options необязательны: FROM [x] и FROM [x] (...) обе формы валидны.
-        var options = VisitSourceOptions(context.source_options());
+        // 5. SQL source query необязателен и взаимоисключен с LOAD-level WHERE/GROUP/ORDER/LIMIT.
+        var sql = VisitLoadSql(context.load_sql());
 
-        // 5. WHERE необязателен и хранится как обычное expression tree.
+        // 6. WHERE необязателен и хранится как обычное expression tree.
         var where = VisitLoadWhere(context.load_where());
 
-        // 6. GROUP BY необязателен и хранит список expression группировки.
+        // 7. GROUP BY необязателен и хранит список expression группировки.
         var groupBy = VisitLoadGroupBy(context.load_group_by());
 
-        // 7. ORDER BY необязателен и хранит список expression с направлением сортировки.
+        // 8. ORDER BY необязателен и хранит список expression с направлением сортировки.
         var orderBy = VisitLoadOrderBy(context.load_order_by());
 
-        // 8. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
+        // 9. LIMIT/OFFSET необязательны и специально ограничены integer literal, как в SQL-форме LIMIT 10 OFFSET 20.
         var limitContext = context.load_limit();
         var limit = VisitLoadLimit(limitContext);
         var offset = VisitLoadOffset(limitContext?.load_offset());
 
         return new LoadStatement
         {
+            LoadSpan = Span(context.LOAD()),
             TableName = tableName,
             Fields = fields,
             FromSpan = Span(context.FROM()),
-            SourcePart = new SourcePart
-            {
-                Value = source,
-                Span = Span(sourceNode)
-            },
-            Options = options,
+            SourceCall = sourceCall,
+            SqlPart = sql,
             Where = where,
             GroupBy = groupBy,
             OrderBy = orderBy,
@@ -106,18 +102,33 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     }
 
     /// <summary>
-    /// Optional table name prefix before LOAD.
-    /// Пример: <c>orders: LOAD * FROM [orders.csv];</c>.
+    /// Optional source SQL after FROM.
+    /// Пример: <c>SQL SELECT * FROM public.orders WHERE amount &gt; 0</c>.
     /// </summary>
-    private static string? VisitLoadTableName(LangParser.Load_table_nameContext? context)
+    private static SqlPart? VisitLoadSql(LangParser.Load_sqlContext? context)
     {
-        // 1. Префикса нет: имя таблицы будет назначено execution-слоем.
+        // 1. SQL отсутствует: source задается provider-specific options.
         if (context is null)
         {
             return null;
         }
 
-        // 2. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
+        // 2. Lexer mode отдает весь текст до ; как SQL_TEXT, не пытаясь парсить SQL нашим языком.
+        var text = context.SQL_TEXT()?.GetText().Trim() ?? string.Empty;
+        return new SqlPart
+        {
+            Value = text,
+            Span = Span(context)
+        };
+    }
+
+    /// <summary>
+    /// Table name prefix before LOAD.
+    /// Пример: <c>orders: LOAD * FROM Csv(path='orders.csv');</c>.
+    /// </summary>
+    private static string VisitLoadTableName(LangParser.Load_table_nameContext context)
+    {
+        // 1. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
         return context.NAME().GetText();
     }
 
@@ -172,20 +183,61 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         };
     }
 
-    /// <summary>
-    /// Source options после FROM.
-    /// Пример: <c>(csv, delimiter=',', header=true)</c>.
-    /// </summary>
-    private List<LoadOption> VisitSourceOptions(LangParser.Source_optionsContext? context)
+    private LoadSourceCall VisitLoadSource(LangParser.Load_sourceContext context)
     {
-        // 1. Отсутствующий options block означает пустой список options.
-        if (context?.option_list() is null)
+        if (context.source_call() is { } sourceCall)
+        {
+            return VisitSourceCall(sourceCall);
+        }
+
+        return VisitSourceTable(context.source_table());
+    }
+
+    private static LoadSourceCall VisitSourceTable(LangParser.Source_tableContext context)
+    {
+        var nameSpan = Span(context.NAME());
+        return new LoadSourceCall
+        {
+            Name = "Table",
+            NameSpan = nameSpan,
+            Options =
+            [
+                new LoadOption
+                {
+                    Name = "name",
+                    Span = nameSpan,
+                    Value = new StringLiteral(context.NAME().GetText(), nameSpan)
+                }
+            ],
+            Span = Span(context)
+        };
+    }
+
+    private LoadSourceCall VisitSourceCall(LangParser.Source_callContext context)
+    {
+        return new LoadSourceCall
+        {
+            Name = context.NAME().GetText(),
+            NameSpan = Span(context.NAME()),
+            Options = VisitSourceOptions(context.option_list()),
+            Span = Span(context)
+        };
+    }
+
+    /// <summary>
+    /// Source options внутри provider call.
+    /// Пример: <c>path='orders.csv', delimiter=',', header=true</c>.
+    /// </summary>
+    private List<LoadOption> VisitSourceOptions(LangParser.Option_listContext? context)
+    {
+        // 1. Пустой provider call означает пустой список options.
+        if (context is null)
         {
             return [];
         }
 
-        // 2. Options сохраняем в исходном порядке, чтобы provider resolver мог читать marker первым.
-        return context.option_list().load_option().Select(VisitLoadOption).ToList();
+        // 2. Options сохраняем в исходном порядке для диагностики duplicate options и span-ов.
+        return context.load_option().Select(VisitLoadOption).ToList();
     }
 
     /// <summary>
@@ -291,23 +343,18 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     /// <summary>
     /// Одна source option.
-    /// Примеры: <c>csv</c>, <c>delimiter=','</c>, <c>header=true</c>.
+    /// Примеры: <c>path='orders.csv'</c>, <c>delimiter=','</c>, <c>header=true</c>.
     /// </summary>
     private LoadOption VisitLoadOption(LangParser.Load_optionContext context)
     {
         // 1. NAME всегда является именем option.
         var name = context.NAME().GetText();
 
-        // 2. Value есть только у формы "name=value"; marker option вроде "csv" остается без value.
-        var value = context.option_literal() is null
-            ? null
-            : VisitOptionLiteral(context.option_literal());
-
         return new LoadOption
         {
             Name = name,
             Span = Span(context),
-            Value = value
+            Value = VisitOptionLiteral(context.option_literal())
         };
     }
 
@@ -342,21 +389,39 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     private static LangSpan Span(ParserRuleContext context)
     {
-        return new LangSpan(
-            (uint)context.Start.Line,
-            (uint)context.Start.Column,
-            (uint)context.Stop.Line,
-            (uint)(context.Stop.Column + context.Stop.Text.Length));
+        return Span(context.Start, context.Stop);
     }
 
     private static LangSpan Span(ITerminalNode node)
     {
         var token = node.Symbol;
+        return Span(token, token);
+    }
+
+    private static LangSpan Span(IToken start, IToken stop)
+    {
+        var endRow = stop.Line;
+        var endColumn = stop.Column;
+        foreach (var character in stop.Text)
+        {
+            if (character == '\n')
+            {
+                endRow++;
+                endColumn = 0;
+                continue;
+            }
+
+            if (character != '\r')
+            {
+                endColumn++;
+            }
+        }
+
         return new LangSpan(
-            (uint)token.Line,
-            (uint)token.Column,
-            (uint)token.Line,
-            (uint)(token.Column + token.Text.Length));
+            (uint)start.Line,
+            (uint)start.Column,
+            (uint)endRow,
+            (uint)endColumn);
     }
 
     [GeneratedRegex(@"\\\]")]

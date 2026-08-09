@@ -1,4 +1,4 @@
-using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -14,7 +14,7 @@ public sealed class LoadStatementCsvTests
     }
 
     [Test]
-    [DisplayName("LOAD из CSV пишет temp, применяет преобразования и сохраняет final table")]
+    [DisplayName("LOAD РёР· CSV РїРёС€РµС‚ temp, РїСЂРёРјРµРЅСЏРµС‚ РїСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёСЏ Рё СЃРѕС…СЂР°РЅСЏРµС‚ final table")]
     public async Task Csv_load_materializes_expected_final_table()
     {
         // Arrange
@@ -27,7 +27,7 @@ public sealed class LoadStatementCsvTests
                 Text(Int(id)) AS id,
                 Upper(name) AS name,
                 city
-            FROM [pipe-orders.csv] (csv, delimiter='|')
+            FROM Csv(path='pipe-orders.csv', delimiter='|')
             WHERE Num(amount) > 15
             ORDER BY id DESC;
             """);

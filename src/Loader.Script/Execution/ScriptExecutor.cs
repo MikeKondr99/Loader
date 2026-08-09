@@ -22,7 +22,7 @@ public sealed class ScriptExecutor
             {
                 activity?
                     .SetTag("load.table_name", load.TableName)
-                    .SetSanitizedTag("load.source", load.Source);
+                    .SetTag("load.source_provider", load.SourceCall.Name);
             }
 
             try
