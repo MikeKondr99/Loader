@@ -11,7 +11,7 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad("LOAD * FROM Csv(path='orders.csv');");
 
-        await Assert.That(load.TableName).IsNull();
+        await Assert.That(load.TableName).IsEqualTo("tmp");
         await Assert.That(load.Fields).IsNull();
         await Assert.That(load.SourceCall.Name).IsEqualTo("Csv");
         await AssertOption(load.SourceCall, "path", "orders.csv");
@@ -209,14 +209,14 @@ public sealed class LoadParsingTests
     {
         var load = ParseLoad("LOAD id FROM Postgres(connection='orders.csv', table='public.orders');");
 
-        await Assert.That(load.FromSpan.StartColumn).IsEqualTo(8u);
-        await Assert.That(load.FromSpan.EndColumn).IsEqualTo(12u);
-        await Assert.That(load.SourceCall.NameSpan.StartColumn).IsEqualTo(13u);
-        await Assert.That(load.SourceCall.NameSpan.EndColumn).IsEqualTo(21u);
-        await Assert.That(load.SourceCall.Options[0].Span.StartColumn).IsEqualTo(22u);
-        await Assert.That(load.SourceCall.Options[0].Span.EndColumn).IsEqualTo(45u);
-        await Assert.That(load.SourceCall.Options[1].Span.StartColumn).IsEqualTo(47u);
-        await Assert.That(load.SourceCall.Options[1].Span.EndColumn).IsEqualTo(68u);
+        await Assert.That(load.FromSpan.StartColumn).IsEqualTo(13u);
+        await Assert.That(load.FromSpan.EndColumn).IsEqualTo(17u);
+        await Assert.That(load.SourceCall.NameSpan.StartColumn).IsEqualTo(18u);
+        await Assert.That(load.SourceCall.NameSpan.EndColumn).IsEqualTo(26u);
+        await Assert.That(load.SourceCall.Options[0].Span.StartColumn).IsEqualTo(27u);
+        await Assert.That(load.SourceCall.Options[0].Span.EndColumn).IsEqualTo(50u);
+        await Assert.That(load.SourceCall.Options[1].Span.StartColumn).IsEqualTo(52u);
+        await Assert.That(load.SourceCall.Options[1].Span.EndColumn).IsEqualTo(73u);
     }
 
     [Test]
@@ -273,6 +273,17 @@ public sealed class LoadParsingTests
         var load = ParseLoad("LOAD id AS id FROM Csv();");
 
         await Assert.That(load.SourceCall.Options).IsEmpty();
+    }
+
+    [Test]
+    [DisplayName("LOAD FROM table_name разбирается как ссылка на результат предыдущего LOAD")]
+    public async Task Load_from_table_source()
+    {
+        var load = ParseLoad("second: LOAD * FROM first;");
+
+        await Assert.That(load.TableName).IsEqualTo("second");
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Table");
+        await AssertOption(load.SourceCall, "name", "first");
     }
 
     [Test]
@@ -394,8 +405,8 @@ public sealed class LoadParsingTests
         await Assert.That(load.Limit).IsEqualTo(0);
         await Assert.That(load.LimitPart).IsNotNull();
         await Assert.That(load.LimitPart!.Span.StartRow).IsEqualTo(1u);
-        await Assert.That(load.LimitPart.Span.StartColumn).IsEqualTo(36u);
-        await Assert.That(load.LimitPart.Span.EndColumn).IsEqualTo(43u);
+        await Assert.That(load.LimitPart.Span.StartColumn).IsEqualTo(41u);
+        await Assert.That(load.LimitPart.Span.EndColumn).IsEqualTo(48u);
     }
 
     [Test]
@@ -433,6 +444,7 @@ public sealed class LoadParsingTests
 
     [Test]
     [Arguments("")]
+    [Arguments("LOAD * FROM Csv(path='orders.csv');")]
     [Arguments("LOAD * FROM Csv(path='orders.csv')")]
     [Arguments("LOAD id FROM Csv(path='orders.csv')")]
     [Arguments("LOAD FROM Csv(path='orders.csv');")]
@@ -508,8 +520,8 @@ public sealed class LoadParsingTests
     {
         var result = Script.Parse(
             """
-            LOAD * FROM Csv(path='orders.csv');
-            LOAD id, amount AS amount FROM Excel(path='customers.xlsx', sheet='Sheet1');
+            orders: LOAD * FROM Csv(path='orders.csv');
+            customers: LOAD id, amount AS amount FROM Excel(path='customers.xlsx', sheet='Sheet1');
             """);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -532,12 +544,12 @@ public sealed class LoadParsingTests
         var result = Script.Parse(
             """
             // first source
-            LOAD id FROM Csv(path='orders.csv');
+            orders: LOAD id FROM Csv(path='orders.csv');
 
             /*
               second source
             */
-            LOAD name FROM Csv(path='users.csv');
+            users: LOAD name FROM Csv(path='users.csv');
             """);
 
         await Assert.That(result.IsSuccess).IsTrue();
@@ -562,9 +574,9 @@ public sealed class LoadParsingTests
     {
         var result = Script.Parse(
             """
-            LOAD id FROM Csv(path='orders.csv');
-            LOAD id FROM Csv(path='broken.csv')
-            LOAD name FROM Csv(path='users.csv');
+            orders: LOAD id FROM Csv(path='orders.csv');
+            broken: LOAD id FROM Csv(path='broken.csv')
+            users: LOAD name FROM Csv(path='users.csv');
             """);
 
         await Assert.That(result.IsSuccess).IsFalse();
@@ -585,8 +597,21 @@ public sealed class LoadParsingTests
 
     private static LoadStatement ParseLoad(string text)
     {
-        var result = Statement.Parse(text);
+        var result = Statement.Parse(EnsureTableName(text));
         return (LoadStatement)result.Value;
+    }
+
+    private static string EnsureTableName(string text)
+    {
+        var loadIndex = text.IndexOf("LOAD", StringComparison.OrdinalIgnoreCase);
+        if (loadIndex < 0)
+        {
+            return text;
+        }
+
+        return text[..loadIndex].Contains(':', StringComparison.Ordinal)
+            ? text
+            : text.Insert(loadIndex, "tmp: ");
     }
 
     private static async Task AssertField(LoadField field, string name, string expressionName)

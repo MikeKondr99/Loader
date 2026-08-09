@@ -66,7 +66,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         var fields = VisitLoadFields(context.load_fields());
 
         // 3. Source хранится как provider call: Csv(path='orders.csv').
-        var sourceCall = VisitSourceCall(context.source_call());
+        var sourceCall = VisitLoadSource(context.load_source());
 
         // 5. SQL source query необязателен и взаимоисключен с LOAD-level WHERE/GROUP/ORDER/LIMIT.
         var sql = VisitLoadSql(context.load_sql());
@@ -123,18 +123,12 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     }
 
     /// <summary>
-    /// Optional table name prefix before LOAD.
+    /// Table name prefix before LOAD.
     /// Пример: <c>orders: LOAD * FROM Csv(path='orders.csv');</c>.
     /// </summary>
-    private static string? VisitLoadTableName(LangParser.Load_table_nameContext? context)
+    private static string VisitLoadTableName(LangParser.Load_table_nameContext context)
     {
-        // 1. Префикса нет: имя таблицы будет назначено execution-слоем.
-        if (context is null)
-        {
-            return null;
-        }
-
-        // 2. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
+        // 1. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
         return context.NAME().GetText();
     }
 
@@ -186,6 +180,36 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Name = name,
             Span = Span(context.name()),
             Expression = expression
+        };
+    }
+
+    private LoadSourceCall VisitLoadSource(LangParser.Load_sourceContext context)
+    {
+        if (context.source_call() is { } sourceCall)
+        {
+            return VisitSourceCall(sourceCall);
+        }
+
+        return VisitSourceTable(context.source_table());
+    }
+
+    private static LoadSourceCall VisitSourceTable(LangParser.Source_tableContext context)
+    {
+        var nameSpan = Span(context.NAME());
+        return new LoadSourceCall
+        {
+            Name = "Table",
+            NameSpan = nameSpan,
+            Options =
+            [
+                new LoadOption
+                {
+                    Name = "name",
+                    Span = nameSpan,
+                    Value = new StringLiteral(context.NAME().GetText(), nameSpan)
+                }
+            ],
+            Span = Span(context)
         };
     }
 

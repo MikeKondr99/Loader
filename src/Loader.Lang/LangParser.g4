@@ -15,9 +15,9 @@ statement
     : load_statement;
 
 load_statement
-    : load_table_name?
+    : load_table_name
     LOAD load_fields
-    FROM source_call
+    FROM load_source
     (
         load_sql
         |
@@ -68,6 +68,15 @@ load_sql
 
 source_call
     : NAME LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+    ;
+
+load_source
+    : source_call
+    | source_table
+    ;
+
+source_table
+    : NAME
     ;
 
 option_list

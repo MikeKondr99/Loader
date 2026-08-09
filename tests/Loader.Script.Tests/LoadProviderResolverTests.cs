@@ -694,6 +694,23 @@ public sealed class LoadProviderResolverTests
             .IsEquivalentTo([duplicateConnectionSpan, fromSpan], CollectionOrdering.Matching);
     }
 
+    [Test]
+    [DisplayName("Resolver Table provider ищет ранее загруженную таблицу по alias")]
+    public async Task Resolve_table_provider_rejects_unknown_loaded_table_alias()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceSpan = Span(3, 20, 30);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Table", [Option("name", "raw_orders", sourceSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("raw_orders");
+    }
+
     private static LoadStatement CreateStatement(
         string provider,
         List<LoadOption>? options = null,
@@ -704,7 +721,7 @@ public sealed class LoadProviderResolverTests
     {
         return new LoadStatement
         {
-            TableName = null,
+            TableName = "test",
             Fields = null,
             FromSpan = fromSpan ?? Span(),
             SourceCall = new LoadSourceCall

@@ -469,11 +469,24 @@ internal sealed record PlaygroundConfig(
     {
         var section = configuration.GetSection("PixBi");
         var enabled = section.GetValue("Enabled", false);
+        if (!enabled)
+        {
+            return new PlaygroundPixBiConfig(
+                false,
+                null,
+                null,
+                null,
+                section.GetValue("PageSize", 50));
+        }
+
         Uri? baseUri = null;
         var baseUriText = section["BaseUri"];
         if (!string.IsNullOrWhiteSpace(baseUriText))
         {
-            baseUri = new Uri(baseUriText, UriKind.Absolute);
+            if (!Uri.TryCreate(baseUriText, UriKind.Absolute, out baseUri))
+            {
+                throw new InvalidOperationException("PixBi:BaseUri must be an absolute URI when PixBi is enabled.");
+            }
         }
 
         return new PlaygroundPixBiConfig(

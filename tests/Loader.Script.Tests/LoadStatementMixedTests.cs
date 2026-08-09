@@ -103,4 +103,48 @@ public sealed class LoadStatementMixedTests
             "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [DisplayName("Script выполняет LOAD из результата предыдущего LOAD через Table provider")]
+    public async Task Execute_script_loads_from_previous_load_table()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            raw_names:
+            LOAD
+                id,
+                name,
+                Upper(name) AS [upper-name]
+            FROM Csv(path='orders.csv')
+            ORDER BY id ASC;
+
+            final_names:
+            LOAD
+                Text(Int(id)) AS id,
+                [upper-name] AS name
+            FROM raw_names
+            WHERE name != 'Bob'
+            ORDER BY id DESC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await Assert.That(result.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["raw_names", "final_names"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[1],
+            ["id", "name"],
+            [
+                ["3", "CHARLIE"],
+                ["1", "ALICE"]
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
 }
