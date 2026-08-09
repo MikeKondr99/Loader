@@ -43,6 +43,86 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver выбирает ODBC provider по имени SourceCall и SQL инструкции")]
+    public async Task Resolve_uses_odbc_provider_name_and_sql()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Odbc",
+                [Option("connection", "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=db")],
+                sql: "SELECT * FROM dbo.orders"),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver читает ODBC provider name без учета регистра")]
+    public async Task Resolve_uses_odbc_provider_name_case_insensitive()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "oDbC",
+                [Option("connection", "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db")],
+                sql: "select * from public.orders"),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver для ODBC требует SQL инструкцию")]
+    public async Task Resolve_rejects_odbc_provider_without_sql()
+    {
+        var resolver = new LoadProviderResolver();
+        var fromSpan = Span(2, 5, 9);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Odbc",
+                    [Option("connection", "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db")],
+                    fromSpan),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("SQL");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect берет ODBC connection string и provider type из registry")]
+    public async Task Resolve_connect_supports_odbc_provider_type()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "generic_odbc",
+                Provider = ScriptConnectionType.Odbc,
+                ConnectionString = "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=db"
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [Option("name", "generic_odbc")],
+                sql: "SELECT * FROM dbo.orders"),
+            CreateContext(registry: registry));
+
+        await Assert.That(source.Kind).IsEqualTo("odbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
     [DisplayName("Resolver Connect берет connection string и provider type из registry")]
     public async Task Resolve_connect_uses_registered_connection()
     {

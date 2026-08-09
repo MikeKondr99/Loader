@@ -6,5 +6,6 @@ public enum ScriptConnectionType
     SqlServer,
     Oracle,
     Hive,
+    Odbc,
     ClickHouse
 }

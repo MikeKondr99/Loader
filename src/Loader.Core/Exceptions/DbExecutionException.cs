@@ -11,5 +11,11 @@ public sealed class DbExecutionException : QueryExecutionException
         Sql = sql;
     }
 
+    public DbExecutionException(string providerKind, string sql, string message, Exception innerException)
+        : base(providerKind, sql, message, innerException)
+    {
+        Sql = sql;
+    }
+
     public string Sql { get; }
 }

@@ -64,6 +64,7 @@ classDiagram
     IProvider <|-- SqlServerProvider
     IProvider <|-- OracleProvider
     IProvider <|-- HiveProvider
+    IProvider <|-- OdbcProvider
 ```
 
 ## File providers

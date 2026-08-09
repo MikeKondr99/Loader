@@ -74,6 +74,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new SqlServerLoadSourceResolver(),
             new OracleLoadSourceResolver(),
             new HiveLoadSourceResolver(),
+            new OdbcLoadSourceResolver(),
             new ClickHouseLoadSourceResolver()
         ];
 

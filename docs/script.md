@@ -54,7 +54,33 @@ SQL SELECT id, name FROM public.users;
 - `SqlServer(connection='...')`
 - `Oracle(connection='...')`
 - `Hive(connection='...')`
+- `Odbc(connection='...')`
 - `ClickHouse(connection='...')`
+
+ODBC source:
+
+```text
+users:
+LOAD
+    id,
+    name
+FROM Odbc(connection='Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Uid=sa;Pwd=secret')
+SQL SELECT id, name FROM dbo.users;
+```
+
+ODBC uses the same SQL block style as other DB providers:
+
+```text
+users:
+LOAD
+    id,
+    name
+FROM Odbc(connection='Dsn=analytics')
+SQL select id, name from "My Schema"."Users";
+```
+
+ODBC driver detection is best-effort and used for diagnostics. A recognized driver kind does not mean the driver has
+full integration-test coverage; actual compatibility depends on the installed ODBC driver and the SQL it accepts.
 
 ## Telemetry
 
