@@ -431,7 +431,7 @@ public sealed class LoadProviderResolverTests
 
     [Test]
     [DisplayName("Hive provider ошибку ODBC соединения оборачивает в DbExecutionException")]
-    [ParallelLimiter<ApacheHiveParallelLimit>]
+    [TestWithDependency(DatabaseDependency.ApacheHive, UseDataSource = false, CheckExternalDependencies = false)]
     public async Task Hive_provider_wraps_odbc_connection_error()
     {
         var resolver = new LoadProviderResolver();

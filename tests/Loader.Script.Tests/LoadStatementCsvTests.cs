@@ -2,8 +2,7 @@
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh)]
 public sealed class LoadStatementCsvTests
 {
     private readonly ClickHouseTestDatabase database;
@@ -14,7 +13,7 @@ public sealed class LoadStatementCsvTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· CSV РїРёС€РµС‚ temp, РїСЂРёРјРµРЅСЏРµС‚ РїСЂРµРѕР±СЂР°Р·РѕРІР°РЅРёСЏ Рё СЃРѕС…СЂР°РЅСЏРµС‚ final table")]
+    [DisplayName("LOAD из CSV пишет temp, применяет преобразования и сохраняет final table")]
     public async Task Csv_load_materializes_expected_final_table()
     {
         // Arrange

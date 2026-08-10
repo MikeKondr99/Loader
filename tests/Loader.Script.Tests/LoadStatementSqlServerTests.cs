@@ -3,9 +3,7 @@ using Microsoft.Data.SqlClient;
 
 namespace Loader.Script.Tests;
 
-[Explicit]
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<SqlServerParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh, DatabaseDependency.SqlServer)]
 public sealed class LoadStatementSqlServerTests
 {
     private readonly ClickHouseTestDatabase clickHouse;
@@ -16,7 +14,7 @@ public sealed class LoadStatementSqlServerTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· SqlServer source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
+    [DisplayName("LOAD из SqlServer source перегружает данные через temp в final table")]
     public async Task SqlServer_load_materializes_expected_final_table()
     {
         // Arrange

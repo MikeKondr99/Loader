@@ -7,8 +7,7 @@ using Loader.Core.Writers.ClickHouse;
 
 namespace Loader.Core.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouse)]
 public sealed class ClickHouseWriterTests
 {
     private readonly ClickHouseTestDatabase database;

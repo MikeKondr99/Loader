@@ -2,8 +2,7 @@
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<PostgresParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh, DatabaseDependency.Postgres)]
 public sealed class LoadStatementPostgresTests
 {
     private readonly ClickHouseTestDatabase clickHouse;
@@ -14,7 +13,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· Postgres source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
+    [DisplayName("LOAD из Postgres source перегружает данные через temp в final table")]
     public async Task Postgres_load_materializes_expected_final_table()
     {
         // Arrange
@@ -124,7 +123,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· Postgres nullable numeric РЅРµ РїР°РґР°РµС‚ РїСЂРё Р·Р°РїРёСЃРё temp table")]
+    [DisplayName("LOAD из Postgres nullable numeric не падает при записи temp table")]
     public async Task Postgres_load_allows_null_numeric_in_temp_table()
     {
         // Arrange
@@ -172,7 +171,7 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· Postgres СЃРѕС…СЂР°РЅСЏРµС‚ final table СЃ С„РёР·РёС‡РµСЃРєРёРјРё columnN РїСЂРё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєРёС… alias")]
+    [DisplayName("LOAD из Postgres сохраняет final table с физическими columnN при пользовательских alias")]
     public async Task Postgres_load_keeps_final_table_physical_columns_for_user_aliases()
     {
         // Arrange

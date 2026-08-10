@@ -100,8 +100,7 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
-    [ClassDataSource<PostgresTestDatabase>(Shared = SharedType.PerTestSession)]
-    [ParallelLimiter<PostgresParallelLimit>]
+    [TestWithDependency(DatabaseDependency.Postgres)]
     [DisplayName("PostgresProvider works without buffer")]
     public async Task Postgres_provider_works_without_buffer(PostgresTestDatabase postgres)
     {
@@ -116,8 +115,7 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
-    [ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-    [ParallelLimiter<ClickHouseParallelLimit>]
+    [TestWithDependency(DatabaseDependency.ClickHouse)]
     [DisplayName("ClickHouseProvider works without buffer")]
     public async Task ClickHouse_provider_works_without_buffer(ClickHouseTestDatabase clickHouse)
     {
@@ -132,8 +130,7 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
-    [ClassDataSource<SqlServerTestDatabase>(Shared = SharedType.PerTestSession)]
-    [ParallelLimiter<SqlServerParallelLimit>]
+    [TestWithDependency(DatabaseDependency.SqlServer)]
     [DisplayName("SqlServerProvider works only with buffer")]
     public async Task SqlServer_provider_works_only_with_buffer(SqlServerTestDatabase sqlServer)
     {
@@ -148,9 +145,7 @@ public sealed class BufferDataReaderTests
     }
 
     [Test]
-    [Explicit]
-    [ClassDataSource<OracleTestDatabase>(Shared = SharedType.PerTestSession)]
-    [ParallelLimiter<OracleParallelLimit>]
+    [TestWithDependency(DatabaseDependency.Oracle)]
     [DisplayName("OracleProvider works only with buffer")]
     public async Task Oracle_provider_works_only_with_buffer(OracleTestDatabase oracle)
     {

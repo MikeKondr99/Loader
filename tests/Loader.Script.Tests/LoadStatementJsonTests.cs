@@ -2,8 +2,7 @@
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh)]
 public sealed class LoadStatementJsonTests
 {
     private readonly ClickHouseTestDatabase database;
@@ -14,7 +13,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· JSON Р°РЅР°Р»РёР·РёСЂСѓРµС‚ СЃС…РµРјСѓ, РїРёС€РµС‚ temp Рё СЃРѕС…СЂР°РЅСЏРµС‚ final table")]
+    [DisplayName("LOAD из JSON анализирует схему, пишет temp и сохраняет final table")]
     public async Task Json_load_materializes_expected_final_table()
     {
         // Arrange
@@ -49,7 +48,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· JSON СЃ root С‡РёС‚Р°РµС‚ РјР°СЃСЃРёРІ РІРЅСѓС‚СЂРё РѕР±СЉРµРєС‚Р°")]
+    [DisplayName("LOAD из JSON с root читает массив внутри объекта")]
     public async Task Json_load_with_root_materializes_nested_array()
     {
         // Arrange
@@ -84,7 +83,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· JSON СЃ root СЂР°Р±РѕС‚Р°РµС‚ Р±РµР· СЏРІРЅРѕРіРѕ json marker")]
+    [DisplayName("LOAD из JSON с root работает без явного json marker")]
     public async Task Json_load_with_root_uses_file_extension_provider()
     {
         // Arrange
@@ -115,7 +114,7 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· JSON root РїРѕРґРґРµСЂР¶РёРІР°РµС‚ РёРЅРґРµРєСЃ РјР°СЃСЃРёРІР° РІ РїСѓС‚Рё")]
+    [DisplayName("LOAD из JSON root поддерживает индекс массива в пути")]
     public async Task Json_load_with_root_array_index_materializes_selected_table()
     {
         // Arrange

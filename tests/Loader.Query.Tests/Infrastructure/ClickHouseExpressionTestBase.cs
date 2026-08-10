@@ -15,8 +15,7 @@ using Loader.Tests.Common;
 
 namespace Loader.Query.Tests.Infrastructure;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouse)]
 public abstract class ClickHouseExpressionTestBase
 {
     private static readonly ClickHouseProvider Provider = new();

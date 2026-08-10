@@ -3,9 +3,7 @@ using Oracle.ManagedDataAccess.Client;
 
 namespace Loader.Script.Tests;
 
-[Explicit]
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<OracleParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh, DatabaseDependency.Oracle)]
 public sealed class LoadStatementOracleTests
 {
     private readonly ClickHouseTestDatabase clickHouse;
@@ -16,7 +14,7 @@ public sealed class LoadStatementOracleTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· Oracle source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
+    [DisplayName("LOAD из Oracle source перегружает данные через temp в final table")]
     public async Task Oracle_load_materializes_expected_final_table()
     {
         // Arrange

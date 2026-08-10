@@ -7,8 +7,7 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
-[ClassDataSource<PostgresTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<PostgresParallelLimit>]
+[TestWithDependency(DatabaseDependency.Postgres)]
 public sealed class PostgresProviderTests
 {
     private static readonly PostgresProvider Provider = new();

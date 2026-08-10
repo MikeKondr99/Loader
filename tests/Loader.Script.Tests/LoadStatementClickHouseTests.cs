@@ -2,8 +2,7 @@
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh, DatabaseDependency.ClickHouse)]
 public sealed class LoadStatementClickHouseTests
 {
     private readonly ClickHouseTestDatabase database;
@@ -14,7 +13,7 @@ public sealed class LoadStatementClickHouseTests
     }
 
     [Test]
-    [DisplayName("LOAD РёР· ClickHouse source РїРµСЂРµРіСЂСѓР¶Р°РµС‚ РґР°РЅРЅС‹Рµ С‡РµСЂРµР· temp РІ final table")]
+    [DisplayName("LOAD из ClickHouse source перегружает данные через temp в final table")]
     public async Task ClickHouse_load_materializes_expected_final_table()
     {
         // Arrange

@@ -2,8 +2,7 @@
 
 namespace Loader.Script.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[TestWithDependency(DatabaseDependency.ClickHouseDwh)]
 public sealed class LoadStatementMixedTests
 {
     private readonly ClickHouseTestDatabase database;
@@ -14,7 +13,8 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
-    [DisplayName("Script РІС‹РїРѕР»РЅСЏРµС‚ РЅРµСЃРєРѕР»СЊРєРѕ LOAD РёР· СЂР°Р·РЅС‹С… РёСЃС‚РѕС‡РЅРёРєРѕРІ Рё РІРѕР·РІСЂР°С‰Р°РµС‚ final tables РїРѕ РїРѕСЂСЏРґРєСѓ")]
+    [TestWithDependency(DatabaseDependency.ClickHouse, UseDataSource = false)]
+    [DisplayName("Script выполняет несколько LOAD из разных источников и возвращает final tables по порядку")]
     public async Task Execute_script_loads_multiple_sources_into_clickhouse()
     {
         // Arrange

@@ -1,4 +1,4 @@
-using System.Data.Common;
+﻿using System.Data.Common;
 using Loader.Core.Providers;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -7,7 +7,7 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
-[ClickHouseTestResource]
+[TestWithDependency(DatabaseDependency.ClickHouse)]
 public sealed class ClickHouseProviderTests
 {
     private static readonly ClickHouseProvider Provider = new();

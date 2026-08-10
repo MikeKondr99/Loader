@@ -7,9 +7,7 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
-[Explicit]
-[ClassDataSource<OracleTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<OracleParallelLimit>]
+[TestWithDependency(DatabaseDependency.Oracle)]
 public sealed class OracleProviderTests
 {
     private static readonly OracleProvider Provider = new();

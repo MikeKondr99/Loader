@@ -7,8 +7,7 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
-[ClassDataSource<SqlServerTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<SqlServerParallelLimit>]
+[TestWithDependency(DatabaseDependency.SqlServer)]
 public sealed class SqlServerProviderTests
 {
     private static readonly SqlServerProvider Provider = new();
