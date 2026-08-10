@@ -7,8 +7,7 @@ using Loader.Core.Tests.Infrastructure;
 
 namespace Loader.Core.Tests;
 
-[ClassDataSource<ClickHouseTestDatabase>(Shared = SharedType.PerTestSession)]
-[ParallelLimiter<ClickHouseParallelLimit>]
+[ClickHouseTestResource]
 public sealed class ClickHouseProviderTests
 {
     private static readonly ClickHouseProvider Provider = new();
