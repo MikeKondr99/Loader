@@ -220,6 +220,21 @@
       background: var(--danger-soft);
     }
 
+    .output-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 12px 0;
+      background: #fbfcfa;
+    }
+
+    .copy-error {
+      border-color: #d4a7a2;
+      color: var(--danger);
+      background: #fff8f7;
+      font-size: 12px;
+    }
+
     pre,
     .output-text {
       margin: 0;
@@ -417,6 +432,9 @@
     <section class="card output">
       <div class="status" id="status">Готово</div>
       <div class="result-body">
+        <div class="output-actions" id="output-actions" hidden>
+          <button class="copy-error" id="copy-error" type="button">Скопировать ошибку</button>
+        </div>
         <pre id="output">Напиши script и нажми Run.</pre>
         <div class="preview" id="preview" hidden></div>
       </div>
@@ -444,6 +462,7 @@ LIMIT 10;`;
 
     let editor;
     let decorations = [];
+    let lastFailureResponse = null;
 
     const status = document.getElementById('status');
     let output = document.getElementById('output');
@@ -461,6 +480,8 @@ LIMIT 10;`;
     const sampleButton = document.getElementById('sample');
     const fileUpload = document.getElementById('file-upload');
     const fileList = document.getElementById('file-list');
+    const outputActions = document.getElementById('output-actions');
+    const copyErrorButton = document.getElementById('copy-error');
     refreshFiles();
     refreshLastRun();
 
@@ -541,6 +562,7 @@ LIMIT 10;`;
       clearPreview();
       setResult('Готово', 'Напиши script и нажми Run.', null);
     };
+    copyErrorButton.onclick = () => copyLastErrorForAi();
 
     fileUpload.onchange = async () => {
       const file = fileUpload.files && fileUpload.files[0];
@@ -578,14 +600,25 @@ LIMIT 10;`;
         });
         const json = await response.json();
         if (json.ok) {
+          lastFailureResponse = null;
           setResult('OK', formatSuccess(json.data), true);
           renderPreviewTabs(json.data);
         } else {
+          lastFailureResponse = json;
           markError(json.error);
           clearPreview();
           setResultHtml(`FAIL: ${json.stage || 'unknown'}`, formatFailure(json), false);
         }
       } catch (error) {
+        lastFailureResponse = {
+          ok: false,
+          stage: 'request',
+          error: {
+            type: error.name || 'Error',
+            message: error.message || String(error),
+            stackTrace: error.stack || null
+          }
+        };
         setResult('REQUEST FAIL', error.stack || error.message, false);
       } finally {
         setBusy(false);
@@ -601,12 +634,36 @@ LIMIT 10;`;
       status.textContent = text;
       status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
       output.textContent = body;
+      outputActions.hidden = ok !== false || !lastFailureResponse;
     }
 
     function setResultHtml(text, body, ok) {
       status.textContent = text;
       status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
       output.innerHTML = body;
+      outputActions.hidden = ok !== false || !lastFailureResponse;
+    }
+
+    async function copyLastErrorForAi() {
+      if (!lastFailureResponse) return;
+
+      const text = formatErrorForAi(lastFailureResponse, editor ? editor.getValue() : '');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+
+      const previous = copyErrorButton.textContent;
+      copyErrorButton.textContent = 'Copied';
+      setTimeout(() => copyErrorButton.textContent = previous, 1200);
     }
 
     function formatFailure(response) {
@@ -696,6 +753,65 @@ LIMIT 10;`;
 
     function formatSpan(span) {
       return `${span.startRow}:${span.startColumn + 1}-${span.endRow}:${span.endColumn + 1}`;
+    }
+
+    function formatErrorForAi(response, scriptText) {
+      const lines = [
+        '# Loader Playground bug report',
+        '',
+        '## Script',
+        '```loader',
+        scriptText || '',
+        '```',
+        '',
+        '## Failure',
+        `Stage: ${response.stage || 'unknown'}`
+      ];
+
+      if (response.context) {
+        lines.push('', '## Context', '```json', JSON.stringify(response.context, null, 2), '```');
+      }
+
+      if (response.error) {
+        lines.push('', '## Error summary');
+        appendErrorSummary(lines, response.error, 0);
+      }
+
+      const diagnostics = collectDiagnostics(response.error);
+      if (diagnostics.length > 0) {
+        lines.push('', '## Diagnostics');
+        for (const diagnostic of diagnostics) {
+          lines.push(`- ${formatSpan(diagnostic.span)} ${diagnostic.message}`);
+        }
+      }
+
+      lines.push('', '## Raw response', '```json', JSON.stringify(response, null, 2), '```');
+      return lines.join('\n');
+    }
+
+    function appendErrorSummary(lines, error, depth) {
+      if (!error) return;
+
+      const prefix = depth === 0 ? '' : `${'  '.repeat(depth)}caused by: `;
+      lines.push(`${prefix}${error.type || 'unknown'}`);
+      if (error.message) {
+        lines.push(`${'  '.repeat(depth)}message: ${error.message}`);
+      }
+      if (error.statementIndex !== undefined && error.statementIndex !== null) {
+        lines.push(`${'  '.repeat(depth)}statement: ${formatStatement(error)}`);
+      }
+      if (error.scriptStage) {
+        lines.push(`${'  '.repeat(depth)}script stage: ${error.scriptStage}`);
+      }
+      if (error.span) {
+        lines.push(`${'  '.repeat(depth)}span: ${formatSpan(error.span)}`);
+      }
+      if (error.stackTrace) {
+        lines.push(`${'  '.repeat(depth)}stack:`, '```text', error.stackTrace, '```');
+      }
+      if (error.inner) {
+        appendErrorSummary(lines, error.inner, depth + 1);
+      }
     }
 
     function formatSuccess(data) {
