@@ -1,4 +1,7 @@
 ﻿using Loader.Script.Tests.Infrastructure;
+using Loader.Core.Models;
+using Loader.Core.Writers.ClickHouse;
+using Loader.Script.Execution;
 
 namespace Loader.Script.Tests;
 
@@ -228,6 +231,135 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script строит календарь по явному min/max диапазону")]
+    public async Task Execute_script_loads_calendar_from_explicit_range()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            calendar:
+            LOAD
+                Date,
+                Year,
+                MonthNumber,
+                DayOfMonth,
+                YearMonth,
+                WeekPeriod
+            FROM Calendar(min='2024-01-01', max='2024-01-03')
+            ORDER BY Date ASC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        var rows = await ScriptIntegrationAssert.ReadFinalTableAsync(database, result[0], "ORDER BY `column1` ASC");
+        await Assert.That(result[0].Fields.Select(static field => field.Name).ToArray())
+            .IsEquivalentTo(["Date", "Year", "MonthNumber", "DayOfMonth", "YearMonth", "WeekPeriod"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(rows.Rows).Count().IsEqualTo(3);
+        await AssertCalendarRowAsync(rows.Rows[0], new DateTime(2024, 1, 1), 2024, 1, 1, "2024-01", "2024-01-01 - 2024-01-07");
+        await AssertCalendarRowAsync(rows.Rows[1], new DateTime(2024, 1, 2), 2024, 1, 2, "2024-01", "2024-01-01 - 2024-01-07");
+        await AssertCalendarRowAsync(rows.Rows[2], new DateTime(2024, 1, 3), 2024, 1, 3, "2024-01", "2024-01-01 - 2024-01-07");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script строит календарь по min/max поля ранее загруженной таблицы")]
+    public async Task Execute_script_loads_calendar_from_loaded_table_field()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            LOAD
+                Date(2024, 1, 1).AddDays(number) AS CreatedAt
+            FROM Numbers(max=2);
+
+            calendar:
+            LOAD
+                Date,
+                Year,
+                DayOfMonth
+            FROM Calendar(table='orders', field='CreatedAt')
+            ORDER BY Date ASC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        var rows = await ScriptIntegrationAssert.ReadFinalTableAsync(database, result[1], "ORDER BY `column1` ASC");
+        await Assert.That(result[1].Fields.Select(static field => field.Name).ToArray())
+            .IsEquivalentTo(["Date", "Year", "DayOfMonth"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(rows.Rows).Count().IsEqualTo(3);
+        await AssertCalendarRowAsync(rows.Rows[0], new DateTime(2024, 1, 1), 2024, dayOfMonth: 1);
+        await AssertCalendarRowAsync(rows.Rows[1], new DateTime(2024, 1, 2), 2024, dayOfMonth: 2);
+        await AssertCalendarRowAsync(rows.Rows[2], new DateTime(2024, 1, 3), 2024, dayOfMonth: 3);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Calendar table/field отклоняет даты вне безопасного диапазона")]
+    public async Task Resolve_calendar_loaded_table_field_rejects_out_of_range_datetime64()
+    {
+        // Arrange
+        var sourceTable = $"script_calendar_source_{Guid.NewGuid():N}";
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            CREATE TABLE `{{sourceTable}}`
+            (
+                `column1` DateTime64(3)
+            )
+            ENGINE = Memory
+            """);
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            INSERT INTO `{{sourceTable}}` (`column1`) VALUES (toDateTime64('1900-01-01 00:00:00', 3))
+            """);
+
+        var context = ScriptIntegrationAssert.CreateContext(database);
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = new ClickHouseTableName
+            {
+                Table = sourceTable
+            },
+            Alias = "orders",
+            RowCount = 1,
+            Fields =
+            [
+                new LoadedTableField
+                {
+                    Name = "CreatedAt",
+                    DataType = DataType.DateTime,
+                    CanBeNull = false
+                }
+            ]
+        });
+
+        var script = Loader.Lang.Script.Parse(
+            """
+            calendar:
+            LOAD
+                *
+            FROM Calendar(table='orders', field='CreatedAt');
+            """).Value!;
+        var statement = (Loader.Lang.Statements.LoadStatement)script.Statements[0];
+        var source = await new LoadProviderResolver().ResolveAsync(statement, context);
+
+        // Act
+        var exception = await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
+            .Throws<Exception>();
+
+        // Assert
+        await Assert.That(exception!.Message).Contains("Calendar range must be within 1970-01-05..2148-12-31");
+    }
+
+    [Test]
     [DisplayName("Script DROP удаляет загруженную final table и убирает ее из результата")]
     public async Task Execute_script_drop_removes_loaded_table_and_physical_final_table()
     {
@@ -250,5 +382,39 @@ public sealed class LoadStatementMixedTests
         await Assert.That(execution.Tables).IsEmpty();
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
         await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, execution.FinalTablePrefix);
+    }
+
+    private static async Task AssertCalendarRowAsync(
+        IReadOnlyList<object?> row,
+        DateTime date,
+        long year,
+        long? monthNumber = null,
+        long? dayOfMonth = null,
+        string? yearMonth = null,
+        string? weekPeriod = null)
+    {
+        await Assert.That(row[0]).IsEqualTo(date);
+        await Assert.That(Convert.ToInt64(row[1], System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo(year);
+
+        if (monthNumber is not null)
+        {
+            await Assert.That(Convert.ToInt64(row[2], System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo(monthNumber.Value);
+        }
+
+        if (dayOfMonth is not null)
+        {
+            var dayOrdinal = monthNumber is null ? 2 : 3;
+            await Assert.That(Convert.ToInt64(row[dayOrdinal], System.Globalization.CultureInfo.InvariantCulture)).IsEqualTo(dayOfMonth.Value);
+        }
+
+        if (yearMonth is not null)
+        {
+            await Assert.That(row[4]).IsEqualTo(yearMonth);
+        }
+
+        if (weekPeriod is not null)
+        {
+            await Assert.That(row[5]).IsEqualTo(weekPeriod);
+        }
     }
 }

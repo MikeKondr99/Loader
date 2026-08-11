@@ -119,14 +119,14 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("input", DataType.Text)
             .Arg("charset", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"replaceRegexpAll({0}, concat('[', if({1} = '', regexpQuoteMeta(char(0)), regexpQuoteMeta({1})), ']'), '')");
+            .Template($"if(isNull({0}) OR isNull({1}), CAST(NULL AS Nullable(String)), replaceRegexpAll({0}, concat('[', ifNull(regexpQuoteMeta(nullIf({1}, '')), regexpQuoteMeta(char(0))), ']'), ''))");
 
         Method("KeepChars")
             .Doc("Возвращает строку только из символов, перечисленных в charset")
             .Arg("input", DataType.Text)
             .Arg("charset", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"replaceRegexpAll({0}, concat('[^', if({1} = '', regexpQuoteMeta(char(0)), regexpQuoteMeta({1})), ']'), '')");
+            .Template($"if(isNull({0}) OR isNull({1}), CAST(NULL AS Nullable(String)), replaceRegexpAll({0}, concat('[^', ifNull(regexpQuoteMeta(nullIf({1}, '')), regexpQuoteMeta(char(0))), ']'), ''))");
 
         Method("SubField")
             .Doc("Возвращает часть строки после разделения по delimiter. Положительный номер идет слева, отрицательный справа")

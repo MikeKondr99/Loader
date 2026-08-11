@@ -220,6 +220,17 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD source options допускают keyword from как имя option")]
+    public async Task Load_options_parse_min_max_range()
+    {
+        var load = ParseLoad("LOAD * FROM Calendar(min='2024-01-01', max='2024-01-03');");
+
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Calendar");
+        await AssertOption(load.SourceCall, "min", "2024-01-01");
+        await AssertOption(load.SourceCall, "max", "2024-01-03");
+    }
+
+    [Test]
     [DisplayName("LOAD хранит span FROM, source и source options")]
     public async Task Load_from_and_options_keep_spans()
     {

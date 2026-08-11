@@ -225,6 +225,130 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Calendar принимает min/max режим")]
+    public async Task Resolve_calendar_accepts_min_max_range()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Calendar",
+                [
+                    Option("min", "2024-01-01"),
+                    Option("max", "2024-01-03")
+                ]),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("calendar");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar требует один режим options")]
+    public async Task Resolve_calendar_rejects_missing_mode()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceCallSpan = Span(3, 10, 20);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Calendar", sourceCallSpan: sourceCallSpan),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceCallSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("min/max");
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar проверяет формат даты")]
+    public async Task Resolve_calendar_rejects_invalid_from_date()
+    {
+        var resolver = new LoadProviderResolver();
+        var fromSpan = Span(3, 18, 36);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Option("min", "01.01.2024", fromSpan),
+                        Option("max", "2024-01-03")
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("yyyy-MM-dd");
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar отклоняет явный диапазон ниже безопасной границы")]
+    public async Task Resolve_calendar_rejects_explicit_range_below_safe_date()
+    {
+        var resolver = new LoadProviderResolver();
+        var minSpan = Span(3, 18, 36);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Option("min", "1970-01-04", minSpan),
+                        Option("max", "1970-01-05")
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(minSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("1970-01-05");
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar отклоняет явный диапазон выше безопасной границы")]
+    public async Task Resolve_calendar_rejects_explicit_range_above_safe_date()
+    {
+        var resolver = new LoadProviderResolver();
+        var minSpan = Span(3, 18, 36);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Option("min", "2148-12-31", minSpan),
+                        Option("max", "2149-01-01")
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(minSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("2148-12-31");
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar table/field требует ранее загруженную таблицу")]
+    public async Task Resolve_calendar_rejects_unknown_loaded_table()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 18, 38);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Option("table", "orders", tableSpan),
+                        Option("field", "CreatedAt")
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("orders");
+    }
+
+    [Test]
     [DisplayName("Resolver для ODBC требует SQL инструкцию")]
     public async Task Resolve_rejects_odbc_provider_without_sql()
     {
