@@ -7,5 +7,6 @@ public enum LoadScriptStage
     TempTableWrite,
     QueryResolution,
     QueryCompilation,
-    FinalTableWrite
+    FinalTableWrite,
+    DropTable
 }

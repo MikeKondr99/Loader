@@ -39,4 +39,17 @@ public sealed class ScriptContext
     {
         _loadedTables.Add(table);
     }
+
+    public LoadedTable? FindLoadedTable(string alias)
+    {
+        return _loadedTables.SingleOrDefault(table => string.Equals(
+            table.Alias,
+            alias,
+            StringComparison.Ordinal));
+    }
+
+    public void RemoveLoadedTable(LoadedTable table)
+    {
+        _loadedTables.Remove(table);
+    }
 }

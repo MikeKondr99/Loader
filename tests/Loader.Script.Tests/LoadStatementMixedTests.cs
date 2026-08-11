@@ -190,4 +190,29 @@ public sealed class LoadStatementMixedTests
             "ORDER BY `column1` DESC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [DisplayName("Script DROP удаляет загруженную final table и убирает ее из результата")]
+    public async Task Execute_script_drop_removes_loaded_table_and_physical_final_table()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            [raw names]:
+            LOAD
+                id,
+                name
+            FROM Csv(path='orders.csv')
+            ORDER BY id ASC;
+
+            DROP [raw names];
+            """);
+
+        // Assert
+        await Assert.That(execution.Tables).IsEmpty();
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+        await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, execution.FinalTablePrefix);
+    }
 }

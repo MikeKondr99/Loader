@@ -12,7 +12,12 @@ full_script:
 
 
 statement
-    : load_statement;
+    : load_statement
+    | drop_statement;
+
+drop_statement
+    : DROP name SEMICOLON
+    ;
 
 load_statement
     : load_table_name

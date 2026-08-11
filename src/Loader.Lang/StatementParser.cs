@@ -49,8 +49,17 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     public override Statement VisitStatement(LangParser.StatementContext context)
     {
-        // 1. Пока в языке есть только LOAD statement.
-        return Visit(context.load_statement());
+        return Visit(context.GetChild(0));
+    }
+
+    public override Statement VisitDrop_statement(LangParser.Drop_statementContext context)
+    {
+        return new DropStatement
+        {
+            DropSpan = Span(context.DROP()),
+            Name = UnescapeName(context.name().GetText()),
+            NameSpan = Span(context.name())
+        };
     }
 
     /// <summary>

@@ -6,6 +6,8 @@ public sealed class ScriptExecutor
 {
     public LoadStatementExecutor LoadStatementExecutor { get; init; } = new();
 
+    public DropStatementExecutor DropStatementExecutor { get; init; } = new();
+
     public async ValueTask<IReadOnlyList<LoadedTable>> ExecuteAsync(
         ScriptContext context,
         Loader.Lang.Script script,
@@ -23,6 +25,11 @@ public sealed class ScriptExecutor
                 activity?
                     .SetTag("load.table_name", load.TableName)
                     .SetTag("load.source_provider", load.SourceCall.Name);
+            }
+            else if (statement is DropStatement drop)
+            {
+                activity?
+                    .SetTag("drop.table_name", drop.Name);
             }
 
             try
@@ -51,6 +58,10 @@ public sealed class ScriptExecutor
         {
             case LoadStatement load:
                 await LoadStatementExecutor.ExecuteAsync(context, load, cancellationToken).ConfigureAwait(false);
+                return;
+
+            case DropStatement drop:
+                await DropStatementExecutor.ExecuteAsync(context, drop, cancellationToken).ConfigureAwait(false);
                 return;
 
             default:

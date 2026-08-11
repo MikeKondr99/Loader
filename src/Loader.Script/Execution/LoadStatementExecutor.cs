@@ -27,7 +27,7 @@ public class LoadStatementExecutor
 
     public string FinalTablePrefix { get; init; } = "loader_script_final_";
 
-    public async ValueTask<LoadedTable> ExecuteAsync(
+    public virtual async ValueTask<LoadedTable> ExecuteAsync(
         ScriptContext context,
         LoadStatement statement,
         CancellationToken cancellationToken = default)
