@@ -30,7 +30,7 @@ load_statement
     ;
 
 load_table_name
-    : NAME COLON
+    : name COLON
     ;
 
 load_where
@@ -76,7 +76,7 @@ load_source
     ;
 
 source_table
-    : NAME
+    : name
     ;
 
 option_list

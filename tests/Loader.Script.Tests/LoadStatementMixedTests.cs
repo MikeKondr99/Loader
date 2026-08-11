@@ -147,4 +147,47 @@ public sealed class LoadStatementMixedTests
             "ORDER BY `column1` DESC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [DisplayName("Script выполняет LOAD из результата предыдущего LOAD с blocked table name")]
+    public async Task Execute_script_loads_from_previous_blocked_load_table()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            [raw names]:
+            LOAD
+                id,
+                name
+            FROM Csv(path='orders.csv')
+            ORDER BY id ASC;
+
+            final_names:
+            LOAD
+                id,
+                name
+            FROM [raw names]
+            WHERE name != 'Bob'
+            ORDER BY id DESC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await Assert.That(result.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["raw names", "final_names"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[1],
+            ["id", "name"],
+            [
+                ["3", "Charlie"],
+                ["1", "Alice"]
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
 }

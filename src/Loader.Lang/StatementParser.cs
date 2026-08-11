@@ -128,8 +128,8 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     private static string VisitLoadTableName(LangParser.Load_table_nameContext context)
     {
-        // 1. По grammar здесь разрешен только NAME, поэтому blocked names и keywords не проходят.
-        return context.NAME().GetText();
+        // 1. Имя таблицы может быть обычным NAME или blocked name: "[table name]".
+        return UnescapeName(context.name().GetText());
     }
 
     /// <summary>
@@ -195,7 +195,8 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
     private static LoadSourceCall VisitSourceTable(LangParser.Source_tableContext context)
     {
-        var nameSpan = Span(context.NAME());
+        var nameSpan = Span(context.name());
+        var tableName = UnescapeName(context.name().GetText());
         return new LoadSourceCall
         {
             Name = "Table",
@@ -206,7 +207,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
                 {
                     Name = "name",
                     Span = nameSpan,
-                    Value = new StringLiteral(context.NAME().GetText(), nameSpan)
+                    Value = new StringLiteral(tableName, nameSpan)
                 }
             ],
             Span = Span(context)

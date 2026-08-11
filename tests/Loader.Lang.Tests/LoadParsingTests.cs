@@ -43,6 +43,9 @@ public sealed class LoadParsingTests
     [Arguments("orders_2026: LOAD * FROM Csv(path='orders.csv');", "orders_2026")]
     [Arguments("_orders: LOAD * FROM Csv(path='orders.csv');", "_orders")]
     [Arguments("orders : LOAD * FROM Csv(path='orders.csv');", "orders")]
+    [Arguments("[orders 2026]: LOAD * FROM Csv(path='orders.csv');", "orders 2026")]
+    [Arguments(@"[folder\]orders]: LOAD * FROM Csv(path='orders.csv');", "folder]orders")]
+    [Arguments("[where]: LOAD * FROM Csv(path='orders.csv');", "where")]
     [DisplayName("LOAD table name prefix задает имя результирующей таблицы")]
     public async Task Load_table_name_prefix_parses_name_before_load(string text, string expectedTableName)
     {
@@ -51,6 +54,19 @@ public sealed class LoadParsingTests
         await Assert.That(load.TableName).IsEqualTo(expectedTableName);
         await Assert.That(load.Fields).IsNull();
         await AssertOption(load.SourceCall, "path", "orders.csv");
+    }
+
+    [Test]
+    [Arguments("LOAD * FROM orders;", "orders")]
+    [Arguments("LOAD * FROM [orders 2026];", "orders 2026")]
+    [Arguments(@"LOAD * FROM [folder\]orders];", "folder]orders")]
+    [DisplayName("LOAD FROM table source допускает обычное и blocked имя таблицы")]
+    public async Task Load_from_table_source_parses_name_as_table_provider(string text, string expectedTableName)
+    {
+        var load = ParseLoad(text);
+
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Table");
+        await AssertOption(load.SourceCall, "name", expectedTableName);
     }
 
     [Test]
@@ -488,7 +504,6 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 LIMIT 20;")]
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 WHERE active;")]
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 ORDER BY id;")]
-    [Arguments("[orders]: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("where: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("123orders: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("orders-table: LOAD id FROM Csv(path='orders.csv');")]
