@@ -18,7 +18,7 @@ dotnet run -c Release --project benchmarks\Loader.Benchmarks -- --list flat
 
 ```text
 loader-bench-clickhouse
-image: clickhouse/clickhouse-server:latest
+image: clickhouse/clickhouse-server:24.8.14.39-lts
 ports: 8123, 9000
 database: loader_bench
 user: loader
@@ -40,7 +40,7 @@ docker run -d --name loader-bench-clickhouse `
   -e CLICKHOUSE_DB=loader_bench `
   -e CLICKHOUSE_USER=loader `
   -e CLICKHOUSE_PASSWORD=loader `
-  clickhouse/clickhouse-server:latest
+  clickhouse/clickhouse-server:24.8.14.39-lts
 ```
 
 ## Быстрые Локальные Benchmarks

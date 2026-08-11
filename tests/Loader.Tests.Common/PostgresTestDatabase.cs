@@ -44,7 +44,7 @@ public sealed class PostgresTestDatabase : IAsyncInitializer, IAsyncDisposable
     private async Task StartCoreAsync(CancellationToken cancellationToken)
     {
         container = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+            .WithImage(TestDatabaseImages.Postgres)
             .WithDatabase("loader_tests")
             .WithUsername("loader")
             .WithPassword("loader")

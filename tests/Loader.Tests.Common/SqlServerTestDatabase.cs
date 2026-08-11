@@ -33,6 +33,7 @@ public sealed class SqlServerTestDatabase : IAsyncInitializer, IAsyncDisposable
     private async Task StartCoreAsync(CancellationToken cancellationToken)
     {
         container = new MsSqlBuilder()
+            .WithImage(TestDatabaseImages.SqlServer)
             .WithPassword("Loader_tests1!")
             .Build();
 

@@ -33,6 +33,7 @@ public sealed class OracleTestDatabase : IAsyncInitializer, IAsyncDisposable
     private async Task StartCoreAsync(CancellationToken cancellationToken)
     {
         container = new OracleBuilder()
+            .WithImage(TestDatabaseImages.Oracle)
             .WithUsername("loader")
             .WithPassword("Loader_tests1!")
             .Build();

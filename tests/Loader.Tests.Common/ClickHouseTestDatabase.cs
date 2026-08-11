@@ -33,6 +33,7 @@ public sealed class ClickHouseTestDatabase : IAsyncInitializer, IAsyncDisposable
     private async Task StartCoreAsync(CancellationToken cancellationToken)
     {
         container = new ClickHouseBuilder()
+            .WithImage(TestDatabaseImages.ClickHouse)
             .WithDatabase("loader_tests")
             .WithUsername("loader")
             .WithPassword("loader")
