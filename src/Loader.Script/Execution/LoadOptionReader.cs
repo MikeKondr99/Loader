@@ -55,6 +55,37 @@ internal sealed class LoadOptionReader
         };
     }
 
+    public long Integer(string name, long defaultValue)
+    {
+        var option = GetOption(name);
+        return option?.Value switch
+        {
+            null => defaultValue,
+            IntegerLiteral value => value.Value,
+            _ => AddError(option, $"Опция '{name}' должна быть целым числом.", defaultValue)
+        };
+    }
+
+    public long? RequiredInteger(string name, LangSpan missingSpan, string missingMessage)
+    {
+        var option = GetOption(name);
+        if (option is null)
+        {
+            _errors.Add(new LangError
+            {
+                Message = missingMessage,
+                Span = missingSpan
+            });
+            return null;
+        }
+
+        return option.Value switch
+        {
+            IntegerLiteral value => value.Value,
+            _ => AddIntegerError(option, $"Опция '{name}' должна быть целым числом.")
+        };
+    }
+
     public char Character(string name, char defaultValue)
     {
         var value = String(name);
@@ -151,5 +182,25 @@ internal sealed class LoadOptionReader
             Span = option.Span
         });
         return fallback;
+    }
+
+    private long AddError(LoadOption option, string message, long fallback)
+    {
+        _errors.Add(new LangError
+        {
+            Message = message,
+            Span = option.Span
+        });
+        return fallback;
+    }
+
+    private long? AddIntegerError(LoadOption option, string message)
+    {
+        _errors.Add(new LangError
+        {
+            Message = message,
+            Span = option.Span
+        });
+        return null;
     }
 }

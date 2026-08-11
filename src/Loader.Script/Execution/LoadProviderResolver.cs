@@ -68,6 +68,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new JsonLoadSourceResolver(),
             new XmlLoadSourceResolver(),
             new QvdLoadSourceResolver(),
+            new NumbersLoadSourceResolver(),
             new TableLoadSourceResolver(),
             new ConnectLoadSourceResolver(),
             new PostgresLoadSourceResolver(),

@@ -192,6 +192,42 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script вычисляет аппроксимацию pi через ряд Лейбница")]
+    public async Task Execute_script_calculates_pi_with_leibniz_series()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            leibniz_terms:
+            LOAD
+                If(Mod(number, 4) != 3,
+                    1.0 / Num(number),
+                    -1.0 / Num(number)) AS x
+            FROM Numbers(min=1, max=999, step=2);
+
+            pi_result:
+            LOAD
+                SUM(x) * 4 AS pi_leibniz
+            FROM leibniz_terms;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await Assert.That(result.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["leibniz_terms", "pi_result"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+
+        var rows = await ScriptIntegrationAssert.ReadFinalTableAsync(database, result[1]);
+        await Assert.That(rows.Rows).Count().IsEqualTo(1);
+        await Assert.That(Convert.ToDouble(rows.Rows[0][0], System.Globalization.CultureInfo.InvariantCulture))
+            .IsEqualTo(Math.PI)
+            .Within(0.01);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script DROP удаляет загруженную final table и убирает ее из результата")]
     public async Task Execute_script_drop_removes_loaded_table_and_physical_final_table()
     {

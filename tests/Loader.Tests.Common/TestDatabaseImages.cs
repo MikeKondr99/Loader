@@ -2,7 +2,7 @@ namespace Loader.Tests.Common;
 
 public static class TestDatabaseImages
 {
-    public const string ClickHouse = "clickhouse/clickhouse-server:24.8.14.39-lts";
+    public const string ClickHouse = "clickhouse/clickhouse-server:24.8.14.39";
 
     public const string Postgres = "postgres:18.4-alpine";
 

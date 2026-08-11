@@ -68,6 +68,14 @@ internal static class ScriptIntegrationAssert
         await Assert.That(rows.Rows).IsEquivalentTo(expectedRows, CollectionOrdering.Matching);
     }
 
+    public static Task<QueryRows> ReadFinalTableAsync(
+        ClickHouseTestDatabase database,
+        LoadedTable table,
+        string? orderBySql = null)
+    {
+        return ReadRowsAsync(database, table.Name, orderBySql);
+    }
+
     public static async Task AssertNoTablesWithPrefixAsync(
         ClickHouseTestDatabase database,
         string prefix)
@@ -175,7 +183,7 @@ internal static class ScriptIntegrationAssert
             .ToArray();
     }
 
-    private sealed record QueryRows(string[] Columns, object?[][] Rows);
+    public sealed record QueryRows(string[] Columns, object?[][] Rows);
 }
 
 internal sealed record ScriptExecutionResult(

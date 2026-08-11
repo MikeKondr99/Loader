@@ -118,6 +118,37 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("Execute LOAD читает Numbers provider и строит query поверх generated number field")]
+    public async Task Execute_load_reads_numbers_provider()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new LoadProviderResolver(),
+            TempTablePrefix = "tmp_",
+            FinalTablePrefix = "final_"
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            numbers:
+            LOAD
+                number AS value
+            FROM Numbers(max=3);
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var loadedTable = await executor.ExecuteAsync(context, statement);
+
+        await Assert.That(executor.WriteCalls).IsEqualTo(1);
+        await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
+            .IsEquivalentTo([0L, 1L, 2L, 3L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(executor.QuerySql).Contains("stage.`column1` AS `value`");
+        await Assert.That(loadedTable.Alias).IsEqualTo("numbers");
+        await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
+        await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("value");
+    }
+
+    [Test]
     public async Task Execute_load_drops_temp_table_when_final_materialization_fails()
     {
         var executor = new TestLoadStatementExecutor

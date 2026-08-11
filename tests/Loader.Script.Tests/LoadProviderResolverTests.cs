@@ -1,3 +1,4 @@
+using System.Data.Common;
 using Loader.Core.Exceptions;
 using Loader.Core.Sources;
 using Loader.Lang;
@@ -74,6 +75,153 @@ public sealed class LoadProviderResolverTests
 
         await Assert.That(source.Kind).IsEqualTo("odbc");
         await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
+    public async Task Resolve_numbers_reads_default_range()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement("Numbers", [Option("max", 3)]),
+            CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(source.Kind).IsEqualTo("numbers");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("number");
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
+        await Assert.That(await ReadNumbersAsync(reader))
+            .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers учитывает min и step")]
+    public async Task Resolve_numbers_reads_min_step_range()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Numbers",
+                [
+                    Option("min", 2),
+                    Option("max", 8),
+                    Option("step", 3)
+                ]),
+            CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(await ReadNumbersAsync(reader))
+            .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers требует max option")]
+    public async Task Resolve_numbers_rejects_missing_max()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceCallSpan = Span(3, 10, 19);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Numbers", sourceCallSpan: sourceCallSpan),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceCallSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("max=1000");
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers требует integer max option")]
+    public async Task Resolve_numbers_rejects_non_integer_max()
+    {
+        var resolver = new LoadProviderResolver();
+        var maxSpan = Span(3, 18, 27);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Numbers", [Option("max", "100", maxSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(maxSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("max");
+        await Assert.That(exception.Errors[0].Message).Contains("целым числом");
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers отклоняет step меньше или равный 0")]
+    public async Task Resolve_numbers_rejects_zero_step()
+    {
+        var resolver = new LoadProviderResolver();
+        var stepSpan = Span(3, 25, 31);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Numbers",
+                    [
+                        Option("max", 10),
+                        Option("step", 0, stepSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(stepSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("step");
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers отклоняет max меньше min")]
+    public async Task Resolve_numbers_rejects_max_less_than_min()
+    {
+        var resolver = new LoadProviderResolver();
+        var maxSpan = Span(3, 18, 24);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Numbers",
+                    [
+                        Option("min", 10),
+                        Option("max", 5, maxSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(maxSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("max");
+        await Assert.That(exception.Errors[0].Message).Contains("min");
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers отклоняет SQL после FROM")]
+    public async Task Resolve_numbers_rejects_sql()
+    {
+        var resolver = new LoadProviderResolver();
+        var sqlSpan = Span(4, 1, 20);
+        var statement = CreateStatement(
+            "Numbers",
+            [Option("max", 10)],
+            sql: "SELECT 1") with
+        {
+            SqlPart = new SqlPart
+            {
+                Value = "SELECT 1",
+                Span = sqlSpan
+            }
+        };
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(statement, CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("SQL");
     }
 
     [Test]
@@ -829,6 +977,16 @@ public sealed class LoadProviderResolverTests
         return Option(name, value, Span());
     }
 
+    private static LoadOption Option(string name, long value)
+    {
+        return Option(name, value, Span());
+    }
+
+    private static LoadOption Option(string name, long value, LangSpan span)
+    {
+        return Option(name, new IntegerLiteral(value), span);
+    }
+
     private static LoadOption Option(string name, string value, LangSpan span)
     {
         return Option(name, new StringLiteral(value), span);
@@ -852,6 +1010,17 @@ public sealed class LoadProviderResolverTests
     private static LangSpan Span(uint row, uint startColumn, uint endColumn)
     {
         return new LangSpan(row, startColumn, row, endColumn);
+    }
+
+    private static async Task<long[]> ReadNumbersAsync(DbDataReader reader)
+    {
+        var values = new List<long>();
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            values.Add(reader.GetInt64(0));
+        }
+
+        return values.ToArray();
     }
 
     private static ScriptContext CreateContext(
