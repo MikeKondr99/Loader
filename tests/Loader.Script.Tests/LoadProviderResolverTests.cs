@@ -225,6 +225,178 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Inline возвращает reader с выведенными типами")]
+    public async Task Resolve_inline_returns_reader_with_inferred_types()
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement(
+            "test: LOAD * FROM Inline(id, name, active, amount; 1, 'Mike', true, -10.5; -2, null, false, 0);");
+
+        var source = await resolver.ResolveAsync(statement, CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(source.Kind).IsEqualTo("inline");
+        await Assert.That(reader.FieldCount).IsEqualTo(4);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
+        await Assert.That(reader.GetFieldType(1)).IsEqualTo(typeof(string));
+        await Assert.That(reader.GetFieldType(2)).IsEqualTo(typeof(bool));
+        await Assert.That(reader.GetFieldType(3)).IsEqualTo(typeof(double));
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetInt64(0)).IsEqualTo(1);
+        await Assert.That(reader.GetString(1)).IsEqualTo("Mike");
+        await Assert.That(reader.GetBoolean(2)).IsTrue();
+        await Assert.That(reader.GetDouble(3)).IsEqualTo(-10.5);
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetInt64(0)).IsEqualTo(-2);
+        await Assert.That(reader.IsDBNull(1)).IsTrue();
+        await Assert.That(reader.GetBoolean(2)).IsFalse();
+        await Assert.That(reader.GetDouble(3)).IsEqualTo(0.0);
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline выводит Number для колонки со смесью Integer и Number")]
+    public async Task Resolve_inline_infers_number_for_integer_and_number_values()
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement("test: LOAD * FROM Inline(a; 1; 2.0;);");
+
+        var source = await resolver.ResolveAsync(statement, CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("a");
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(double));
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetDouble(0)).IsEqualTo(1.0);
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetDouble(0)).IsEqualTo(2.0);
+        await Assert.That(await reader.ReadAsync()).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline сводит смешанные primitive-типы к Text")]
+    [Arguments("Inline(a; 1; 'x';)", "1", "x")]
+    [Arguments("Inline(a; true; 'x';)", "true", "x")]
+    [Arguments("Inline(a; 2.5; 'x';)", "2.5", "x")]
+    [Arguments("Inline(a; true; 1;)", "true", "1")]
+    public async Task Resolve_inline_infers_text_for_incompatible_mixed_values(
+        string inline,
+        string expectedFirst,
+        string expectedSecond)
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
+
+        var source = await resolver.ResolveAsync(statement, CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(string));
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetString(0)).IsEqualTo(expectedFirst);
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetString(0)).IsEqualTo(expectedSecond);
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline учитывает null при выводе типа и nullable schema")]
+    [Arguments("Inline(a; null; 1;)", typeof(long), true)]
+    [Arguments("Inline(a; null; 2.5;)", typeof(double), true)]
+    [Arguments("Inline(a; null; true;)", typeof(bool), true)]
+    [Arguments("Inline(a; null; 'x';)", typeof(string), true)]
+    [Arguments("Inline(a; null; null;)", typeof(string), true)]
+    public async Task Resolve_inline_infers_type_and_nullable_for_null_mixed_values(
+        string inline,
+        Type expectedType,
+        bool expectedNullable)
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
+
+        var source = await resolver.ResolveAsync(statement, CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        var schema = reader.GetSchemaTable();
+
+        await Assert.That(schema).IsNotNull();
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(expectedType);
+        await Assert.That((bool)schema!.Rows[0][SchemaTableColumn.AllowDBNull]).IsEqualTo(expectedNullable);
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.IsDBNull(0)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline отклоняет row другой ширины")]
+    public async Task Resolve_inline_rejects_row_width_mismatch()
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement("test: LOAD * FROM Inline(id, name; 1);");
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(statement, CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("ожидалось 2");
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline отклоняет LOAD transformations")]
+    [Arguments("WHERE id > 0", "WHERE")]
+    [Arguments("GROUP BY id", "GROUP BY")]
+    [Arguments("ORDER BY id", "ORDER BY")]
+    [Arguments("LIMIT 1", "LIMIT")]
+    public async Task Resolve_inline_rejects_load_transformations(string clause, string expectedClause)
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement($"test: LOAD * FROM Inline(id; 1) {clause};");
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(statement, CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains(expectedClause);
+        await Assert.That(exception.Errors[0].Message).Contains("отдельный LOAD");
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(expectedClause switch
+        {
+            "WHERE" => statement.WhereSpan,
+            "GROUP BY" => statement.GroupBySpan,
+            "ORDER BY" => statement.OrderBySpan,
+            "LIMIT" => statement.LimitPart!.Span,
+            _ => throw new ArgumentOutOfRangeException(nameof(expectedClause), expectedClause, null)
+        });
+    }
+
+    [Test]
+    [DisplayName("Resolver Inline отклоняет OFFSET с span на keyword")]
+    public async Task Resolve_inline_rejects_offset_with_keyword_span()
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement("test: LOAD * FROM Inline(id; 1) LIMIT 1 OFFSET 2;");
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(statement, CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.Errors[1].Message).Contains("OFFSET");
+        await Assert.That(exception.Errors[1].Span).IsEqualTo(statement.OffsetSpan);
+    }
+
+    [Test]
+    [DisplayName("Resolver отклоняет inline-данные у provider-а кроме Inline")]
+    public async Task Resolve_non_inline_provider_rejects_inline_data()
+    {
+        var resolver = new LoadProviderResolver();
+        var statement = ParseLoadStatement("test: LOAD * FROM Csv(id; 1);");
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(statement, CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("Provider 'Csv'");
+        await Assert.That(exception.Errors[0].Message).Contains("inline-данные");
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(statement.SourceCall.Span);
+    }
+
+    [Test]
     [DisplayName("Resolver Calendar принимает min/max режим")]
     public async Task Resolve_calendar_accepts_min_max_range()
     {
@@ -1094,6 +1266,11 @@ public sealed class LoadProviderResolverTests
             GroupBy = null,
             OrderBy = null
         };
+    }
+
+    private static LoadStatement ParseLoadStatement(string text)
+    {
+        return (LoadStatement)Statement.Parse(text).Value!;
     }
 
     private static LoadOption Option(string name, string value)

@@ -28,8 +28,22 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             });
         }
 
+        var hasInlineDataForNonInlineProvider = statement.SourceCall.InlineData is not null &&
+                                               !string.Equals(
+                                                   statement.SourceCall.Name,
+                                                   "Inline",
+                                                   StringComparison.OrdinalIgnoreCase);
+        if (hasInlineDataForNonInlineProvider)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Provider '{statement.SourceCall.Name}' не поддерживает inline-данные. Используйте Inline(...).",
+                Span = statement.SourceCall.Span
+            });
+        }
+
         LoadProviderSource? source = null;
-        if (resolver is not null)
+        if (resolver is not null && !hasInlineDataForNonInlineProvider)
         {
             try
             {
@@ -68,6 +82,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new JsonLoadSourceResolver(),
             new XmlLoadSourceResolver(),
             new QvdLoadSourceResolver(),
+            new InlineLoadSourceResolver(),
             new NumbersLoadSourceResolver(),
             new CalendarLoadSourceResolver(),
             new TableLoadSourceResolver(),

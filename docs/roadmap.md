@@ -39,9 +39,9 @@
 - [ ] LINK - `shadow table`
 - [ ] FROM JOIN
 - [ ] FROM UNION
-- [ ] FROM INLINE
-- [ ] FROM Numbers
-- [ ] FROM CALENDAR
+- [x] FROM INLINE
+- [x] FROM Numbers
+- [x] FROM CALENDAR
 - [ ] FROM DATASET
 - [ ] INDEX?
 

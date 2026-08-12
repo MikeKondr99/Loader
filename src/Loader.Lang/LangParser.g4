@@ -72,7 +72,7 @@ load_sql
     ;
 
 source_call
-    : NAME LEFT_PARENTHESIS option_list? RIGHT_PARENTHESIS
+    : NAME LEFT_PARENTHESIS (inline_data | option_list)? RIGHT_PARENTHESIS
     ;
 
 load_source
@@ -97,6 +97,34 @@ option_literal
     | integer
     | number
     | boolean
+    ;
+
+inline_data
+    : inline_header SEMICOLON inline_row (SEMICOLON inline_row)* SEMICOLON?
+    ;
+
+inline_header
+    : name (COMMA name)* COMMA?
+    ;
+
+inline_row
+    : inline_value (COMMA inline_value)* COMMA?
+    ;
+
+inline_value
+    : string
+    | inline_number
+    | inline_integer
+    | boolean
+    | null
+    ;
+
+inline_integer
+    : MINUS? INTEGER
+    ;
+
+inline_number
+    : MINUS? NUMBER
     ;
 
 load_fields

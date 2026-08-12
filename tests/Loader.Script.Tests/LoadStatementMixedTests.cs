@@ -108,6 +108,47 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script загружает Inline source и применяет LOAD преобразования")]
+    public async Task Execute_script_loads_inline_source_into_clickhouse()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            inline_orders_raw:
+            LOAD *
+            FROM Inline(id, name, active, amount, created_text;
+                1, 'Mike', true, -10.5, '2026-01-01';
+                2, null, false, 20.0, null);
+
+            inline_orders:
+            LOAD
+                id,
+                name,
+                active,
+                amount,
+                created_text.Date('yyyy-MM-dd') AS created
+            FROM inline_orders_raw
+            ORDER BY id ASC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[1],
+            ["id", "name", "active", "amount", "created"],
+            [
+                [1L, "Mike", true, -10.5, new DateTime(2026, 1, 1)],
+                [2L, null, false, 20.0, null]
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script выполняет LOAD из результата предыдущего LOAD через Table provider")]
     public async Task Execute_script_loads_from_previous_load_table()
     {

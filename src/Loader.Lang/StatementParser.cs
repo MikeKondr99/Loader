@@ -103,10 +103,18 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             SourceCall = sourceCall,
             SqlPart = sql,
             Where = where,
+            WhereSpan = context.load_where() is null ? null : Span(context.load_where().WHERE()),
             GroupBy = groupBy,
+            GroupBySpan = context.load_group_by() is null
+                ? null
+                : Span(context.load_group_by().GROUP().Symbol, context.load_group_by().BY().Symbol),
             OrderBy = orderBy,
+            OrderBySpan = context.load_order_by() is null
+                ? null
+                : Span(context.load_order_by().ORDER().Symbol, context.load_order_by().BY().Symbol),
             LimitPart = limit,
-            Offset = offset
+            Offset = offset,
+            OffsetSpan = limitContext?.load_offset() is null ? null : Span(limitContext.load_offset().OFFSET())
         };
     }
 
@@ -230,8 +238,66 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Name = context.NAME().GetText(),
             NameSpan = Span(context.NAME()),
             Options = VisitSourceOptions(context.option_list()),
+            InlineData = VisitInlineData(context.inline_data()),
             Span = Span(context)
         };
+    }
+
+    private InlineData? VisitInlineData(LangParser.Inline_dataContext? context)
+    {
+        if (context is null)
+        {
+            return null;
+        }
+
+        return new InlineData
+        {
+            Columns = context.inline_header().name().Select(name => new InlineColumn
+            {
+                Name = UnescapeName(name.GetText()),
+                Span = Span(name)
+            }).ToArray(),
+            Rows = context.inline_row().Select(row => new InlineRow
+            {
+                Values = row.inline_value().Select(VisitInlineValue).ToArray(),
+                Span = Span(row)
+            }).ToArray(),
+            Span = Span(context)
+        };
+    }
+
+    private Literal VisitInlineValue(LangParser.Inline_valueContext context)
+    {
+        if (context.inline_integer() is { } integer)
+        {
+            var value = long.Parse(integer.INTEGER().GetText(), CultureInfo.InvariantCulture);
+            if (integer.MINUS() is not null)
+            {
+                value = -value;
+            }
+
+            return new IntegerLiteral(value)
+            {
+                Span = Span(integer)
+            };
+        }
+
+        if (context.inline_number() is { } number)
+        {
+            var value = double.Parse(number.NUMBER().GetText(), CultureInfo.InvariantCulture);
+            if (number.MINUS() is not null)
+            {
+                value = -value;
+            }
+
+            return new NumberLiteral(value)
+            {
+                Span = Span(number)
+            };
+        }
+
+        var literalContext = context.children.OfType<ParserRuleContext>().Single();
+        return (Literal)expressionParser.Visit(literalContext);
     }
 
     /// <summary>

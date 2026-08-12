@@ -276,6 +276,33 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("ScriptExecutor оборачивает Inline transformations как ProviderResolution ошибку")]
+    public async Task Execute_load_wraps_inline_transformations_as_provider_resolution_script_exception()
+    {
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            bad_inline_where:
+            LOAD *
+            FROM Inline(id, name; 1, 'Mike'; 2, 'Ann')
+            WHERE id > 1;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor()
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.WhereSpan);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<ProviderResolutionException>();
+        await Assert.That(exception.Errors[0].Message).Contains("WHERE");
+        await Assert.That(exception.Errors[0].Message).Contains("отдельный LOAD");
+    }
+
+    [Test]
     [DisplayName("ScriptExecutor оборачивает ошибку подготовки JSON provider с statement и span")]
     public async Task Execute_load_wraps_json_provider_prepare_error_as_script_exception()
     {

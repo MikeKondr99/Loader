@@ -8,5 +8,7 @@ public sealed record LoadSourceCall
 
     public required List<LoadOption> Options { get; init; }
 
+    public InlineData? InlineData { get; init; }
+
     public required LangSpan Span { get; init; }
 }

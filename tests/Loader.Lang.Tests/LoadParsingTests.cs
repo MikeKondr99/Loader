@@ -231,6 +231,26 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD Inline разбирает header и rows")]
+    public async Task Load_inline_parses_header_and_rows()
+    {
+        var load = ParseLoad("LOAD * FROM Inline(id, name, active, amount; 1, 'Mike', true, -10.5; -2, null, false, 0);");
+
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Inline");
+        await Assert.That(load.SourceCall.Options).IsEmpty();
+        await Assert.That(load.SourceCall.InlineData).IsNotNull();
+        await Assert.That(load.SourceCall.InlineData!.Columns.Select(static column => column.Name).ToArray())
+            .IsEquivalentTo(["id", "name", "active", "amount"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(load.SourceCall.InlineData.Rows).Count().IsEqualTo(2);
+        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[0].Values[0]).Value).IsEqualTo(1);
+        await Assert.That(((StringLiteral)load.SourceCall.InlineData.Rows[0].Values[1]).Value).IsEqualTo("Mike");
+        await Assert.That(((BooleanLiteral)load.SourceCall.InlineData.Rows[0].Values[2]).Value).IsTrue();
+        await Assert.That(((NumberLiteral)load.SourceCall.InlineData.Rows[0].Values[3]).Value).IsEqualTo(-10.5);
+        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[1].Values[0]).Value).IsEqualTo(-2);
+        await Assert.That(load.SourceCall.InlineData.Rows[1].Values[1]).IsTypeOf<NullLiteral>();
+    }
+
+    [Test]
     [DisplayName("LOAD хранит span FROM, source и source options")]
     public async Task Load_from_and_options_keep_spans()
     {
@@ -515,6 +535,8 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 LIMIT 20;")]
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 WHERE active;")]
     [Arguments("LOAD id FROM Csv(path='orders.csv') LIMIT 10 ORDER BY id;")]
+    [Arguments("LOAD * FROM Inline(a;);")]
+    [Arguments("LOAD * FROM Inline(; 1);")]
     [Arguments("where: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("123orders: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("orders-table: LOAD id FROM Csv(path='orders.csv');")]

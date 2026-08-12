@@ -42,14 +42,29 @@ public sealed record LoadStatement : Statement
     public Expr? Where { get; init; }
 
     /// <summary>
+    /// Span keyword-а <c>WHERE</c>, нужен для диагностики ошибок на самой секции.
+    /// </summary>
+    public LangSpan? WhereSpan { get; init; }
+
+    /// <summary>
     /// Поля группировки из части <c>GROUP BY</c>. <c>null</c> означает отсутствие группировки.
     /// </summary>
     public required List<Expr>? GroupBy { get; init; }
 
     /// <summary>
+    /// Span keyword-ов <c>GROUP BY</c>, нужен для диагностики ошибок на самой секции.
+    /// </summary>
+    public LangSpan? GroupBySpan { get; init; }
+
+    /// <summary>
     /// Поля сортировки из части <c>ORDER BY</c>. <c>null</c> означает отсутствие сортировки.
     /// </summary>
     public required List<LoadOrderField>? OrderBy { get; init; }
+
+    /// <summary>
+    /// Span keyword-ов <c>ORDER BY</c>, нужен для диагностики ошибок на самой секции.
+    /// </summary>
+    public LangSpan? OrderBySpan { get; init; }
 
     public LimitPart? LimitPart { get; init; }
 
@@ -62,4 +77,9 @@ public sealed record LoadStatement : Statement
     /// Смещение строк из части <c>OFFSET 100</c>. Допускается только после <c>LIMIT</c>.
     /// </summary>
     public long? Offset { get; init; }
+
+    /// <summary>
+    /// Span keyword-а <c>OFFSET</c>, нужен для диагностики ошибок на самой секции.
+    /// </summary>
+    public LangSpan? OffsetSpan { get; init; }
 }
