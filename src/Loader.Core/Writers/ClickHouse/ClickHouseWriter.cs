@@ -49,7 +49,10 @@ public sealed class ClickHouseWriter
             };
 
             await bulkCopy.InitAsync().ConfigureAwait(false);
-            await bulkCopy.WriteToServerAsync(reader).ConfigureAwait(false);
+
+            // BulkCopy пишет в физические CH-типы. Доменные значения адаптируются здесь,
+            // не меняя доменную схему reader-а: например Time пишем как DateTime с датой 1970-01-01.
+            await bulkCopy.WriteToServerAsync(ClickHouseWriteDataReader.Wrap(reader)).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

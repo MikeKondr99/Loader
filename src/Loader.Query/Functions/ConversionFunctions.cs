@@ -211,6 +211,7 @@ public sealed class ConversionFunctions : FunctionDescriptor
             DataType.Text => type.CanBeNull ? "text" : "text!",
             DataType.Boolean => type.CanBeNull ? "bool" : "bool!",
             DataType.DateTime => type.CanBeNull ? "date" : "date!",
+            DataType.Time => type.CanBeNull ? "time" : "time!",
             DataType.Unknown => type.CanBeNull ? "unk" : "unk!",
             _ => "unk"
         };

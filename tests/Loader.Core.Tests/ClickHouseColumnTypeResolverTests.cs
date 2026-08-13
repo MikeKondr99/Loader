@@ -167,7 +167,7 @@ public sealed class ClickHouseColumnTypeResolverTests
     {
         yield return (DataType.DateTime, typeof(DateTime), "DateTime64(3)");
         yield return (DataType.Date, typeof(DateOnly), "Date");
-        yield return (DataType.Time, typeof(TimeOnly), "String");
+        yield return (DataType.Time, typeof(TimeOnly), "DateTime");
         yield return (DataType.Boolean, typeof(bool), "Bool");
     }
 

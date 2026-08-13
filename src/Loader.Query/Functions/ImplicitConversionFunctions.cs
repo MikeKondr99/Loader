@@ -33,7 +33,8 @@ public sealed class ImplicitConversionFunctions : FunctionDescriptor
                      DataType.Number,
                      DataType.Boolean,
                      DataType.Text,
-                     DataType.DateTime
+                     DataType.DateTime,
+                     DataType.Time
                  })
         {
             Function("Optional")
