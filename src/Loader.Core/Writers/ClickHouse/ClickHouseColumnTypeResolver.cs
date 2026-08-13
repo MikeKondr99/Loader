@@ -26,7 +26,7 @@ internal sealed class ClickHouseColumnTypeResolver
             DataType.Number => ResolveNumber(field, meta),
             DataType.DateTime => "DateTime64(3)",
             DataType.Date => "Date",
-            DataType.Time => "String",
+            DataType.Time => "DateTime",
             DataType.Boolean => "Bool",
             _ => throw new ArgumentOutOfRangeException(nameof(field), field.DataType, null)
         };

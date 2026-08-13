@@ -236,6 +236,98 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script сохраняет логический Time тип при LOAD из результата предыдущего LOAD")]
+    public async Task Execute_script_preserves_time_type_from_previous_load_table()
+    {
+        // Arrange
+        var sourceTable = new ClickHouseTableName
+        {
+            Table = $"script_time_source_{Guid.NewGuid():N}"
+        };
+        var tempPrefix = $"script_test_temp_{Guid.NewGuid():N}_";
+        var finalPrefix = $"script_test_final_{Guid.NewGuid():N}_";
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            CREATE TABLE {{sourceTable.ToSql()}}
+            (
+                `column1` Int32,
+                `column2` DateTime,
+                `column3` DateTime
+            )
+            ENGINE = Log
+            """);
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            INSERT INTO {{sourceTable.ToSql()}} (`column1`, `column2`, `column3`) VALUES
+            (1, toDateTime('1970-01-01 03:04:05'), toDateTime('1970-01-01 04:05:06'))
+            """);
+
+        var context = ScriptIntegrationAssert.CreateContext(database);
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = sourceTable,
+            Alias = "pg_time",
+            RowCount = 1,
+            Fields =
+            [
+                Field("id", DataType.Integer),
+                Field("time_value", DataType.Time),
+                Field("interval_value", DataType.Time)
+            ]
+        });
+        var executor = new ScriptExecutor
+        {
+            LoadStatementExecutor = new LoadStatementExecutor
+            {
+                TempTablePrefix = tempPrefix,
+                FinalTablePrefix = finalPrefix
+            }
+        };
+        var script = Loader.Lang.Script.Parse(
+            """
+            s:
+            LOAD * FROM pg_time;
+            """).Value!;
+        LoadedTable? finalTable = null;
+
+        try
+        {
+            // Act
+            var result = await executor.ExecuteAsync(context, script);
+
+            // Assert
+            await Assert.That(result).Count().IsEqualTo(2);
+            var table = result[1];
+            finalTable = table;
+            await Assert.That(table.Alias).IsEqualTo("s");
+            await Assert.That(table.Fields.Select(static field => field.Name).ToArray())
+                .IsEquivalentTo(["id", "time_value", "interval_value"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+            await Assert.That(table.Fields[1].DataType).IsEqualTo(DataType.Time);
+            await Assert.That(table.Fields[2].DataType).IsEqualTo(DataType.Time);
+            await ScriptIntegrationAssert.AssertFinalTableAsync(
+                database,
+                table,
+                ["id", "time_value", "interval_value"],
+                [
+                    new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5), new DateTime(1970, 1, 1, 4, 5, 6) }
+                ]);
+            await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, tempPrefix);
+        }
+        finally
+        {
+            await ScriptIntegrationAssert.ExecuteClickHouseAsync(database, $"DROP TABLE IF EXISTS {sourceTable.ToSql()}");
+            if (finalTable is not null)
+            {
+                await ScriptIntegrationAssert.ExecuteClickHouseAsync(database, $"DROP TABLE IF EXISTS {finalTable.Name.ToSql()}");
+            }
+
+            await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, finalPrefix);
+        }
+    }
+
+    [Test]
     [DisplayName("Script вычисляет аппроксимацию pi через ряд Лейбница")]
     public async Task Execute_script_calculates_pi_with_leibniz_series()
     {
@@ -457,5 +549,15 @@ public sealed class LoadStatementMixedTests
         {
             await Assert.That(row[5]).IsEqualTo(weekPeriod);
         }
+    }
+
+    private static LoadedTableField Field(string name, DataType dataType)
+    {
+        return new LoadedTableField
+        {
+            Name = name,
+            DataType = dataType,
+            CanBeNull = false
+        };
     }
 }

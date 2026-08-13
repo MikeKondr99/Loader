@@ -9,6 +9,7 @@ public static class ClickHouseFunctions
 {
     public static IReadOnlyList<FunctionDefinition> All { get; } =
     [
+        ..new TimeFunctions().GetFunctions(),
         ..new ConversionFunctions().GetFunctions(),
         ..new ImplicitConversionFunctions().GetFunctions(),
         ..new ComparisonFunctions().GetFunctions(),

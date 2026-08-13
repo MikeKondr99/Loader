@@ -55,10 +55,15 @@ internal sealed class TableLoadSourceResolver : LoadSourceResolverBase
             RequiresBuffer = false,
             OpenReaderAsync = async token =>
             {
+                // Читаем физическую final table из DWH. В ClickHouse там всегда columnN и CH-типы.
                 var reader = await new ClickHouseProvider()
                     .OpenReaderAsync(source, config, token)
                     .ConfigureAwait(false);
-                return reader.RenameColumns(loadedTable.Fields.Select(static field => field.Name).ToArray());
+
+                // Возвращаем наружу пользовательские имена и логические типы из LoadedTable.
+                // Например Time физически лежит в CH как DateTime, но для следующего LOAD остается Time.
+                var renamedReader = reader.RenameColumns(loadedTable.Fields.Select(static field => field.Name).ToArray());
+                return new LoadedTableDataReader(renamedReader, loadedTable.Fields);
             }
         });
     }

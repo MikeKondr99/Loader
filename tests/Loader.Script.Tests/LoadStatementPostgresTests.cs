@@ -217,4 +217,58 @@ public sealed class LoadStatementPostgresTests
             "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }
+
+    [Test]
+    [DisplayName("LOAD из результата Postgres LOAD сохраняет Time типы")]
+    public async Task Postgres_load_from_previous_load_preserves_time_types()
+    {
+        // Arrange
+        await using var postgres = await PostgresTestDatabase.StartAsync();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "test_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = postgres.ConnectionString
+            }
+        ]);
+
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            clickHouse,
+            """
+            pg_time:
+            LOAD
+              id,
+              time_value,
+              interval_value
+            FROM Connect(name='test_pg')
+            SQL
+              SELECT
+                1 AS id,
+                time '03:04:05' AS time_value,
+                interval '04:05:06' AS interval_value;
+
+            s:
+            LOAD * FROM pg_time;
+            """,
+            registry);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        await Assert.That(result[0].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[0].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[1].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[1].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            clickHouse,
+            result[1],
+            ["id", "time_value", "interval_value"],
+            [
+                new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5), new DateTime(1970, 1, 1, 4, 5, 6) }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
+    }
 }
