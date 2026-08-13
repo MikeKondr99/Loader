@@ -7,18 +7,19 @@ namespace Loader.Script.Tests;
 public sealed class LoadStatementOracleTests
 {
     private readonly ClickHouseTestDatabase clickHouse;
+    private readonly OracleTestDatabase oracle;
 
-    public LoadStatementOracleTests(ClickHouseTestDatabase clickHouse)
+    public LoadStatementOracleTests(ClickHouseTestDatabase clickHouse, OracleTestDatabase oracle)
     {
         this.clickHouse = clickHouse;
+        this.oracle = oracle;
     }
 
     [Test]
-    [DisplayName("LOAD из Oracle source перегружает данные через temp в final table")]
+    [DisplayName("LOAD из Connect Oracle source перегружает данные через temp в final table")]
     public async Task Oracle_load_materializes_expected_final_table()
     {
         // Arrange
-        await using var oracle = await OracleTestDatabase.StartAsync();
         var sourceTable = $"SCRIPT_ORA_SOURCE_{Guid.NewGuid():N}".ToUpperInvariant();
         await ExecuteOracleAsync(
             oracle,
@@ -49,9 +50,10 @@ public sealed class LoadStatementOracleTests
                 Text(ID) AS id,
                 Upper(NAME) AS name,
                 CITY AS city
-            FROM Oracle(connection='{{oracle.ConnectionString}}')
+            FROM Connect(name='container_oracle')
             SQL SELECT * FROM {{sourceTable}} WHERE CITY != 'Berlin' ORDER BY ID ASC;
-            """);
+            """,
+            oracle);
 
         // Assert
         var result = execution.Tables;

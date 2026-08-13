@@ -14,7 +14,6 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
-        RejectUnknownOptions(Name, options, errors, ["name"]);
         var nameOption = options.GetOption("name");
         var name = options.RequiredString(
             "name",

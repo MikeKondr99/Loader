@@ -7,18 +7,19 @@ namespace Loader.Script.Tests;
 public sealed class LoadStatementSqlServerTests
 {
     private readonly ClickHouseTestDatabase clickHouse;
+    private readonly SqlServerTestDatabase sqlServer;
 
-    public LoadStatementSqlServerTests(ClickHouseTestDatabase clickHouse)
+    public LoadStatementSqlServerTests(ClickHouseTestDatabase clickHouse, SqlServerTestDatabase sqlServer)
     {
         this.clickHouse = clickHouse;
+        this.sqlServer = sqlServer;
     }
 
     [Test]
-    [DisplayName("LOAD из SqlServer source перегружает данные через temp в final table")]
+    [DisplayName("LOAD из Connect SqlServer source перегружает данные через temp в final table")]
     public async Task SqlServer_load_materializes_expected_final_table()
     {
         // Arrange
-        await using var sqlServer = await SqlServerTestDatabase.StartAsync();
         var sourceTable = $"script_sql_source_{Guid.NewGuid():N}";
         await ExecuteSqlServerAsync(
             sqlServer,
@@ -27,12 +28,16 @@ public sealed class LoadStatementSqlServerTests
             (
                 id int not null,
                 name nvarchar(100) not null,
-                city nvarchar(100) not null
+                city nvarchar(100) not null,
+                active bit not null,
+                amount decimal(10, 2) null,
+                created_at datetime2 not null,
+                note nvarchar(100) null
             );
-            INSERT INTO dbo.{{sourceTable}} (id, name, city) VALUES
-            (1, N'Alice', N'Moscow'),
-            (2, N'Bob', N'Berlin'),
-            (3, N'Charlie', N'London');
+            INSERT INTO dbo.{{sourceTable}} (id, name, city, active, amount, created_at, note) VALUES
+            (1, N'Alice', N'Moscow', 1, 10.50, '2024-01-01T10:11:12', N'vip'),
+            (2, N'Bob', N'Berlin', 0, NULL, '2024-01-02T11:12:13', NULL),
+            (3, N'Charlie', N'London', 1, 25.75, '2024-01-03T12:13:14', N'new');
             """);
 
         // Act
@@ -43,83 +48,32 @@ public sealed class LoadStatementSqlServerTests
             LOAD
                 Text(id) AS id,
                 Upper(name) AS name,
-                city
-            FROM SqlServer(connection='{{sqlServer.ConnectionString}}')
+                city AS Город,
+                active,
+                amount,
+                created_at,
+                note
+            FROM Connect(name='container_mssql')
             SQL SELECT * FROM dbo.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
-            """);
 
-        // Assert
-        var result = execution.Tables;
-        await Assert.That(result).Count().IsEqualTo(1);
-        await Assert.That(result[0].Alias).IsEqualTo("sql_people");
-        await ScriptIntegrationAssert.AssertFinalTableAsync(
-            clickHouse,
-            result[0],
-            ["id", "name", "city"],
-            [
-                ["1", "ALICE", "Moscow"],
-                ["3", "CHARLIE", "London"]
-            ],
-            "ORDER BY `column1` ASC");
-        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
-    }
-
-    [Test]
-    [DisplayName("LOAD из Connect SqlServer source перегружает данные через temp в final table")]
-    public async Task Connect_sqlserver_load_materializes_expected_final_table()
-    {
-        // Arrange
-        await using var sqlServer = await SqlServerTestDatabase.StartAsync();
-        var sourceTable = $"script_connect_sql_source_{Guid.NewGuid():N}";
-        await ExecuteSqlServerAsync(
-            sqlServer,
-            $$"""
-            CREATE TABLE dbo.{{sourceTable}}
-            (
-                id int not null,
-                name nvarchar(100) not null,
-                city nvarchar(100) not null
-            );
-            INSERT INTO dbo.{{sourceTable}} (id, name, city) VALUES
-            (1, N'Alice', N'Moscow'),
-            (2, N'Bob', N'Berlin'),
-            (3, N'Charlie', N'London');
-            """);
-        var registry = new InMemoryConnectionRegistry(
-        [
-            new ScriptConnection
-            {
-                Name = "test_sql",
-                Provider = ScriptConnectionType.SqlServer,
-                ConnectionString = sqlServer.ConnectionString
-            }
-        ]);
-
-        // Act
-        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
-            clickHouse,
-            $$"""
-            sql_people:
-            LOAD
-                Text(id) AS id,
-                Upper(name) AS name,
-                city
-            FROM Connect(name='test_sql')
-            SQL SELECT * FROM dbo.{{sourceTable}} WHERE city != 'Berlin' ORDER BY id ASC;
+            sql_people_copy:
+            LOAD *
+            FROM sql_people
+            ORDER BY id ASC;
             """,
-            registry);
+            sqlServer);
 
         // Assert
         var result = execution.Tables;
-        await Assert.That(result).Count().IsEqualTo(1);
+        await Assert.That(result).Count().IsEqualTo(2);
         await Assert.That(result[0].Alias).IsEqualTo("sql_people");
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             clickHouse,
-            result[0],
-            ["id", "name", "city"],
+            result[1],
+            ["id", "name", "Город", "active", "amount", "created_at", "note"],
             [
-                ["1", "ALICE", "Moscow"],
-                ["3", "CHARLIE", "London"]
+                ["1", "ALICE", "Moscow", true, 10.50m, new DateTime(2024, 1, 1, 10, 11, 12), "vip"],
+                ["3", "CHARLIE", "London", true, 25.75m, new DateTime(2024, 1, 3, 12, 13, 14), "new"]
             ],
             "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
@@ -130,8 +84,6 @@ public sealed class LoadStatementSqlServerTests
     public async Task SqlServer_load_from_previous_load_preserves_time_types()
     {
         // Arrange
-        await using var sqlServer = await SqlServerTestDatabase.StartAsync();
-
         // Act
         var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
             clickHouse,
@@ -140,7 +92,7 @@ public sealed class LoadStatementSqlServerTests
             LOAD
               id,
               time_value
-            FROM SqlServer(connection='{{sqlServer.ConnectionString}}')
+            FROM Connect(name='container_mssql')
             SQL
               SELECT
                 1 AS id,
@@ -148,7 +100,8 @@ public sealed class LoadStatementSqlServerTests
 
             s:
             LOAD * FROM sql_time;
-            """);
+            """,
+            sqlServer);
 
         // Assert
         var result = execution.Tables;

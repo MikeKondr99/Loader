@@ -8,7 +8,7 @@ namespace Loader.Script;
 /// Хранит стартовые зависимости, например file storage и целевое ClickHouse-подключение,
 /// и накапливает состояние выполнения, например имена уже созданных финальных таблиц.
 /// </summary>
-public sealed class ScriptContext
+public sealed record ScriptContext
 {
     private readonly List<LoadedTable> _loadedTables = [];
 
@@ -29,6 +29,8 @@ public sealed class ScriptContext
     public required ILogger Logger { get; init; }
 
     public IConnectionRegistry ConnectionRegistry { get; init; } = EmptyConnectionRegistry.Instance;
+
+    public ScriptContextOptions Options { get; init; } = new();
 
     /// <summary>
     /// Финальные таблицы, которые script execution уже успешно создал.

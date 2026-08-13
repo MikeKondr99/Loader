@@ -2,6 +2,9 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Исполнитель скрипта без собственного состояния. Состояние выполнения накапливается в <see cref="ScriptContext"/>.
+/// </summary>
 public sealed class ScriptExecutor
 {
     public LoadStatementExecutor LoadStatementExecutor { get; init; } = new();

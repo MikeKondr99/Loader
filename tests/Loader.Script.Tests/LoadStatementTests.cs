@@ -20,8 +20,7 @@ public sealed class LoadStatementTests
         var providerResolver = new FakeProviderResolver();
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = providerResolver,
-            TempTablePrefix = "tmp_"
+            ProviderResolver = providerResolver
         };
         var statement = new LoadStatement
         {
@@ -58,9 +57,7 @@ public sealed class LoadStatementTests
         var providerResolver = new FakeProviderResolver();
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = providerResolver,
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = providerResolver
         };
         var context = CreateContext();
         var statement = new LoadStatement
@@ -123,9 +120,7 @@ public sealed class LoadStatementTests
     {
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = new LoadProviderResolver(),
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = new LoadProviderResolver()
         };
         var context = CreateContext();
         var script = Loader.Lang.Script.Parse(
@@ -154,7 +149,6 @@ public sealed class LoadStatementTests
         var executor = new TestLoadStatementExecutor
         {
             ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
             ThrowOnMaterialize = true
         };
         var context = CreateContext();
@@ -193,7 +187,6 @@ public sealed class LoadStatementTests
         var executor = new TestLoadStatementExecutor
         {
             ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
             ThrowOnMaterialize = true
         };
         var context = CreateContext();
@@ -223,9 +216,7 @@ public sealed class LoadStatementTests
     {
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = new FakeProviderResolver()
         };
         var context = CreateContext();
         var script = Loader.Lang.Script.Parse(
@@ -331,9 +322,7 @@ public sealed class LoadStatementTests
     {
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = new FakeProviderResolver()
         };
         var context = CreateContext();
         var script = Loader.Lang.Script.Parse(
@@ -366,9 +355,7 @@ public sealed class LoadStatementTests
     {
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = new FakeProviderResolver()
         };
         var context = CreateContext();
         var script = Loader.Lang.Script.Parse(
@@ -401,9 +388,7 @@ public sealed class LoadStatementTests
     {
         var executor = new TestLoadStatementExecutor
         {
-            ProviderResolver = new FakeProviderResolver(),
-            TempTablePrefix = "tmp_",
-            FinalTablePrefix = "final_"
+            ProviderResolver = new FakeProviderResolver()
         };
         var context = CreateContext();
         var script = Loader.Lang.Script.Parse(
@@ -435,7 +420,12 @@ public sealed class LoadStatementTests
         {
             FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=localhost",
-            Logger = NullLogger.Instance
+            Logger = NullLogger.Instance,
+            Options = new ScriptContextOptions
+            {
+                TempTablePrefix = "tmp_",
+                FinalTablePrefix = "final_"
+            }
         };
     }
 

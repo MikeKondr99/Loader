@@ -27,57 +27,6 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает DB provider по имени SourceCall и SQL инструкции")]
-    public async Task Resolve_uses_database_provider_name_and_sql()
-    {
-        var resolver = new LoadProviderResolver();
-
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "Postgres",
-                [Option("connection", "Host=localhost;Database=db")],
-                sql: "SELECT * FROM public.orders"),
-            CreateContext());
-
-        await Assert.That(source.Kind).IsEqualTo("postgres");
-        await Assert.That(source.RequiresBuffer).IsFalse();
-    }
-
-    [Test]
-    [DisplayName("Resolver выбирает ODBC provider по имени SourceCall и SQL инструкции")]
-    public async Task Resolve_uses_odbc_provider_name_and_sql()
-    {
-        var resolver = new LoadProviderResolver();
-
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "Odbc",
-                [Option("connection", "Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=db")],
-                sql: "SELECT * FROM dbo.orders"),
-            CreateContext());
-
-        await Assert.That(source.Kind).IsEqualTo("odbc");
-        await Assert.That(source.RequiresBuffer).IsTrue();
-    }
-
-    [Test]
-    [DisplayName("Resolver читает ODBC provider name без учета регистра")]
-    public async Task Resolve_uses_odbc_provider_name_case_insensitive()
-    {
-        var resolver = new LoadProviderResolver();
-
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "oDbC",
-                [Option("connection", "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db")],
-                sql: "select * from public.orders"),
-            CreateContext());
-
-        await Assert.That(source.Kind).IsEqualTo("odbc");
-        await Assert.That(source.RequiresBuffer).IsTrue();
-    }
-
-    [Test]
     [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
     public async Task Resolve_numbers_reads_default_range()
     {
@@ -521,26 +470,6 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver для ODBC требует SQL инструкцию")]
-    public async Task Resolve_rejects_odbc_provider_without_sql()
-    {
-        var resolver = new LoadProviderResolver();
-        var fromSpan = Span(2, 5, 9);
-
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Odbc",
-                    [Option("connection", "Driver={PostgreSQL Unicode(x64)};Server=localhost;Database=db")],
-                    fromSpan),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
-
-        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("SQL");
-    }
-
-    [Test]
     [DisplayName("Resolver Connect берет ODBC connection string и provider type из registry")]
     public async Task Resolve_connect_supports_odbc_provider_type()
     {
@@ -720,27 +649,31 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver Connect отклоняет лишнюю connection option")]
-    public async Task Resolve_connect_rejects_direct_connection_option()
+    [DisplayName("Resolver Connect игнорирует лишние options")]
+    public async Task Resolve_connect_ignores_unknown_options()
     {
         var resolver = new LoadProviderResolver();
-        var connectionSpan = Span(3, 21, 55);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
 
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Connect",
-                    [
-                        Option("name", "main_pg"),
-                        Option("connection", "Host=localhost", connectionSpan)
-                    ],
-                    sql: "SELECT * FROM public.orders"),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [
+                    Option("name", "main_pg"),
+                    Option("connection", "Host=ignored")
+                ],
+                sql: "SELECT * FROM public.orders"),
+            CreateContext(registry: registry));
 
-        await Assert.That(exception!.Errors.Select(static error => error.Span).ToArray())
-            .Contains(connectionSpan);
-        await Assert.That(exception.Errors.Any(static error => error.Message.Contains("не поддерживается")))
-            .IsTrue();
+        await Assert.That(source.Kind).IsEqualTo("postgres");
     }
 
     [Test]
@@ -773,104 +706,29 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver выбирает Hive provider по имени SourceCall и SQL инструкции")]
-    public async Task Resolve_uses_hive_provider_name_and_sql()
+    [DisplayName("Resolver Connect поддерживает Hive provider type")]
+    public async Task Resolve_connect_supports_hive_provider_type()
     {
         var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "hive_main",
+                Provider = ScriptConnectionType.Hive,
+                ConnectionString = "Driver={Hive};Host=localhost;Port=10000;Schema=default"
+            }
+        ]);
 
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Hive",
-                [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
+                "Connect",
+                [Option("name", "hive_main")],
                 sql: "SELECT * FROM default.orders"),
-            CreateContext());
+            CreateContext(registry: registry));
 
         await Assert.That(source.Kind).IsEqualTo("hive");
         await Assert.That(source.RequiresBuffer).IsTrue();
-    }
-
-    [Test]
-    [DisplayName("Resolver для Hive отклоняет aliases provider name")]
-    [Arguments("apachehive")]
-    [Arguments("apache-hive")]
-    public async Task Resolve_rejects_hive_provider_aliases(string providerName)
-    {
-        var resolver = new LoadProviderResolver();
-        var providerSpan = Span(4, 12, 20);
-
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    providerName,
-                    [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
-                    providerSpan: providerSpan,
-                    sql: "SELECT * FROM analytics.orders"),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
-
-        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(providerSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
-    }
-
-    [Test]
-    [DisplayName("Resolver для Hive читает provider name без учета регистра")]
-    public async Task Resolve_uses_hive_provider_name_case_insensitive()
-    {
-        var resolver = new LoadProviderResolver();
-
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "HiVe",
-                [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
-                sql: "SELECT * FROM default.orders"),
-            CreateContext());
-
-        await Assert.That(source.Kind).IsEqualTo("hive");
-        await Assert.That(source.RequiresBuffer).IsTrue();
-    }
-
-    [Test]
-    [DisplayName("Resolver для Hive требует SQL инструкции")]
-    public async Task Resolve_rejects_hive_provider_without_sql()
-    {
-        var resolver = new LoadProviderResolver();
-        var fromSpan = Span(2, 5, 9);
-
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Hive",
-                    [Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default")],
-                    fromSpan),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
-
-        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.ProviderResolution);
-        await Assert.That(exception.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(fromSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("требуется SQL после FROM");
-    }
-
-    [Test]
-    [DisplayName("Resolver для DB provider отклоняет table option")]
-    public async Task Resolve_rejects_database_provider_table_option()
-    {
-        var resolver = new LoadProviderResolver();
-        var tableSpan = Span(5, 30, 52);
-
-        var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement(
-                    "Hive",
-                    [
-                        Option("connection", "Driver={Hive};Host=localhost;Port=10000;Schema=default"),
-                        Option("table", "default.orders", tableSpan)
-                    ],
-                    sql: "SELECT * FROM default.orders"),
-                CreateContext()))
-            .ThrowsExactly<ProviderResolutionException>();
-
-        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
-        await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
     }
 
     [Test]
@@ -879,12 +737,21 @@ public sealed class LoadProviderResolverTests
     public async Task Hive_provider_wraps_odbc_connection_error()
     {
         var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "missing_hive",
+                Provider = ScriptConnectionType.Hive,
+                ConnectionString = "Driver={__loader_missing_hive_driver__};Host=localhost;Port=10000;Schema=default"
+            }
+        ]);
         var source = await resolver.ResolveAsync(
             CreateStatement(
-                "Hive",
-                [Option("connection", "Driver={__loader_missing_hive_driver__};Host=localhost;Port=10000;Schema=default")],
+                "Connect",
+                [Option("name", "missing_hive")],
                 sql: "SELECT * FROM default.orders"),
-            CreateContext());
+            CreateContext(registry: registry));
 
         await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
             .ThrowsExactly<DbExecutionException>()
@@ -899,14 +766,14 @@ public sealed class LoadProviderResolverTests
         var providerSpan = Span(4, 12, 20);
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
-                CreateStatement("Postgre", [Option("connection", "Host=localhost")], providerSpan: providerSpan),
+                CreateStatement("Conect", [Option("name", "main_pg")], providerSpan: providerSpan),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(providerSpan);
         await Assert.That(exception.Errors[0].Message).Contains("не поддерживается");
-        await Assert.That(exception.Errors[0].Message).Contains("Возможно вы имели в виду 'Postgres'");
+        await Assert.That(exception.Errors[0].Message).Contains("Возможно вы имели в виду 'Connect'");
     }
 
     [Test]
@@ -932,13 +799,22 @@ public sealed class LoadProviderResolverTests
     public async Task Resolve_rejects_empty_sql_for_database_provider()
     {
         var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "Postgres",
-                    [Option("connection", "Host=localhost;Database=db")],
+                    "Connect",
+                    [Option("name", "main_pg")],
                     sql: "   "),
-                CreateContext()))
+                CreateContext(registry: registry)))
             .ThrowsExactly<ProviderResolutionException>();
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
@@ -1200,14 +1076,14 @@ public sealed class LoadProviderResolverTests
     {
         var resolver = new LoadProviderResolver();
         var fromSpan = Span(6, 1, 5);
-        var duplicateConnectionSpan = Span(6, 48, 51);
+        var duplicateNameSpan = Span(6, 48, 51);
 
         var exception = await Assert.That(async () => await resolver.ResolveAsync(
                 CreateStatement(
-                    "Postgres",
+                    "Connect",
                     [
-                        Option("connection", "Host=localhost;Database=db", Span(6, 10, 46)),
-                        Option("connection", "Host=localhost;Database=other", duplicateConnectionSpan)
+                        Option("name", "main_pg", Span(6, 10, 30)),
+                        Option("name", "main_pg2", duplicateNameSpan)
                     ],
                     fromSpan),
                 CreateContext()))
@@ -1215,7 +1091,7 @@ public sealed class LoadProviderResolverTests
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(2);
         await Assert.That(exception.Errors.Select(static error => error.Span).ToArray())
-            .IsEquivalentTo([duplicateConnectionSpan, fromSpan], CollectionOrdering.Matching);
+            .IsEquivalentTo([duplicateNameSpan, fromSpan], CollectionOrdering.Matching);
     }
 
     [Test]

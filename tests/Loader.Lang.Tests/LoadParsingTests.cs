@@ -254,16 +254,16 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD хранит span FROM, source и source options")]
     public async Task Load_from_and_options_keep_spans()
     {
-        var load = ParseLoad("LOAD id FROM Postgres(connection='orders.csv', table='public.orders');");
+        var load = ParseLoad("LOAD id FROM Connect(name='main_pg', table='public.orders');");
 
         await Assert.That(load.FromSpan.StartColumn).IsEqualTo(13u);
         await Assert.That(load.FromSpan.EndColumn).IsEqualTo(17u);
         await Assert.That(load.SourceCall.NameSpan.StartColumn).IsEqualTo(18u);
-        await Assert.That(load.SourceCall.NameSpan.EndColumn).IsEqualTo(26u);
-        await Assert.That(load.SourceCall.Options[0].Span.StartColumn).IsEqualTo(27u);
-        await Assert.That(load.SourceCall.Options[0].Span.EndColumn).IsEqualTo(50u);
-        await Assert.That(load.SourceCall.Options[1].Span.StartColumn).IsEqualTo(52u);
-        await Assert.That(load.SourceCall.Options[1].Span.EndColumn).IsEqualTo(73u);
+        await Assert.That(load.SourceCall.NameSpan.EndColumn).IsEqualTo(25u);
+        await Assert.That(load.SourceCall.Options[0].Span.StartColumn).IsEqualTo(26u);
+        await Assert.That(load.SourceCall.Options[0].Span.EndColumn).IsEqualTo(40u);
+        await Assert.That(load.SourceCall.Options[1].Span.StartColumn).IsEqualTo(42u);
+        await Assert.That(load.SourceCall.Options[1].Span.EndColumn).IsEqualTo(63u);
     }
 
     [Test]
@@ -275,7 +275,7 @@ public sealed class LoadParsingTests
             LOAD
                 id,
                 amount
-            FROM Postgres(connection='postgres_connection')
+            FROM Connect(name='main_pg')
             SQL
                 SELECT id, amount
                 FROM public.orders
@@ -298,10 +298,10 @@ public sealed class LoadParsingTests
 
     [Test]
     [DisplayName("LOAD SQL после FROM взаимоисключен с WHERE GROUP ORDER LIMIT")]
-    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders WHERE id > 0;")]
-    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders GROUP BY id;")]
-    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders ORDER BY id;")]
-    [Arguments("LOAD * FROM Postgres(connection='db') SQL SELECT * FROM orders LIMIT 10;")]
+    [Arguments("LOAD * FROM Connect(name='main_pg') SQL SELECT * FROM orders WHERE id > 0;")]
+    [Arguments("LOAD * FROM Connect(name='main_pg') SQL SELECT * FROM orders GROUP BY id;")]
+    [Arguments("LOAD * FROM Connect(name='main_pg') SQL SELECT * FROM orders ORDER BY id;")]
+    [Arguments("LOAD * FROM Connect(name='main_pg') SQL SELECT * FROM orders LIMIT 10;")]
     public async Task Load_sql_keeps_sql_keywords_inside_source_sql(string text)
     {
         var load = ParseLoad(text);

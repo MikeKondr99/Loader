@@ -65,7 +65,7 @@ public sealed class LoadStatementMixedTests
             LOAD
                 username,
                 city
-            FROM ClickHouse(connection='{{database.ConnectionString}}')
+            FROM Connect(name='container_ch')
             SQL SELECT * FROM `{{sourceTable}}` WHERE city != 'Berlin' ORDER BY username ASC;
             """);
 
@@ -264,7 +264,14 @@ public sealed class LoadStatementMixedTests
             (1, toDateTime('1970-01-01 03:04:05'), toDateTime('1970-01-01 04:05:06'))
             """);
 
-        var context = ScriptIntegrationAssert.CreateContext(database);
+        var context = ScriptIntegrationAssert.CreateContext(database) with
+        {
+            Options = new ScriptContextOptions
+            {
+                TempTablePrefix = tempPrefix,
+                FinalTablePrefix = finalPrefix
+            }
+        };
         context.AddLoadedTable(new LoadedTable
         {
             Name = sourceTable,
@@ -277,14 +284,7 @@ public sealed class LoadStatementMixedTests
                 Field("interval_value", DataType.Time)
             ]
         });
-        var executor = new ScriptExecutor
-        {
-            LoadStatementExecutor = new LoadStatementExecutor
-            {
-                TempTablePrefix = tempPrefix,
-                FinalTablePrefix = finalPrefix
-            }
-        };
+        var executor = new ScriptExecutor();
         var script = Loader.Lang.Script.Parse(
             """
             s:

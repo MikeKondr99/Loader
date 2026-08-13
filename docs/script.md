@@ -39,7 +39,7 @@ users:
 LOAD
     id,
     name
-FROM Postgres(connection='Host=localhost;Database=app;Username=postgres;Password=postgres')
+FROM Connect(name='app_postgres')
 SQL SELECT id, name FROM public.users;
 ```
 
@@ -50,12 +50,11 @@ SQL SELECT id, name FROM public.users;
 - `Json(path='...', root='...')`
 - `Xml(path='...', table='...')`
 - `Qvd(path='...')`
-- `Postgres(connection='...')`
-- `SqlServer(connection='...')`
-- `Oracle(connection='...')`
-- `Hive(connection='...')`
-- `Odbc(connection='...')`
-- `ClickHouse(connection='...')`
+- `Inline(...)`
+- `Numbers(max=..., min=..., step=...)`
+- `Calendar(min='...', max='...')`
+- `Calendar(table='...', field='...')`
+- `Connect(name='...')`
 
 ODBC source:
 
@@ -64,7 +63,7 @@ users:
 LOAD
     id,
     name
-FROM Odbc(connection='Driver={ODBC Driver 18 for SQL Server};Server=localhost;Database=app;Uid=sa;Pwd=secret')
+FROM Connect(name='app_odbc_sqlserver')
 SQL SELECT id, name FROM dbo.users;
 ```
 
@@ -75,12 +74,14 @@ users:
 LOAD
     id,
     name
-FROM Odbc(connection='Dsn=analytics')
+FROM Connect(name='analytics_odbc')
 SQL select id, name from "My Schema"."Users";
 ```
 
-ODBC driver detection is best-effort and used for diagnostics. A recognized driver kind does not mean the driver has
-full integration-test coverage; actual compatibility depends on the installed ODBC driver and the SQL it accepts.
+DB connection strings не пишутся в script. Принимающая сторона передает `IConnectionRegistry`, где connection имеет
+`name`, `ScriptConnectionType` и connection string. ODBC driver detection is best-effort and used for diagnostics.
+A recognized driver kind does not mean the driver has full integration-test coverage; actual compatibility depends on
+the installed ODBC driver and the SQL it accepts.
 
 ## Telemetry
 

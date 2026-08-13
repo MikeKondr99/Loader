@@ -35,7 +35,7 @@ public sealed class TestWithDependencyAttribute :
     protected override async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateDataSourcesAsync(
         DataGeneratorMetadata dataGeneratorMetadata)
     {
-        await foreach (var row in GeneratePrimaryDataSourceAsync(dataGeneratorMetadata).ConfigureAwait(false))
+        await foreach (var row in GenerateDataSourceAsync(dataGeneratorMetadata).ConfigureAwait(false))
         {
             yield return row;
         }
@@ -64,32 +64,66 @@ public sealed class TestWithDependencyAttribute :
         return ValueTask.CompletedTask;
     }
 
-    private IAsyncEnumerable<Func<Task<object?[]?>>> GeneratePrimaryDataSourceAsync(
+    private async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateDataSourceAsync(
         DataGeneratorMetadata dataGeneratorMetadata)
     {
         if (ShouldSkipOracle())
         {
-            return GenerateNoDataSourceAsync();
+            yield break;
         }
 
         if (!UseDataSource)
         {
-            return GenerateEmptyDataSourceAsync();
+            yield return () => Task.FromResult<object?[]?>([]);
+            yield break;
         }
 
-        return dependencies[0] switch
+        var factories = new List<Func<Task<object?>>>(dependencies.Length);
+        foreach (var dependency in dependencies)
         {
-            DatabaseDependency.ClickHouse or DatabaseDependency.ClickHouseDwh =>
-                GenerateDataSourceAsync<ClickHouseTestDatabase>(dataGeneratorMetadata),
-            DatabaseDependency.Postgres => GenerateDataSourceAsync<PostgresTestDatabase>(dataGeneratorMetadata),
-            DatabaseDependency.SqlServer => GenerateDataSourceAsync<SqlServerTestDatabase>(dataGeneratorMetadata),
-            DatabaseDependency.Oracle => GenerateDataSourceAsync<OracleTestDatabase>(dataGeneratorMetadata),
-            DatabaseDependency.ApacheHive => GenerateEmptyDataSourceAsync(),
-            _ => throw new ArgumentOutOfRangeException(nameof(dependencies), dependencies[0], null)
+            if (dependency == DatabaseDependency.ApacheHive)
+            {
+                continue;
+            }
+
+            factories.Add(await CreateDependencyFactoryAsync(dependency, dataGeneratorMetadata).ConfigureAwait(false));
+        }
+
+        yield return async () =>
+        {
+            var values = new object?[factories.Count];
+            for (var index = 0; index < factories.Count; index++)
+            {
+                values[index] = await factories[index]().ConfigureAwait(false);
+            }
+
+            return values;
         };
     }
 
-    private static async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateDataSourceAsync<TDatabase>(
+    private static async Task<Func<Task<object?>>> CreateDependencyFactoryAsync(
+        DatabaseDependency dependency,
+        DataGeneratorMetadata dataGeneratorMetadata)
+    {
+        return dependency switch
+        {
+            DatabaseDependency.ClickHouse or DatabaseDependency.ClickHouseDwh =>
+                await CreateDependencyFactoryAsync<ClickHouseTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
+            DatabaseDependency.Postgres =>
+                await CreateDependencyFactoryAsync<PostgresTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
+            DatabaseDependency.SqlServer =>
+                await CreateDependencyFactoryAsync<SqlServerTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
+            DatabaseDependency.Oracle =>
+                await CreateDependencyFactoryAsync<OracleTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
+            DatabaseDependency.ApacheHive => throw new ArgumentOutOfRangeException(
+                nameof(dependency),
+                dependency,
+                "ApacheHive dependency does not have a managed test datasource."),
+            _ => throw new ArgumentOutOfRangeException(nameof(dependency), dependency, null)
+        };
+    }
+
+    private static async Task<Func<Task<object?>>> CreateDependencyFactoryAsync<TDatabase>(
         DataGeneratorMetadata dataGeneratorMetadata)
     {
         var dataSource = new ClassDataSourceAttribute<TDatabase>
@@ -99,20 +133,14 @@ public sealed class TestWithDependencyAttribute :
 
         await foreach (var row in dataSource.GetDataRowsAsync(dataGeneratorMetadata).ConfigureAwait(false))
         {
-            yield return row;
+            return async () =>
+            {
+                var values = await row().ConfigureAwait(false);
+                return values is { Length: > 0 } ? values[0] : null;
+            };
         }
-    }
 
-    private static async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateEmptyDataSourceAsync()
-    {
-        yield return () => Task.FromResult<object?[]?>([]);
-        await Task.CompletedTask.ConfigureAwait(false);
-    }
-
-    private static async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateNoDataSourceAsync()
-    {
-        await Task.CompletedTask.ConfigureAwait(false);
-        yield break;
+        throw new InvalidOperationException($"No datasource row was generated for {typeof(TDatabase).Name}.");
     }
 
     private IEnumerable<string> DefaultCategories()

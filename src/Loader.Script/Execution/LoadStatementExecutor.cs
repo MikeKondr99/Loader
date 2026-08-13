@@ -19,13 +19,13 @@ using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Исполнитель одной LOAD-инструкции без собственного состояния.
+/// Состояние и настройки конкретного запуска хранятся в <see cref="ScriptContext"/>.
+/// </summary>
 public class LoadStatementExecutor
 {
     public ILoadProviderResolver ProviderResolver { get; init; } = new LoadProviderResolver();
-
-    public string TempTablePrefix { get; init; } = "loader_script_temp_";
-
-    public string FinalTablePrefix { get; init; } = "loader_script_final_";
 
     public virtual async ValueTask<LoadedTable> ExecuteAsync(
         ScriptContext context,
@@ -77,7 +77,7 @@ public class LoadStatementExecutor
         await using var stageReader = NormalizeForTempTable(stageNameReader, source);
 
         // 5. Создаем temp table name.
-        var tempTable = CreatePhysicalTempTableName();
+        var tempTable = CreatePhysicalTempTableName(context);
         activity?
             .SetTag("load.temp_table", tempTable.Table);
         activity?.Stop();
@@ -439,25 +439,25 @@ public class LoadStatementExecutor
 
     private FinalClickHouseTable CreateFinalTable(ScriptContext context)
     {
-        var finalTable = CreatePhysicalFinalTableName();
+        var finalTable = CreatePhysicalFinalTableName(context);
         return new FinalClickHouseTable(
             finalTable,
             () => DropFinalTableBestEffortAsync(context, finalTable));
     }
 
-    private ClickHouseTableName CreatePhysicalTempTableName()
+    private static ClickHouseTableName CreatePhysicalTempTableName(ScriptContext context)
     {
         return new ClickHouseTableName
         {
-            Table = $"{TempTablePrefix}{Guid.NewGuid():N}"
+            Table = $"{context.Options.TempTablePrefix}{Guid.NewGuid():N}"
         };
     }
 
-    private ClickHouseTableName CreatePhysicalFinalTableName()
+    private static ClickHouseTableName CreatePhysicalFinalTableName(ScriptContext context)
     {
         return new ClickHouseTableName
         {
-            Table = $"{FinalTablePrefix}{Guid.NewGuid():N}"
+            Table = $"{context.Options.FinalTablePrefix}{Guid.NewGuid():N}"
         };
     }
 

@@ -16,17 +16,61 @@ namespace Loader.Script.Tests.Infrastructure;
 
 internal static class ScriptIntegrationAssert
 {
-    public static ScriptContext CreateContext(
-        ClickHouseTestDatabase database,
-        IConnectionRegistry? connectionRegistry = null)
+    public const string ContainerClickHouse = "container_ch";
+    public const string ContainerPostgres = "container_pg";
+    public const string ContainerSqlServer = "container_mssql";
+    public const string ContainerOracle = "container_oracle";
+    public const string ContainerHive = "container_hive";
+
+    private static readonly ScriptExecutor Executor = new();
+
+    public static ScriptContext CreateContext(ClickHouseTestDatabase database)
     {
         return new ScriptContext
         {
             FileStorage = new FileSystemSource(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Script")),
             TargetConnectionString = database.ConnectionString,
             Logger = NullLogger.Instance,
-            ConnectionRegistry = connectionRegistry ?? EmptyConnectionRegistry.Instance
+            ConnectionRegistry = ContainerConnections(clickHouse: database)
         };
+    }
+
+    public static IConnectionRegistry ContainerConnections(
+        ClickHouseTestDatabase? clickHouse = null,
+        PostgresTestDatabase? postgres = null,
+        SqlServerTestDatabase? sqlServer = null,
+        OracleTestDatabase? oracle = null,
+        string? hiveConnectionString = null)
+    {
+        var connections = new List<ScriptConnection>();
+        if (clickHouse is not null)
+        {
+            connections.Add(Connection(ContainerClickHouse, ScriptConnectionType.ClickHouse, clickHouse.ConnectionString));
+        }
+
+        if (postgres is not null)
+        {
+            connections.Add(Connection(ContainerPostgres, ScriptConnectionType.Postgres, postgres.ConnectionString));
+        }
+
+        if (sqlServer is not null)
+        {
+            connections.Add(Connection(ContainerSqlServer, ScriptConnectionType.SqlServer, sqlServer.ConnectionString));
+        }
+
+        if (oracle is not null)
+        {
+            connections.Add(Connection(ContainerOracle, ScriptConnectionType.Oracle, oracle.ConnectionString));
+        }
+
+        if (!string.IsNullOrWhiteSpace(hiveConnectionString))
+        {
+            connections.Add(Connection(ContainerHive, ScriptConnectionType.Hive, hiveConnectionString));
+        }
+
+        return connections.Count == 0
+            ? EmptyConnectionRegistry.Instance
+            : new InMemoryConnectionRegistry(connections);
     }
 
     public static async Task<ScriptExecutionResult> ExecuteScriptAsync(
@@ -38,19 +82,83 @@ internal static class ScriptIntegrationAssert
         var executionId = Guid.NewGuid().ToString("N");
         var tempPrefix = $"script_test_temp_{executionId}_";
         var finalPrefix = $"script_test_final_{executionId}_";
-        var context = CreateContext(database, connectionRegistry);
-        var executor = new ScriptExecutor
+        var context = CreateContext(database) with
         {
-            LoadStatementExecutor = new LoadStatementExecutor
+            ConnectionRegistry = connectionRegistry ?? ContainerConnections(clickHouse: database),
+            Options = new ScriptContextOptions
             {
                 TempTablePrefix = tempPrefix,
                 FinalTablePrefix = finalPrefix
             }
         };
 
-        var tables = await executor.ExecuteAsync(context, ParseScript(scriptText), cancellationToken)
+        var tables = await Executor.ExecuteAsync(context, ParseScript(scriptText), cancellationToken)
             .ConfigureAwait(false);
         return new ScriptExecutionResult(tables, tempPrefix, finalPrefix);
+    }
+
+    public static Task<ScriptExecutionResult> ExecuteScriptAsync(
+        ClickHouseTestDatabase database,
+        string scriptText,
+        PostgresTestDatabase postgres,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteScriptAsync(
+            database,
+            scriptText,
+            ContainerConnections(clickHouse: database, postgres: postgres),
+            cancellationToken);
+    }
+
+    public static Task<ScriptExecutionResult> ExecuteScriptAsync(
+        ClickHouseTestDatabase database,
+        string scriptText,
+        SqlServerTestDatabase sqlServer,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteScriptAsync(
+            database,
+            scriptText,
+            ContainerConnections(clickHouse: database, sqlServer: sqlServer),
+            cancellationToken);
+    }
+
+    public static Task<ScriptExecutionResult> ExecuteScriptAsync(
+        ClickHouseTestDatabase database,
+        string scriptText,
+        OracleTestDatabase oracle,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteScriptAsync(
+            database,
+            scriptText,
+            ContainerConnections(clickHouse: database, oracle: oracle),
+            cancellationToken);
+    }
+
+    public static Task<ScriptExecutionResult> ExecuteScriptWithOnlyClickHouseAsync(
+        ClickHouseTestDatabase database,
+        string scriptText,
+        CancellationToken cancellationToken = default)
+    {
+        return ExecuteScriptAsync(
+            database,
+            scriptText,
+            ContainerConnections(clickHouse: database),
+            cancellationToken);
+    }
+
+    private static ScriptConnection Connection(
+        string name,
+        ScriptConnectionType provider,
+        string connectionString)
+    {
+        return new ScriptConnection
+        {
+            Name = name,
+            Provider = provider,
+            ConnectionString = connectionString
+        };
     }
 
     public static async Task AssertFinalTableAsync(

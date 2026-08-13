@@ -86,13 +86,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new NumbersLoadSourceResolver(),
             new CalendarLoadSourceResolver(),
             new TableLoadSourceResolver(),
-            new ConnectLoadSourceResolver(),
-            new PostgresLoadSourceResolver(),
-            new SqlServerLoadSourceResolver(),
-            new OracleLoadSourceResolver(),
-            new HiveLoadSourceResolver(),
-            new OdbcLoadSourceResolver(),
-            new ClickHouseLoadSourceResolver()
+            new ConnectLoadSourceResolver()
         ];
 
         return resolvers.ToDictionary(
