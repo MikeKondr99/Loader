@@ -26,3 +26,8 @@ public sealed record ApacheHiveParallelLimit : IParallelLimit
 {
     public int Limit => 4;
 }
+
+public sealed record YdbParallelLimit : IParallelLimit
+{
+    public int Limit => 1;
+}

@@ -6,6 +6,7 @@ using Loader.Core.Providers.Oracle;
 using Loader.Core.Providers.Postgres;
 using Loader.Core.Providers.Sql;
 using Loader.Core.Providers.SqlServer;
+using Loader.Core.Providers.Ydb;
 using Loader.Core.Sources;
 
 namespace Loader.Script.Execution;
@@ -84,7 +85,12 @@ internal sealed class DatabaseLoadProviderFactory
                 ScriptConnectionType.ClickHouse,
                 "clickhouse",
                 requiresBuffer: false,
-                static (source, config, token) => new ClickHouseProvider().OpenReaderAsync(source, config, token))
+                static (source, config, token) => new ClickHouseProvider().OpenReaderAsync(source, config, token)),
+            new(
+                ScriptConnectionType.Ydb,
+                "ydb",
+                requiresBuffer: false,
+                static (source, config, token) => new YdbProvider().OpenReaderAsync(source, config, token))
         ];
 
         return factories.ToDictionary(

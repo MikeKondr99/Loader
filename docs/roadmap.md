@@ -9,6 +9,7 @@
   - [x] Oracle
   - [x] Apache Hive
   - [x] ODBC
+  - [x] YDB
 - [x] Файлы
   - [x] Excel
   - [x] CSV

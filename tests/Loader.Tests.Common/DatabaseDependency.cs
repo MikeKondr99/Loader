@@ -7,5 +7,6 @@ public enum DatabaseDependency
     Postgres,
     SqlServer,
     Oracle,
-    ApacheHive
+    ApacheHive,
+    Ydb
 }
