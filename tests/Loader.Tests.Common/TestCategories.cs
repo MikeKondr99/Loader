@@ -11,4 +11,6 @@ public static class TestCategories
     public const string Oracle = "Oracle";
 
     public const string ApacheHive = "ApacheHive";
+
+    public const string Ydb = "Ydb";
 }

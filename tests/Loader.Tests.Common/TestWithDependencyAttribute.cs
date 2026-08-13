@@ -85,6 +85,7 @@ public sealed class TestWithDependencyAttribute :
             DatabaseDependency.SqlServer => GenerateDataSourceAsync<SqlServerTestDatabase>(dataGeneratorMetadata),
             DatabaseDependency.Oracle => GenerateDataSourceAsync<OracleTestDatabase>(dataGeneratorMetadata),
             DatabaseDependency.ApacheHive => GenerateEmptyDataSourceAsync(),
+            DatabaseDependency.Ydb => GenerateDataSourceAsync<YdbTestDatabase>(dataGeneratorMetadata),
             _ => throw new ArgumentOutOfRangeException(nameof(dependencies), dependencies[0], null)
         };
     }
@@ -133,6 +134,7 @@ public sealed class TestWithDependencyAttribute :
             DatabaseDependency.SqlServer => TestCategories.SqlServer,
             DatabaseDependency.Oracle => TestCategories.Oracle,
             DatabaseDependency.ApacheHive => TestCategories.ApacheHive,
+            DatabaseDependency.Ydb => TestCategories.Ydb,
             _ => throw new ArgumentOutOfRangeException(nameof(dependency), dependency, null)
         };
     }
@@ -154,6 +156,7 @@ public sealed class TestWithDependencyAttribute :
             DatabaseDependency.SqlServer => new SqlServerParallelLimit(),
             DatabaseDependency.Oracle => new OracleParallelLimit(),
             DatabaseDependency.ApacheHive => new ApacheHiveParallelLimit(),
+            DatabaseDependency.Ydb => new YdbParallelLimit(),
             _ => throw new ArgumentOutOfRangeException(nameof(dependency), dependency, null)
         };
     }

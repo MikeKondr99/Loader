@@ -9,4 +9,6 @@ public static class TestDatabaseImages
     public const string SqlServer = "mcr.microsoft.com/mssql/server:2022-CU23-ubuntu-22.04";
 
     public const string Oracle = "gvenzl/oracle-free:23.26.2-slim-faststart";
+
+    public const string Ydb = "ydbplatform/local-ydb:26.1.1.22";
 }

@@ -7,5 +7,6 @@ public enum ScriptConnectionType
     Oracle,
     Hive,
     Odbc,
-    ClickHouse
+    ClickHouse,
+    Ydb
 }
