@@ -496,6 +496,32 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Connect берет JDBC driver настройки из registry")]
+    public async Task Resolve_connect_supports_jdbc_provider_type()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "hive_jdbc",
+                Provider = ScriptConnectionType.Jdbc,
+                ConnectionString = "JarPath=C:\\drivers\\hive-jdbc-4.0.0-standalone.jar;DriverClass=org.apache.hive.jdbc.HiveDriver;JdbcUrl=jdbc:hive2://localhost:10000/default;User=hive;Password=hive"
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [Option("name", "hive_jdbc")],
+                sql: "SELECT * FROM default.orders"),
+            CreateContext(registry: registry));
+
+        await Assert.That(source.Kind).IsEqualTo("jdbc");
+        await Assert.That(source.RequiresBuffer).IsTrue();
+    }
+
+    [Test]
     [DisplayName("Resolver Connect берет connection string и provider type из registry")]
     public async Task Resolve_connect_uses_registered_connection()
     {
