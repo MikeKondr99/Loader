@@ -220,6 +220,17 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD source options допускают positional literals")]
+    public async Task Load_options_support_positional_literals()
+    {
+        var load = ParseLoad("LOAD id AS id FROM Csv('orders.csv', header=false);");
+
+        await Assert.That(load.SourceCall.Options).Count().IsEqualTo(2);
+        await AssertOption(load.SourceCall, "0", "orders.csv");
+        await AssertOption(load.SourceCall, "header", false);
+    }
+
+    [Test]
     [DisplayName("LOAD source options допускают keyword from как имя option")]
     public async Task Load_options_parse_min_max_range()
     {

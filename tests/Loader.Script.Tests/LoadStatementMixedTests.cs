@@ -364,6 +364,35 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script Numbers поддерживает positional min/max")]
+    public async Task Execute_script_loads_numbers_with_positional_min_max()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            numbers_short:
+            LOAD
+                number
+            FROM Numbers(1, 9, step=4)
+            ORDER BY number ASC;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["number"],
+            [
+                new object?[] { 1L },
+                new object?[] { 5L },
+                new object?[] { 9L }
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script строит календарь по явному min/max диапазону")]
     public async Task Execute_script_loads_calendar_from_explicit_range()
     {
@@ -426,6 +455,37 @@ public sealed class LoadStatementMixedTests
         var rows = await ScriptIntegrationAssert.ReadFinalTableAsync(database, result[1], "ORDER BY `column1` ASC");
         await Assert.That(result[1].Fields.Select(static field => field.Name).ToArray())
             .IsEquivalentTo(["Date", "Year", "DayOfMonth"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(rows.Rows).Count().IsEqualTo(3);
+        await AssertCalendarRowAsync(rows.Rows[0], new DateTime(2024, 1, 1), 2024, dayOfMonth: 1);
+        await AssertCalendarRowAsync(rows.Rows[1], new DateTime(2024, 1, 2), 2024, dayOfMonth: 2);
+        await AssertCalendarRowAsync(rows.Rows[2], new DateTime(2024, 1, 3), 2024, dayOfMonth: 3);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Calendar поддерживает positional table/field")]
+    public async Task Execute_script_loads_calendar_from_positional_table_field()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            LOAD
+                Date(2024, 1, 1).AddDays(number) AS CreatedAt
+            FROM Numbers(2);
+
+            calendar:
+            LOAD
+                Date,
+                Year,
+                DayOfMonth
+            FROM Calendar('orders', 'CreatedAt')
+            ORDER BY Date ASC;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(2);
+        var rows = await ScriptIntegrationAssert.ReadFinalTableAsync(database, result[1], "ORDER BY `column1` ASC");
         await Assert.That(rows.Rows).Count().IsEqualTo(3);
         await AssertCalendarRowAsync(rows.Rows[0], new DateTime(2024, 1, 1), 2024, dayOfMonth: 1);
         await AssertCalendarRowAsync(rows.Rows[1], new DateTime(2024, 1, 2), 2024, dayOfMonth: 2);

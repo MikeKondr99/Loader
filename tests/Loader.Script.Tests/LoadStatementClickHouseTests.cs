@@ -79,4 +79,50 @@ public sealed class LoadStatementClickHouseTests
             "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [DisplayName("LOAD из Connect поддерживает positional connection name")]
+    public async Task ClickHouse_load_accepts_positional_connect_name()
+    {
+        var sourceTable = $"script_ch_source_{Guid.NewGuid():N}";
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            CREATE TABLE `{{sourceTable}}`
+            (
+                `id` Int32,
+                `name` String
+            )
+            ENGINE = Memory
+            """);
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            INSERT INTO `{{sourceTable}}` (`id`, `name`) VALUES
+            (1, 'Alice'),
+            (2, 'Bob')
+            """);
+
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            $$"""
+            ch_short:
+            LOAD *
+            FROM Connect('container_ch')
+            SQL SELECT * FROM `{{sourceTable}}` ORDER BY id ASC;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["id", "name"],
+            [
+                [1, "Alice"],
+                [2, "Bob"]
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
 }

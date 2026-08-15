@@ -90,6 +90,7 @@ option_list
 
 load_option
     : NAME EQUAL option_literal
+    | option_literal
     ;
 
 option_literal

@@ -15,6 +15,10 @@ internal sealed class NumbersLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        var positionalNames = options.PositionalCount <= 1
+            ? new[] { "max" }
+            : ["min", "max"];
+        options = options.MapPositionals(Name, positionalNames);
         RejectUnknownOptions(Name, options, errors, ["max", "min", "step"]);
         RejectSql(statement, errors);
 

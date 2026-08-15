@@ -1296,13 +1296,13 @@ LIMIT 10;`;
       const table = formatTableName(toTableName(name));
       const path = quoteScriptString(name);
       const provider = providerForFile(name);
-      return `\n${table}:\nLOAD *\nFROM ${provider}(path=${path});\n`;
+      return `\n${table}:\nLOAD *\nFROM ${provider}(${path});\n`;
     }
 
     function buildConnectionLoadScript(connection) {
       const table = formatTableName(toTableName(connection.name || 'source'));
       const name = quoteScriptString(connection.name || '');
-      return `\n${table}:\nLOAD *\nFROM Connect(name=${name})\nSQL\n  SELECT *\n  FROM table_name;\n`;
+      return `\n${table}:\nLOAD *\nFROM Connect(${name})\nSQL\n  SELECT *\n  FROM table_name;\n`;
     }
 
     function providerForFile(name) {

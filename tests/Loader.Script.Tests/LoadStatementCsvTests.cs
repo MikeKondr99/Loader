@@ -48,6 +48,36 @@ public sealed class LoadStatementCsvTests
     }
 
     [Test]
+    [DisplayName("LOAD из CSV поддерживает positional path")]
+    public async Task Csv_load_accepts_positional_path()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            csv_orders_short:
+            LOAD
+                id,
+                name
+            FROM Csv('orders.csv')
+            ORDER BY id ASC
+            LIMIT 2;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["id", "name"],
+            [
+                ["1", "Alice"],
+                ["2", "Bob"]
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("LOAD из CSV создает Time преобразованием и сохраняет тип при следующем LOAD")]
     public async Task Csv_load_time_transformation_preserves_time_type_in_next_load()
     {

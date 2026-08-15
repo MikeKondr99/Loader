@@ -15,6 +15,7 @@ internal sealed class XmlLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        options = options.MapPositionals(Name, ["path"]);
         RejectUnknownOptions(Name, options, errors, ["path", "table"]);
         RejectSqlForFileProvider("xml", statement, errors);
         var path = RequiredPath("xml", statement, options, errors);

@@ -17,6 +17,62 @@ internal sealed class LoadOptionReader
         _optionsByName = BuildOptionMap(options, errors);
     }
 
+    public int PositionalCount => _options.Count(IsPositional);
+
+    public IReadOnlyList<LoadOption> PositionalOptions()
+    {
+        return _options.Where(IsPositional).ToArray();
+    }
+
+    public LoadOptionReader MapPositionals(string providerName, ReadOnlySpan<string> names)
+    {
+        if (_options.All(static option => !IsPositional(option)))
+        {
+            return this;
+        }
+
+        var result = new List<LoadOption>(_options.Count);
+        var positionalIndex = 0;
+        var namedStarted = false;
+        foreach (var option in _options)
+        {
+            if (!IsPositional(option))
+            {
+                namedStarted = true;
+                result.Add(option);
+                continue;
+            }
+
+            if (namedStarted)
+            {
+                _errors.Add(new LangError
+                {
+                    Message = $"Provider '{providerName}' принимает позиционные options только перед именованными.",
+                    Span = option.Span
+                });
+                result.Add(option);
+                continue;
+            }
+
+            if (positionalIndex >= names.Length)
+            {
+                _errors.Add(new LangError
+                {
+                    Message = $"Provider '{providerName}' не поддерживает позиционную option #{positionalIndex}.",
+                    Span = option.Span
+                });
+                result.Add(option);
+                positionalIndex++;
+                continue;
+            }
+
+            result.Add(option with { Name = names[positionalIndex] });
+            positionalIndex++;
+        }
+
+        return new LoadOptionReader(result, _errors);
+    }
+
     public string? String(string name)
     {
         var option = GetOption(name);
@@ -136,6 +192,11 @@ internal sealed class LoadOptionReader
         }
 
         return false;
+    }
+
+    private static bool IsPositional(LoadOption option)
+    {
+        return int.TryParse(option.Name, out _);
     }
 
     private static IReadOnlyDictionary<string, LoadOption> BuildOptionMap(

@@ -27,6 +27,38 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Csv принимает path как positional option")]
+    public async Task Resolve_csv_maps_positional_path()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement("Csv", [Positional("orders.csv")]),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("csv");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv отклоняет positional path вместе с named path")]
+    public async Task Resolve_csv_rejects_positional_and_named_path()
+    {
+        var resolver = new LoadProviderResolver();
+        var namedSpan = Span(3, 30, 46);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Csv", [Positional("orders.csv"), Option("path", "other.csv", namedSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors.Any(error =>
+            error.Span == namedSpan &&
+            error.Message.Contains("path") &&
+            error.Message.Contains("несколько"))).IsTrue();
+    }
+
+    [Test]
     [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
     public async Task Resolve_numbers_reads_default_range()
     {
@@ -44,6 +76,54 @@ public sealed class LoadProviderResolverTests
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers принимает max как single positional option")]
+    public async Task Resolve_numbers_maps_single_positional_to_max()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement("Numbers", [Positional(3)]),
+            CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(await ReadNumbersAsync(reader))
+            .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers отклоняет positional max вместе с named max")]
+    public async Task Resolve_numbers_rejects_positional_and_named_max()
+    {
+        var resolver = new LoadProviderResolver();
+        var namedSpan = Span(3, 26, 32);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Numbers", [Positional(10), Option("max", 20, namedSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors.Any(error =>
+            error.Span == namedSpan &&
+            error.Message.Contains("max") &&
+            error.Message.Contains("несколько"))).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Resolver Numbers принимает min/max как positional options")]
+    public async Task Resolve_numbers_maps_two_positionals_to_min_max()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement("Numbers", [Positional(2, 0), Positional(8, 1), Option("step", 3)]),
+            CreateContext());
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(await ReadNumbersAsync(reader))
+            .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -365,6 +445,25 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Calendar принимает min/max как positional date options")]
+    public async Task Resolve_calendar_maps_date_positionals_to_min_max()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Calendar",
+                [
+                    Positional("2024-01-01", 0),
+                    Positional("2024-01-03", 1)
+                ]),
+            CreateContext());
+
+        await Assert.That(source.Kind).IsEqualTo("calendar");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
     [DisplayName("Resolver Calendar требует один режим options")]
     public async Task Resolve_calendar_rejects_missing_mode()
     {
@@ -470,6 +569,40 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Calendar принимает table/field как positional string options")]
+    public async Task Resolve_calendar_maps_non_date_positionals_to_table_field()
+    {
+        var resolver = new LoadProviderResolver();
+        var context = CreateContext();
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = new Loader.Core.Writers.ClickHouse.ClickHouseTableName { Table = "orders_physical" },
+            Alias = "orders",
+            Fields =
+            [
+                new LoadedTableField
+                {
+                    Name = "CreatedAt",
+                    DataType = Loader.Core.Models.DataType.Date,
+                    CanBeNull = false
+                }
+            ]
+        });
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Calendar",
+                [
+                    Positional("orders", 0),
+                    Positional("CreatedAt", 1)
+                ]),
+            context);
+
+        await Assert.That(source.Kind).IsEqualTo("calendar");
+        await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
     [DisplayName("Resolver Connect берет ODBC connection string и provider type из registry")]
     public async Task Resolve_connect_supports_odbc_provider_type()
     {
@@ -565,6 +698,47 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceCallSpan);
         await Assert.That(exception.Errors[0].Message).Contains("name='connection_name'");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect принимает name как positional option")]
+    public async Task Resolve_connect_maps_positional_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var nameSpan = Span(3, 20, 29);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Positional("missing", nameSpan)],
+                    sql: "SELECT 1"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("missing");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect отклоняет positional name вместе с named name")]
+    public async Task Resolve_connect_rejects_positional_and_named_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var namedSpan = Span(3, 30, 45);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Positional("main_pg"), Option("name", "other_pg", namedSpan)],
+                    sql: "SELECT 1"),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors.Any(error =>
+            error.Span == namedSpan &&
+            error.Message.Contains("name") &&
+            error.Message.Contains("несколько"))).IsTrue();
     }
 
     [Test]
@@ -1152,6 +1326,36 @@ public sealed class LoadProviderResolverTests
     private static LoadOption Option(string name, string value)
     {
         return Option(name, value, Span());
+    }
+
+    private static LoadOption Positional(string value)
+    {
+        return Positional(value, Span());
+    }
+
+    private static LoadOption Positional(string value, LangSpan span)
+    {
+        return Option("0", new StringLiteral(value), span);
+    }
+
+    private static LoadOption Positional(string value, int index)
+    {
+        return Option(index.ToString(System.Globalization.CultureInfo.InvariantCulture), new StringLiteral(value), Span());
+    }
+
+    private static LoadOption Positional(long value)
+    {
+        return Positional(value, Span());
+    }
+
+    private static LoadOption Positional(long value, int index)
+    {
+        return Option(index.ToString(System.Globalization.CultureInfo.InvariantCulture), new IntegerLiteral(value), Span());
+    }
+
+    private static LoadOption Positional(long value, LangSpan span)
+    {
+        return Option("0", new IntegerLiteral(value), span);
     }
 
     private static LoadOption Option(string name, long value)

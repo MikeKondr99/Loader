@@ -5,6 +5,7 @@ using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
 using Loader.Core.Sources;
 using Loader.Lang;
+using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
@@ -20,6 +21,7 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
+        options = MapPositionals(options);
         RejectUnknownOptions(Name, options, errors, ["min", "max", "table", "field"]);
         RejectSql(statement, errors);
 
@@ -70,6 +72,34 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
             RequiresBuffer = false,
             OpenReaderAsync = async token => await OpenCalendarReaderAsync(source, config, token).ConfigureAwait(false)
         });
+    }
+
+    private static LoadOptionReader MapPositionals(LoadOptionReader options)
+    {
+        if (options.PositionalCount != 2)
+        {
+            return options.MapPositionals("Calendar", ["max"]);
+        }
+
+        var positionals = options.PositionalOptions();
+        if (positionals is [LoadOption { Value: StringLiteral first }, LoadOption { Value: StringLiteral second }] &&
+            !IsDate(first.Value) &&
+            !IsDate(second.Value))
+        {
+            return options.MapPositionals("Calendar", ["table", "field"]);
+        }
+
+        return options.MapPositionals("Calendar", ["min", "max"]);
+    }
+
+    private static bool IsDate(string value)
+    {
+        return DateOnly.TryParseExact(
+            value,
+            "yyyy-MM-dd",
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out _);
     }
 
     private static string? ResolveExplicitRangeSql(

@@ -313,7 +313,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         }
 
         // 2. Options сохраняем в исходном порядке для диагностики duplicate options и span-ов.
-        return context.load_option().Select(VisitLoadOption).ToList();
+        return context.load_option().Select((option, index) => VisitLoadOption(option, index)).ToList();
     }
 
     /// <summary>
@@ -421,10 +421,10 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// Одна source option.
     /// Примеры: <c>path='orders.csv'</c>, <c>delimiter=','</c>, <c>header=true</c>.
     /// </summary>
-    private LoadOption VisitLoadOption(LangParser.Load_optionContext context)
+    private LoadOption VisitLoadOption(LangParser.Load_optionContext context, int index)
     {
         // 1. NAME всегда является именем option.
-        var name = context.NAME().GetText();
+        var name = context.NAME()?.GetText() ?? index.ToString(CultureInfo.InvariantCulture);
 
         return new LoadOption
         {
