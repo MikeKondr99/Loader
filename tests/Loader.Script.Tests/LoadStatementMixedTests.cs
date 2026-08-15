@@ -445,7 +445,7 @@ public sealed class LoadStatementMixedTests
                 Date,
                 Year,
                 DayOfMonth
-            FROM Calendar(table='orders', field='CreatedAt')
+            FROM Calendar(table=orders, field=CreatedAt)
             ORDER BY Date ASC;
             """);
 
@@ -479,7 +479,7 @@ public sealed class LoadStatementMixedTests
                 Date,
                 Year,
                 DayOfMonth
-            FROM Calendar('orders', 'CreatedAt')
+            FROM Calendar(orders, CreatedAt)
             ORDER BY Date ASC;
             """);
 
@@ -539,7 +539,7 @@ public sealed class LoadStatementMixedTests
             calendar:
             LOAD
                 *
-            FROM Calendar(table='orders', field='CreatedAt');
+            FROM Calendar(table=orders, field=CreatedAt);
             """).Value!;
         var statement = (Loader.Lang.Statements.LoadStatement)script.Statements[0];
         var source = await new LoadProviderResolver().ResolveAsync(statement, context);

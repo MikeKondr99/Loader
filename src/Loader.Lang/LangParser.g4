@@ -95,6 +95,7 @@ load_option
 
 option_literal
     : string
+    | name
     | integer
     | number
     | boolean

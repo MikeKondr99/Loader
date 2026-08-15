@@ -84,6 +84,17 @@ internal sealed class LoadOptionReader
         };
     }
 
+    public string? Name(string name)
+    {
+        var option = GetOption(name);
+        return option?.Value switch
+        {
+            null => null,
+            NameLiteral value => value.Value,
+            _ => AddError(option, $"Опция '{name}' должна быть именем.")
+        };
+    }
+
     public string? RequiredString(string name, LangSpan missingSpan, string missingMessage)
     {
         var option = GetOption(name);
@@ -98,6 +109,22 @@ internal sealed class LoadOptionReader
         }
 
         return String(name);
+    }
+
+    public string? RequiredName(string name, LangSpan missingSpan, string missingMessage)
+    {
+        var option = GetOption(name);
+        if (option is null)
+        {
+            _errors.Add(new LangError
+            {
+                Message = missingMessage,
+                Span = missingSpan
+            });
+            return null;
+        }
+
+        return Name(name);
     }
 
     public bool Boolean(string name, bool defaultValue)

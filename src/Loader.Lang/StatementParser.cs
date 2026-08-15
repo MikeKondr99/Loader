@@ -440,7 +440,15 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     private Literal VisitOptionLiteral(LangParser.Option_literalContext context)
     {
-        // 1. option_literal специально ограничен literal-ами без name/null.
+        if (context.name() is { } name)
+        {
+            return new NameLiteral(UnescapeName(name.GetText()))
+            {
+                Span = Span(name)
+            };
+        }
+
+        // 1. option_literal специально ограничен literal-ами без null и выражений.
         var literalContext = context.children.OfType<ParserRuleContext>().Single();
 
         // 2. Expression visitor уже умеет строить String/Integer/Number/Boolean literal.

@@ -82,24 +82,12 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
         }
 
         var positionals = options.PositionalOptions();
-        if (positionals is [LoadOption { Value: StringLiteral first }, LoadOption { Value: StringLiteral second }] &&
-            !IsDate(first.Value) &&
-            !IsDate(second.Value))
+        if (positionals is [LoadOption { Value: NameLiteral }, LoadOption { Value: NameLiteral }])
         {
             return options.MapPositionals("Calendar", ["table", "field"]);
         }
 
         return options.MapPositionals("Calendar", ["min", "max"]);
-    }
-
-    private static bool IsDate(string value)
-    {
-        return DateOnly.TryParseExact(
-            value,
-            "yyyy-MM-dd",
-            CultureInfo.InvariantCulture,
-            DateTimeStyles.None,
-            out _);
     }
 
     private static string? ResolveExplicitRangeSql(
@@ -124,14 +112,14 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
         LoadOptionReader options,
         List<LangError> errors)
     {
-        var tableAlias = options.RequiredString(
+        var tableAlias = options.RequiredName(
             "table",
             statement.SourceCall.Span,
-            "Для provider-а Calendar в режиме table/field требуется option table='table_name'.");
-        var fieldName = options.RequiredString(
+            "Для provider-а Calendar в режиме table/field требуется option table=table_name.");
+        var fieldName = options.RequiredName(
             "field",
             statement.SourceCall.Span,
-            "Для provider-а Calendar в режиме table/field требуется option field='field_name'.");
+            "Для provider-а Calendar в режиме table/field требуется option field=field_name.");
 
         if (tableAlias is null || fieldName is null)
         {

@@ -242,6 +242,21 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD source options различают строку и имя")]
+    public async Task Load_options_parse_name_literal()
+    {
+        var load = ParseLoad("LOAD * FROM Calendar(table=orders, field=[creationDate]);");
+
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Calendar");
+        await Assert.That(load.SourceCall.Options.Single(option => option.Name == "table").Value)
+            .IsTypeOf<NameLiteral>();
+        await Assert.That(load.SourceCall.Options.Single(option => option.Name == "field").Value)
+            .IsTypeOf<NameLiteral>();
+        await AssertOption(load.SourceCall, "table", "orders");
+        await AssertOption(load.SourceCall, "field", "creationDate");
+    }
+
+    [Test]
     [DisplayName("LOAD Inline разбирает header и rows")]
     public async Task Load_inline_parses_header_and_rows()
     {
@@ -708,6 +723,7 @@ public sealed class LoadParsingTests
             BooleanLiteral value => value.Value,
             IntegerLiteral value => value.Value,
             NumberLiteral value => value.Value,
+            NameLiteral value => value.Value,
             _ => throw new InvalidOperationException($"Unexpected option literal type '{literal.GetType().Name}'.")
         };
     }

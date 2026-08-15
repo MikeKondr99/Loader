@@ -59,6 +59,23 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Csv отклоняет path как имя")]
+    public async Task Resolve_csv_rejects_name_literal_path()
+    {
+        var resolver = new LoadProviderResolver();
+        var pathSpan = Span(3, 18, 29);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Csv", [OptionName("path", "orders", pathSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(pathSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("строкой");
+    }
+
+    [Test]
     [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
     public async Task Resolve_numbers_reads_default_range()
     {
@@ -557,8 +574,8 @@ public sealed class LoadProviderResolverTests
                 CreateStatement(
                     "Calendar",
                     [
-                        Option("table", "orders", tableSpan),
-                        Option("field", "CreatedAt")
+                        OptionName("table", "orders", tableSpan),
+                        OptionName("field", "CreatedAt")
                     ]),
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
@@ -569,8 +586,8 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver Calendar принимает table/field как positional string options")]
-    public async Task Resolve_calendar_maps_non_date_positionals_to_table_field()
+    [DisplayName("Resolver Calendar принимает table/field как positional name options")]
+    public async Task Resolve_calendar_maps_name_positionals_to_table_field()
     {
         var resolver = new LoadProviderResolver();
         var context = CreateContext();
@@ -593,13 +610,57 @@ public sealed class LoadProviderResolverTests
             CreateStatement(
                 "Calendar",
                 [
-                    Positional("orders", 0),
-                    Positional("CreatedAt", 1)
+                    PositionalName("orders", 0),
+                    PositionalName("CreatedAt", 1)
                 ]),
             context);
 
         await Assert.That(source.Kind).IsEqualTo("calendar");
         await Assert.That(source.RequiresBuffer).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar отклоняет строковые table/field options")]
+    public async Task Resolve_calendar_rejects_string_table_field_options()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 18, 33);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Option("table", "orders", tableSpan),
+                        Option("field", "CreatedAt")
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("именем");
+    }
+
+    [Test]
+    [DisplayName("Resolver Calendar отклоняет positional строки как table/field")]
+    public async Task Resolve_calendar_rejects_string_positionals_as_table_field()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 18, 26);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Calendar",
+                    [
+                        Positional("orders", tableSpan),
+                        Positional("CreatedAt", 1)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("yyyy-MM-dd");
     }
 
     [Test]
@@ -759,6 +820,35 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
         await Assert.That(exception.Errors[0].Message).Contains("name");
+        await Assert.That(exception.Errors[0].Message).Contains("строкой");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect отклоняет positional name как имя")]
+    public async Task Resolve_connect_rejects_name_literal_positional_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new ScriptConnection
+            {
+                Name = "main_pg",
+                Provider = ScriptConnectionType.Postgres,
+                ConnectionString = "Host=localhost;Database=db"
+            }
+        ]);
+        var nameSpan = Span(3, 18, 25);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [PositionalName("main_pg", 0, nameSpan)],
+                    sql: "SELECT 1"),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(nameSpan);
         await Assert.That(exception.Errors[0].Message).Contains("строкой");
     }
 
@@ -1343,6 +1433,16 @@ public sealed class LoadProviderResolverTests
         return Option(index.ToString(System.Globalization.CultureInfo.InvariantCulture), new StringLiteral(value), Span());
     }
 
+    private static LoadOption PositionalName(string value, int index)
+    {
+        return Option(index.ToString(System.Globalization.CultureInfo.InvariantCulture), new NameLiteral(value), Span());
+    }
+
+    private static LoadOption PositionalName(string value, int index, LangSpan span)
+    {
+        return Option(index.ToString(System.Globalization.CultureInfo.InvariantCulture), new NameLiteral(value), span);
+    }
+
     private static LoadOption Positional(long value)
     {
         return Positional(value, Span());
@@ -1371,6 +1471,16 @@ public sealed class LoadProviderResolverTests
     private static LoadOption Option(string name, string value, LangSpan span)
     {
         return Option(name, new StringLiteral(value), span);
+    }
+
+    private static LoadOption OptionName(string name, string value)
+    {
+        return OptionName(name, value, Span());
+    }
+
+    private static LoadOption OptionName(string name, string value, LangSpan span)
+    {
+        return Option(name, new NameLiteral(value), span);
     }
 
     private static LoadOption Option(string name, Literal value, LangSpan span)
