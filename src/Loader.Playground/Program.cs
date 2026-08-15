@@ -63,6 +63,56 @@ app.MapGet("/api/files", () => Results.Ok(new
     Files = PlaygroundFiles.ListFiles()
 }));
 
+app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvironment environment, CancellationToken cancellationToken) =>
+{
+    var config = PlaygroundConfig.From(configuration, environment);
+    var connections = new List<object>();
+    connections.AddRange(config.Connections.Select(static connection => new
+    {
+        connection.Name,
+        Type = connection.Provider.ToString()
+    }));
+
+    string? warning = null;
+    try
+    {
+        var registry = config.CreateConnectionRegistry();
+        var knownNames = new HashSet<string>(
+            config.Connections.Select(static connection => connection.Name),
+            StringComparer.OrdinalIgnoreCase);
+        var names = await registry.FindNamesAsync(cancellationToken).ConfigureAwait(false);
+        foreach (var name in names)
+        {
+            if (knownNames.Contains(name))
+            {
+                continue;
+            }
+
+            var connection = await registry.GetAsync(name, cancellationToken).ConfigureAwait(false);
+            if (connection is null)
+            {
+                continue;
+            }
+
+            connections.Add(new
+            {
+                connection.Name,
+                Type = connection.Provider.ToString()
+            });
+        }
+    }
+    catch (Exception ex) when (ex is not OperationCanceledException)
+    {
+        warning = ex.Message;
+    }
+
+    return Results.Ok(new
+    {
+        Connections = connections,
+        Warning = warning
+    });
+});
+
 app.MapPost("/api/files", async (HttpRequest request, CancellationToken cancellationToken) =>
 {
     if (!request.HasFormContentType)
