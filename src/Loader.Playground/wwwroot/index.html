@@ -76,6 +76,20 @@
       background: var(--panel-soft);
     }
 
+    .dev-mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+      user-select: none;
+    }
+
+    .dev-mode input {
+      margin: 0;
+    }
+
     .files-panel {
       height: 100%;
       display: grid;
@@ -460,6 +474,10 @@
         <button class="primary" id="run">Run script</button>
         <button id="parse">Parse only</button>
         <button id="sample">Reset sample</button>
+        <label class="dev-mode" title="Limit every source to first 100 rows before temp table">
+          <input type="checkbox" id="dev-mode">
+          DevMode 100 rows
+        </label>
       </div>
       <div id="editor"></div>
     </section>
@@ -513,6 +531,7 @@ LIMIT 10;`;
     const runButton = document.getElementById('run');
     const parseButton = document.getElementById('parse');
     const sampleButton = document.getElementById('sample');
+    const devMode = document.getElementById('dev-mode');
     const fileUpload = document.getElementById('file-upload');
     const fileList = document.getElementById('file-list');
     const connectionList = document.getElementById('connection-list');
@@ -637,7 +656,7 @@ LIMIT 10;`;
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ script: editor.getValue() })
+          body: JSON.stringify({ script: editor.getValue(), devMode: devMode?.checked === true })
         });
         const json = await response.json();
         if (json.ok) {

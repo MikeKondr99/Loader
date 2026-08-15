@@ -74,7 +74,9 @@ public class LoadStatementExecutor
         await using var stageNameReader = providerReader.AbstractColumns();
 
         // 4. Нормализуем поток перед записью в ClickHouse temp table.
-        await using var stageReader = NormalizeForTempTable(stageNameReader, source);
+        await using var stageReader = LimitSourceRows(
+            NormalizeForTempTable(stageNameReader, source),
+            context.Options.SourceRowLimit);
 
         // 5. Создаем temp table name.
         var tempTable = CreatePhysicalTempTableName(context);
@@ -158,6 +160,13 @@ public class LoadStatementExecutor
         {
             Buffer = source.RequiresBuffer
         });
+    }
+
+    private static DomainDataReader LimitSourceRows(DomainDataReader reader, int? limit)
+    {
+        return limit is null
+            ? reader
+            : reader.Limit(limit.Value);
     }
 
     protected virtual async ValueTask WriteTempTableAsync(

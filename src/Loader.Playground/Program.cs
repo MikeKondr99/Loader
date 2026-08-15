@@ -198,7 +198,11 @@ app.MapPost("/api/run", async (
         FileStorage = new FileSystemSource(config.FileRoot),
         TargetConnectionString = config.TargetConnectionString,
         Logger = NullLogger.Instance,
-        ConnectionRegistry = config.CreateConnectionRegistry()
+        ConnectionRegistry = config.CreateConnectionRegistry(),
+        Options = new ScriptContextOptions
+        {
+            SourceRowLimit = request.DevMode ? 100 : null
+        }
     };
 
     var stopwatch = Stopwatch.StartNew();
@@ -391,7 +395,7 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
     };
 }
 
-internal sealed record ScriptRequest(string Script);
+internal sealed record ScriptRequest(string Script, bool DevMode = false);
 
 internal sealed record PlaygroundRunSnapshot(
     string TargetConnectionString,
