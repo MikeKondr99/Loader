@@ -35,7 +35,7 @@
   - [ ] `LowCardinality(String)` по известной низкой cardinality.
   - [ ] Final tables на `MergeTree`; temp/staging оставить на `Log`.
 - [x] LOAD FROM LOAD
-- [ ] DROP TABLE
+- [x] DROP TABLE
 - [ ] LINK - `shadow table`
 - [ ] FROM JOIN
 - [ ] FROM UNION

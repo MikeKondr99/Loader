@@ -417,6 +417,7 @@
     .preview-message {
       color: var(--muted);
       font: 13px "Segoe UI", sans-serif;
+      white-space: pre-wrap;
     }
 
     .monaco-editor .line-error {
@@ -551,7 +552,7 @@ LIMIT 10;`;
             [/\/\*/, 'comment', '@comment'],
             [/\/\/.*$/, 'comment'],
             [/\bSQL\b/, 'keyword.sql', '@sql'],
-            [/\b(LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|true|false|null)\b/, 'keyword'],
+            [/\b(DROP|LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|true|false|null)\b/, 'keyword'],
             [/\[[^\]]*\]/, 'blocked-name'],
             [/'([^'\\]|\\.)*'/, 'string'],
             [/[0-9]+(\.[0-9]+)?/, 'number'],
@@ -890,43 +891,7 @@ LIMIT 10;`;
         return lines.join('\n');
       }
 
-      for (const table of data.tables) {
-        lines.push(`Таблица \`${table.name}\``);
-        if (table.alias) {
-          lines.push(`alias: ${table.alias}`);
-        }
-        if (table.rowCount !== undefined && table.rowCount !== null) {
-          lines.push(`rows: ${table.rowCount}`);
-        }
-
-        const fields = Array.isArray(table.fields) ? table.fields : [];
-        if (fields.length === 0) {
-          lines.push('- полей нет');
-          lines.push('');
-          continue;
-        }
-
-        for (const field of fields) {
-          const nullableSuffix = field.canBeNull ? '' : '!';
-          const density = field.density === undefined || field.density === null
-            ? ''
-            : ` ${formatDensity(field.density)} {density}`;
-          lines.push(`- ${field.name}: ${field.dataType}${nullableSuffix}${density}`);
-        }
-
-        lines.push('');
-      }
-
       return lines.join('\n').trimEnd();
-    }
-
-    function formatDensity(value) {
-      const number = Number(value);
-      if (!Number.isFinite(number)) {
-        return `${value}%`;
-      }
-
-      return `${number.toFixed(number % 1 === 0 ? 0 : 2)}%`;
     }
 
     function renderPreviewTabs(data) {
@@ -980,7 +945,7 @@ LIMIT 10;`;
           return;
         }
 
-        renderPreviewTable(tableHost, json.columns || [], json.rows || []);
+        renderPreviewTable(tableHost, json.fields || [], json.columns || [], json.rows || []);
       } catch (error) {
         tableHost.textContent = error.stack || error.message;
       }
@@ -999,7 +964,7 @@ LIMIT 10;`;
       }
     }
 
-    function renderPreviewTable(host, columns, rows) {
+    function renderPreviewTable(host, fields, columns, rows) {
       host.innerHTML = '';
       if (!columns.length) {
         host.innerHTML = '<div class="preview-message">У таблицы нет колонок.</div>';
@@ -1013,9 +978,11 @@ LIMIT 10;`;
 
       const thead = document.createElement('thead');
       const headerRow = document.createElement('tr');
-      for (const column of columns) {
+      for (let i = 0; i < columns.length; i++) {
+        const column = columns[i];
+        const field = Array.isArray(fields) ? fields[i] : null;
         const th = document.createElement('th');
-        th.textContent = column;
+        th.textContent = field?.type ? `${column}: ${field.type}` : column;
         headerRow.appendChild(th);
       }
       thead.appendChild(headerRow);

@@ -270,6 +270,9 @@ app.MapGet("/api/last-run/tables/{index:int}/preview", async (
             Table = table.Name.ToSql(),
             table.Alias,
             Columns = ResolvePreviewColumns(table, rows.Columns),
+            Fields = table.Fields.Select(static field => new PlaygroundFieldData(
+                field.Name,
+                FormatQueryType(field.DataType, field.CanBeNull))).ToArray(),
             Rows = rows.Rows
         });
     }
@@ -330,14 +333,24 @@ static PlaygroundRunData ToPlaygroundRunData(PlaygroundRunSnapshot snapshot)
             index,
             table.Name.ToSql(),
             table.Alias,
-            table.RowCount,
-            table.Fields.Select(static field => new PlaygroundFieldData(
-                field.Name,
-                field.DataType.ToString(),
-                field.CanBeNull,
-                field.Cardinality,
-                field.Density,
-                field.StringMaxLength)).ToArray())).ToArray());
+            table.RowCount)).ToArray());
+}
+
+static string FormatQueryType(Loader.Core.Models.DataType dataType, bool canBeNull)
+{
+    var name = dataType switch
+    {
+        Loader.Core.Models.DataType.Text => "text",
+        Loader.Core.Models.DataType.Integer => "int",
+        Loader.Core.Models.DataType.Number => "num",
+        Loader.Core.Models.DataType.DateTime => "datetime",
+        Loader.Core.Models.DataType.Date => "date",
+        Loader.Core.Models.DataType.Time => "time",
+        Loader.Core.Models.DataType.Boolean => "bool",
+        _ => dataType.ToString().ToLowerInvariant()
+    };
+
+    return canBeNull ? name : $"{name}!";
 }
 
 static PlaygroundError ToPlaygroundError(LangError error)
@@ -410,16 +423,11 @@ internal sealed record PlaygroundTableData(
     int Index,
     string Name,
     string? Alias,
-    long? RowCount,
-    IReadOnlyList<PlaygroundFieldData> Fields);
+    long? RowCount);
 
 internal sealed record PlaygroundFieldData(
     string Name,
-    string DataType,
-    bool CanBeNull,
-    long? Cardinality,
-    long? Density,
-    int? StringMaxLength);
+    string Type);
 
 internal sealed class PlaygroundLastRunStore
 {
