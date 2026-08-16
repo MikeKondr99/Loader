@@ -37,8 +37,8 @@
 - [x] LOAD FROM LOAD
 - [ ] DROP TABLE
 - [ ] LINK - `shadow table`
-- [ ] FROM JOIN
-- [ ] FROM UNION
+- [x] FROM JOIN
+- [x] FROM UNION
 - [x] FROM INLINE
 - [x] FROM Numbers
 - [x] FROM CALENDAR
