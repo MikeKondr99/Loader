@@ -37,8 +37,8 @@
 - [x] LOAD FROM LOAD
 - [x] DROP TABLE
 - [ ] LINK - `shadow table`
-- [ ] FROM JOIN
-- [ ] FROM UNION
+- [x] FROM JOIN
+- [x] FROM UNION
 - [x] FROM INLINE
 - [x] FROM Numbers
 - [x] FROM CALENDAR
@@ -52,8 +52,8 @@
 
 ## Функции
 
-- [ ] Time('12:00')
-- [ ] Text(Time('12:00'))
+- [x] Time('12:00')
+- [x] Text(Time('12:00'))
 - [x] Num(text, ',') или Dec/Float
 - [x] Date(text, 'yyyy-mm-dd') Joda pattern
 - [x] Text(date, 'yyyy-mm-dd') Joda pattern
