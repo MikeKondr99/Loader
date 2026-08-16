@@ -1,6 +1,8 @@
 using System.Data.Common;
 using Loader.Core.Exceptions;
+using Loader.Core.Models;
 using Loader.Core.Sources;
+using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
@@ -1466,6 +1468,198 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception.Errors[0].Message).Contains("missing");
     }
 
+    [Test]
+    [DisplayName("Resolver Join отклоняет named options")]
+    public async Task Resolve_join_rejects_named_options()
+    {
+        var resolver = new LoadProviderResolver();
+        var extraSpan = Span(3, 40, 50);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("id", 1),
+                        PositionalName("customers", 2),
+                        PositionalName("id", 3),
+                        Option("kind", "inner", extraSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(extraSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("позиционные");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join принимает только имена без кавычек")]
+    public async Task Resolve_join_rejects_string_arguments()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 15, 23);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        Positional("orders", tableSpan),
+                        PositionalName("id", 1),
+                        PositionalName("customers", 2),
+                        PositionalName("id", 3)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("без кавычек");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join отклоняет неизвестную таблицу со span на аргументе")]
+    public async Task Resolve_join_rejects_unknown_table_with_argument_span()
+    {
+        var resolver = new LoadProviderResolver();
+        var missingSpan = Span(3, 28, 35);
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("orders", [Field("id", DataType.Integer)]));
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("id", 1),
+                        PositionalName("missing", 2, missingSpan),
+                        PositionalName("id", 3)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(missingSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("missing");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join отклоняет неизвестный ключ со span на аргументе")]
+    public async Task Resolve_join_rejects_unknown_key_with_argument_span()
+    {
+        var resolver = new LoadProviderResolver();
+        var missingKeySpan = Span(3, 22, 33);
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("orders", [Field("id", DataType.Integer)]));
+        context.AddLoadedTable(LoadedTable("customers", [Field("id", DataType.Integer)]));
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("missing_key", 1, missingKeySpan),
+                        PositionalName("customers", 2),
+                        PositionalName("id", 3)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(missingKeySpan);
+        await Assert.That(exception.Errors[0].Message).Contains("missing_key");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join отклоняет соединение таблицы самой с собой")]
+    public async Task Resolve_join_rejects_same_table_before_sql()
+    {
+        var resolver = new LoadProviderResolver();
+        var secondTableSpan = Span(3, 28, 34);
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("orders", [Field("id", DataType.Integer)]));
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("id", 1),
+                        PositionalName("orders", 2, secondTableSpan),
+                        PositionalName("id", 3)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(secondTableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("самой с собой");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join отклоняет разные типы ключей")]
+    public async Task Resolve_join_rejects_different_key_types()
+    {
+        var resolver = new LoadProviderResolver();
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("orders", [Field("id", DataType.Integer)]));
+        context.AddLoadedTable(LoadedTable("customers", [Field("id", DataType.Text)]));
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("id", 1),
+                        PositionalName("customers", 2),
+                        PositionalName("id", 3)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("одинаковый тип");
+    }
+
+    [Test]
+    [DisplayName("Resolver Join отклоняет конфликт имени после prefix")]
+    public async Task Resolve_join_rejects_conflict_after_prefix()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceSpan = Span(3, 10, 48);
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable(
+            "orders",
+            [
+                Field("id", DataType.Integer),
+                Field("name", DataType.Text),
+                Field("customers.name", DataType.Text)
+            ]));
+        context.AddLoadedTable(LoadedTable(
+            "customers",
+            [
+                Field("id", DataType.Integer),
+                Field("name", DataType.Text)
+            ]));
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Join",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("id", 1),
+                        PositionalName("customers", 2),
+                        PositionalName("id", 3)
+                    ],
+                    sourceCallSpan: sourceSpan),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("customers.name");
+    }
+
     private static LoadStatement CreateStatement(
         string provider,
         List<LoadOption>? options = null,
@@ -1592,6 +1786,26 @@ public sealed class LoadProviderResolverTests
     private static LangSpan Span(uint row, uint startColumn, uint endColumn)
     {
         return new LangSpan(row, startColumn, row, endColumn);
+    }
+
+    private static LoadedTable LoadedTable(string alias, List<LoadedTableField> fields)
+    {
+        return new LoadedTable
+        {
+            Name = new ClickHouseTableName { Table = $"{alias}_physical" },
+            Alias = alias,
+            Fields = fields
+        };
+    }
+
+    private static LoadedTableField Field(string name, DataType dataType)
+    {
+        return new LoadedTableField
+        {
+            Name = name,
+            DataType = dataType,
+            CanBeNull = false
+        };
     }
 
     private static async Task<long[]> ReadNumbersAsync(DbDataReader reader)
