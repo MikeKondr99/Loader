@@ -1375,6 +1375,97 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception.Errors[0].Message).Contains("raw_orders");
     }
 
+    [Test]
+    [DisplayName("Resolver Union требует минимум две таблицы")]
+    public async Task Resolve_union_rejects_less_than_two_tables()
+    {
+        var resolver = new LoadProviderResolver();
+        var sourceSpan = Span(3, 10, 22);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Union", [PositionalName("orders", 0)], sourceCallSpan: sourceSpan),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sourceSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("минимум две");
+    }
+
+    [Test]
+    [DisplayName("Resolver Union принимает только имена таблиц")]
+    public async Task Resolve_union_rejects_string_table_name()
+    {
+        var resolver = new LoadProviderResolver();
+        var tableSpan = Span(3, 16, 24);
+        var context = CreateContext();
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = new Loader.Core.Writers.ClickHouse.ClickHouseTableName { Table = "payments_physical" },
+            Alias = "payments",
+            Fields =
+            [
+                new LoadedTableField
+                {
+                    Name = "id",
+                    DataType = Loader.Core.Models.DataType.Integer,
+                    CanBeNull = false
+                }
+            ]
+        });
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Union",
+                    [
+                        Positional("orders", tableSpan),
+                        PositionalName("payments", 1)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(tableSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("без кавычек");
+    }
+
+    [Test]
+    [DisplayName("Resolver Union отклоняет неизвестную таблицу")]
+    public async Task Resolve_union_rejects_unknown_loaded_table_alias()
+    {
+        var resolver = new LoadProviderResolver();
+        var missingSpan = Span(3, 24, 31);
+        var context = CreateContext();
+        context.AddLoadedTable(new LoadedTable
+        {
+            Name = new Loader.Core.Writers.ClickHouse.ClickHouseTableName { Table = "orders_physical" },
+            Alias = "orders",
+            Fields =
+            [
+                new LoadedTableField
+                {
+                    Name = "id",
+                    DataType = Loader.Core.Models.DataType.Integer,
+                    CanBeNull = false
+                }
+            ]
+        });
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Union",
+                    [
+                        PositionalName("orders", 0),
+                        PositionalName("missing", 1, missingSpan)
+                    ]),
+                context))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(missingSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("missing");
+    }
+
     private static LoadStatement CreateStatement(
         string provider,
         List<LoadOption>? options = null,

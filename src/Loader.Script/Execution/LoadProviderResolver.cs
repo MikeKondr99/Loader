@@ -86,6 +86,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new NumbersLoadSourceResolver(),
             new CalendarLoadSourceResolver(),
             new TableLoadSourceResolver(),
+            new UnionLoadSourceResolver(),
             new ConnectLoadSourceResolver()
         ];
 
