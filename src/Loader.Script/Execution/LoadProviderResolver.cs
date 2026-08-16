@@ -87,6 +87,10 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             new CalendarLoadSourceResolver(),
             new TableLoadSourceResolver(),
             new UnionLoadSourceResolver(),
+            new JoinLoadSourceResolver(JoinKind.Inner),
+            new JoinLoadSourceResolver(JoinKind.Left),
+            new JoinLoadSourceResolver(JoinKind.Right),
+            new JoinLoadSourceResolver(JoinKind.Full),
             new ConnectLoadSourceResolver()
         ];
 
