@@ -1,6 +1,7 @@
 using System.Data.Common;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Hive;
+using Loader.Core.Providers.Jdbc;
 using Loader.Core.Providers.Odbc;
 using Loader.Core.Providers.Oracle;
 using Loader.Core.Providers.Postgres;
@@ -80,6 +81,11 @@ internal sealed class DatabaseLoadProviderFactory
                 "odbc",
                 requiresBuffer: true,
                 static (source, config, token) => new OdbcProvider().OpenReaderAsync(source, config, token)),
+            new(
+                ScriptConnectionType.Jdbc,
+                "jdbc",
+                requiresBuffer: true,
+                static (source, config, token) => new JdbcProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.ClickHouse,
                 "clickhouse",
