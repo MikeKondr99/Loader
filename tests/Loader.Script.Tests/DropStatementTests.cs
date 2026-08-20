@@ -12,9 +12,10 @@ public sealed class DropStatementTests
     public async Task Execute_script_drop_removes_physical_table_and_context_entry()
     {
         var executor = CreateExecutor(out var dropExecutor);
+        var logger = new RecordingProgressLogger();
 
         var tables = await executor.ExecuteAsync(
-            CreateContext(),
+            CreateContext(logger),
             Parse(
                 """
                 orders: LOAD * FROM Csv(path='orders.csv');
@@ -23,6 +24,10 @@ public sealed class DropStatementTests
 
         await Assert.That(dropExecutor.DropCalls).IsEqualTo(1);
         await Assert.That(dropExecutor.DroppedTableName!.Table).IsEqualTo("physical_orders");
+        await Assert.That(logger.Events.Select(static item => item.Kind).ToArray())
+            .Contains("DropTableStarted");
+        await Assert.That(logger.Events.Single(static item => item.Kind == "DropTableStarted").Message)
+            .IsEqualTo("Удаляем таблицу [orders]");
         await Assert.That(tables).IsEmpty();
     }
 
@@ -127,12 +132,13 @@ public sealed class DropStatementTests
         };
     }
 
-    private static ScriptContext CreateContext()
+    private static ScriptContext CreateContext(IProgressLogger? logger = null)
     {
         return new ScriptContext
         {
             FileStorage = new StubFileSource(),
-            TargetConnectionString = "Host=localhost"
+            TargetConnectionString = "Host=localhost",
+            Logger = logger ?? NullProgressLogger.Instance
         };
     }
 
@@ -195,6 +201,17 @@ public sealed class DropStatementTests
                 context.RemoveLoadedTable(table);
             }
 
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingProgressLogger : IProgressLogger
+    {
+        public List<ScriptProgressEvent> Events { get; } = [];
+
+        public ValueTask ReportAsync(ScriptProgressEvent progressEvent, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progressEvent);
             return ValueTask.CompletedTask;
         }
     }

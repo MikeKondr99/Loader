@@ -58,6 +58,31 @@ public sealed class ProgressLoggerExtensionsTests
         await Assert.That(logger.Events[^1].Level).IsEqualTo(ScriptProgressLevel.Debug);
     }
 
+    [Test]
+    public async Task Progress_extensions_emit_drop_and_temp_cleanup_messages()
+    {
+        var logger = new TestProgressLogger();
+
+        await logger.DropTableStartedAsync("old_table");
+        await logger.TempLoadCleanupStartedAsync();
+
+        await Assert.That(logger.Events.Select(static item => item.Kind).ToArray())
+            .IsEquivalentTo(
+                [
+                    "DropTableStarted",
+                    "TempLoadCleanupStarted"
+                ],
+                TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(logger.Events.Select(static item => item.Message).ToArray())
+            .IsEquivalentTo(
+                [
+                    "Удаляем таблицу [old_table]",
+                    "Чистим TEMP LOAD таблицы"
+                ],
+                TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(logger.Events.All(static item => item.Level == ScriptProgressLevel.User)).IsTrue();
+    }
+
     private sealed class TestProgressLogger : IProgressLogger
     {
         public List<ScriptProgressEvent> Events { get; } = [];

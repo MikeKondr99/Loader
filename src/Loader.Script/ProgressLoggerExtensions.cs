@@ -84,6 +84,29 @@ public static class ProgressLoggerExtensions
         }, cancellationToken);
     }
 
+    public static ValueTask DropTableStartedAsync(
+        this IProgressLogger logger,
+        string tableName,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.ReportAsync(new ScriptProgressEvent
+        {
+            Kind = "DropTableStarted",
+            Message = $"Удаляем таблицу [{tableName}]"
+        }, cancellationToken);
+    }
+
+    public static ValueTask TempLoadCleanupStartedAsync(
+        this IProgressLogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.ReportAsync(new ScriptProgressEvent
+        {
+            Kind = "TempLoadCleanupStarted",
+            Message = "Чистим TEMP LOAD таблицы"
+        }, cancellationToken);
+    }
+
     public static ValueTask DebugSqlAsync(
         this IProgressLogger logger,
         string sql,

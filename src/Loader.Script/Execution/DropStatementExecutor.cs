@@ -29,6 +29,7 @@ public class DropStatementExecutor
 
         try
         {
+            await context.Logger.DropTableStartedAsync(statement.Name, cancellationToken).ConfigureAwait(false);
             await DropTableAsync(context, table.Name, cancellationToken).ConfigureAwait(false);
         }
         catch (LoadScriptStageException)

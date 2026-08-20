@@ -20,8 +20,17 @@ public class TemporaryLoadedTableCleanupExecutor
             .Where(static table => table.Kind == LoadedTableKind.Temp)
             .ToArray();
 
+        if (temporaryTables.Length > 0)
+        {
+            await context.Logger.TempLoadCleanupStartedAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         foreach (var table in temporaryTables)
         {
+            await context.Logger.DropTableStartedAsync(
+                    table.Alias ?? table.Name.Table,
+                    cancellationToken)
+                .ConfigureAwait(false);
             await DropTableAsync(context, table.Name, cancellationToken).ConfigureAwait(false);
             context.RemoveLoadedTable(table);
         }
