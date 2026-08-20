@@ -11,7 +11,6 @@ using Loader.Query.Compile;
 using Loader.Query.Functions;
 using Loader.Query.Models;
 using Loader.Query.Resolve;
-using Microsoft.Extensions.Logging;
 using CoreDataType = Loader.Core.Models.DataType;
 using QueryDataType = Loader.Query.Models.DataType;
 using QueryModel = Loader.Query.Models.Query;
@@ -32,6 +31,8 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
+        await context.Logger.LoadTableStartedAsync(statement.TableName, cancellationToken).ConfigureAwait(false);
+
         // 1. Сырые данные source кладем в физическую temp table column1, column2...
         await using var tempTable = await LoadTempTableAsync(context, statement, cancellationToken)
             .ConfigureAwait(false);
@@ -41,8 +42,9 @@ public class LoadStatementExecutor
 
         // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
         await using var finalTable = CreateFinalTable(context);
-        await MaterializeFinalTableWithTelemetryAsync(context, statement, querySql, finalTable.TableName, cancellationToken)
+        var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, querySql, finalTable.TableName, cancellationToken)
             .ConfigureAwait(false);
+        await context.Logger.TransformationRowsLoadedAsync(finalRowCount, cancellationToken).ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
         var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName);
@@ -65,6 +67,8 @@ public class LoadStatementExecutor
         var source = await ResolveProviderAsync(context, statement, cancellationToken).ConfigureAwait(false);
         activity?
             .SetTag("load.source_kind", source.Kind);
+
+        await ReportSourceReadStartedAsync(context, statement, source, cancellationToken).ConfigureAwait(false);
 
         // 2. Открываем provider reader.
         await using var providerReader = await OpenProviderReaderAsync(context, statement, source, cancellationToken)
@@ -94,7 +98,8 @@ public class LoadStatementExecutor
 
             try
             {
-                await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
+                var rowCount = await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
+                await context.Logger.SourceRowsLoadedAsync(rowCount, cancellationToken).ConfigureAwait(false);
             }
             catch (LoadScriptStageException)
             {
@@ -119,12 +124,82 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken)
     {
-        context.Logger.ResolvingLoadProvider(statement.SourceCall.Name);
         var source = await ProviderResolver
             .ResolveAsync(statement, context, cancellationToken)
             .ConfigureAwait(false);
-        context.Logger.LoadProviderResolved(source.Kind);
         return source;
+    }
+
+    private static async ValueTask ReportSourceReadStartedAsync(
+        ScriptContext context,
+        LoadStatement statement,
+        LoadProviderSource source,
+        CancellationToken cancellationToken)
+    {
+        if (string.Equals(source.Kind, "connect", StringComparison.OrdinalIgnoreCase) ||
+            IsDatabaseSourceKind(source.Kind))
+        {
+            if (TryGetSourceOption(statement, "name", 0) is { Length: > 0 } connectionName)
+            {
+                await context.Logger.ConnectionOpeningAsync(connectionName, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (statement.SqlPart is not null)
+            {
+                await context.Logger.SqlSourceReadStartedAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            return;
+        }
+
+        if (IsFileSourceKind(source.Kind) &&
+            TryGetSourceOption(statement, "path", 0) is { Length: > 0 } fileName)
+        {
+            await context.Logger.FileSourceReadStartedAsync(fileName, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsFileSourceKind(string kind)
+    {
+        return string.Equals(kind, "csv", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "excel", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "json", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "xml", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "qvd", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsDatabaseSourceKind(string kind)
+    {
+        return string.Equals(kind, "postgres", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "sqlserver", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "oracle", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "clickhouse", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "hive", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "odbc", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "jdbc", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(kind, "ydb", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string? TryGetSourceOption(LoadStatement statement, string namedOption, int positionalIndex)
+    {
+        var positional = positionalIndex.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var option in statement.SourceCall.Options)
+        {
+            if (!string.Equals(option.Name, namedOption, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(option.Name, positional, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return option.Value switch
+            {
+                Loader.Lang.Expressions.StringLiteral value => value.Value,
+                Loader.Lang.Expressions.NameLiteral value => value.Value,
+                _ => null
+            };
+        }
+
+        return null;
     }
 
     private static async ValueTask<DbDataReader> OpenProviderReaderAsync(
@@ -133,7 +208,6 @@ public class LoadStatementExecutor
         LoadProviderSource source,
         CancellationToken cancellationToken)
     {
-        context.Logger.OpeningLoadReader(statement.SourceCall.Name);
         try
         {
             return await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);
@@ -169,27 +243,27 @@ public class LoadStatementExecutor
             : reader.Limit(limit.Value);
     }
 
-    protected virtual async ValueTask WriteTempTableAsync(
+    protected virtual async ValueTask<long> WriteTempTableAsync(
         ScriptContext context,
         DomainDataReader stageReader,
         ClickHouseTableName tempTable,
         CancellationToken cancellationToken)
     {
-        context.Logger.LoadingTempTable(tempTable.ToSql());
-
         var source = new ConnectionStringSource
         {
             ConnectionString = context.TargetConnectionString
         };
+        var meta = new DataMetaContainer();
+        await using var metaReader = stageReader.CollectMeta(meta);
         await new ClickHouseWriter()
             .WriteAsync(
                 source,
-                stageReader,
+                metaReader,
                 new ClickHouseWriteOptions { TableName = tempTable },
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        context.Logger.TempTableLoaded(tempTable.ToSql());
+        return meta.RowCount;
     }
 
     private static ResolvedQuerySql BuildResolvedQuerySql(
@@ -310,7 +384,7 @@ public class LoadStatementExecutor
         }
     }
 
-    private async ValueTask MaterializeFinalTableWithTelemetryAsync(
+    private async ValueTask<long> MaterializeFinalTableWithTelemetryAsync(
         ScriptContext context,
         LoadStatement statement,
         string querySql,
@@ -324,7 +398,8 @@ public class LoadStatementExecutor
 
         try
         {
-            await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+            await context.Logger.TransformationWriteStartedAsync(cancellationToken).ConfigureAwait(false);
+            return await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
         }
         catch (LoadScriptStageException)
         {
@@ -340,14 +415,12 @@ public class LoadStatementExecutor
         }
     }
 
-    protected virtual async ValueTask MaterializeFinalTableAsync(
+    protected virtual async ValueTask<long> MaterializeFinalTableAsync(
         ScriptContext context,
         string querySql,
         ClickHouseTableName finalTable,
         CancellationToken cancellationToken)
     {
-        context.Logger.MaterializingFinalTable(finalTable.ToSql());
-
         var source = new ConnectionStringSource
         {
             ConnectionString = context.TargetConnectionString
@@ -358,15 +431,17 @@ public class LoadStatementExecutor
         await using var finalNameReader = rawReader.AbstractColumns();
         await using var finalReader = finalNameReader.Normalize();
 
+        var meta = new DataMetaContainer();
+        await using var metaReader = finalReader.CollectMeta(meta);
         await new ClickHouseWriter()
             .WriteAsync(
                 source,
-                finalReader,
+                metaReader,
                 new ClickHouseWriteOptions { TableName = finalTable },
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        context.Logger.FinalTableMaterialized(finalTable.ToSql());
+        return meta.RowCount;
     }
 
     protected virtual async ValueTask DropTempTableAsync(
@@ -374,9 +449,7 @@ public class LoadStatementExecutor
         ClickHouseTableName tempTable,
         CancellationToken cancellationToken)
     {
-        context.Logger.DroppingTempTable(tempTable.ToSql());
         await DropTableAsync(context, tempTable, cancellationToken).ConfigureAwait(false);
-        context.Logger.TempTableDropped(tempTable.ToSql());
     }
 
     protected virtual async ValueTask DropFinalTableAsync(
@@ -384,9 +457,7 @@ public class LoadStatementExecutor
         ClickHouseTableName finalTable,
         CancellationToken cancellationToken)
     {
-        context.Logger.DroppingFinalTable(finalTable.ToSql());
         await DropTableAsync(context, finalTable, cancellationToken).ConfigureAwait(false);
-        context.Logger.FinalTableDropped(finalTable.ToSql());
     }
 
     private static async ValueTask DropTableAsync(
@@ -415,7 +486,7 @@ public class LoadStatementExecutor
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            context.Logger.TempTableDropFailed(tempTable.ToSql(), exception);
+            // Best-effort cleanup: исходная ошибка LOAD важнее ошибки удаления temp table.
         }
     }
 
@@ -429,7 +500,7 @@ public class LoadStatementExecutor
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            context.Logger.FinalTableDropFailed(finalTable.ToSql(), exception);
+            // Best-effort cleanup: исходная ошибка LOAD важнее ошибки удаления final table.
         }
     }
 

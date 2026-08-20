@@ -8,7 +8,6 @@ using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
 
@@ -112,6 +111,58 @@ public sealed class LoadStatementTests
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("city");
         await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
         await Assert.That(context.LoadedTables[0]).IsSameReferenceAs(loadedTable);
+    }
+
+    [Test]
+    [DisplayName("Execute LOAD отправляет progress с фактическим количеством строк")]
+    public async Task Execute_load_reports_progress_row_counts()
+    {
+        var logger = new RecordingProgressLogger();
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                SourceKind = "csv"
+            },
+            FinalRowCount = 1
+        };
+        var context = CreateContext(logger: logger);
+        var statement = new LoadStatement
+        {
+            TableName = "orders",
+            LoadSpan = Span(),
+            Fields =
+            [
+                new LoadField
+                {
+                    Name = "city",
+                    Span = Span(),
+                    Expression = Expr.Parse("name").Value
+                }
+            ],
+            FromSpan = Span(),
+            SourceCall = SourceCall("Csv", "orders.csv"),
+            Where = null,
+            GroupBy = null,
+            OrderBy = null
+        };
+
+        await executor.ExecuteAsync(context, statement);
+
+        await Assert.That(logger.Events.Select(static item => item.Kind).ToArray())
+            .IsEquivalentTo(
+                [
+                    "LoadTableStarted",
+                    "FileSourceReadStarted",
+                    "SourceRowsLoaded",
+                    "TransformationWriteStarted",
+                    "TransformationRowsLoaded"
+                ],
+                TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(logger.Events.Single(static item => item.Kind == "SourceRowsLoaded").Message)
+            .Contains("1");
+        await Assert.That(logger.Events.Single(static item => item.Kind == "TransformationRowsLoaded").Message)
+            .Contains("1");
     }
 
     [Test]
@@ -414,13 +465,15 @@ public sealed class LoadStatementTests
         await Assert.That(exception.InnerException!.Message).Contains("SELECT *");
     }
 
-    private static ScriptContext CreateContext(IFileSource? fileSource = null)
+    private static ScriptContext CreateContext(
+        IFileSource? fileSource = null,
+        IProgressLogger? logger = null)
     {
         return new ScriptContext
         {
             FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=localhost",
-            Logger = NullLogger.Instance,
+            Logger = logger ?? NullProgressLogger.Instance,
             Options = new ScriptContextOptions
             {
                 TempTablePrefix = "tmp_",
@@ -457,6 +510,8 @@ public sealed class LoadStatementTests
     {
         public int ResolveCalls { get; private set; }
 
+        public string SourceKind { get; init; } = "fake";
+
         public ValueTask<LoadProviderSource> ResolveAsync(
             LoadStatement statement,
             ScriptContext context,
@@ -465,7 +520,7 @@ public sealed class LoadStatementTests
             ResolveCalls++;
             return ValueTask.FromResult(new LoadProviderSource
             {
-                Kind = "fake",
+                Kind = SourceKind,
                 RequiresBuffer = false,
                 OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(CreateReader())
             });
@@ -503,9 +558,11 @@ public sealed class LoadStatementTests
 
         public bool ThrowOnMaterialize { get; init; }
 
+        public long FinalRowCount { get; init; }
+
         public List<object[]> Rows { get; } = [];
 
-        protected override async ValueTask WriteTempTableAsync(
+        protected override async ValueTask<long> WriteTempTableAsync(
             ScriptContext context,
             DomainDataReader reader,
             ClickHouseTableName tableName,
@@ -520,9 +577,11 @@ public sealed class LoadStatementTests
                 reader.GetValues(values);
                 Rows.Add(values);
             }
+
+            return Rows.Count;
         }
 
-        protected override ValueTask MaterializeFinalTableAsync(
+        protected override ValueTask<long> MaterializeFinalTableAsync(
             ScriptContext context,
             string querySql,
             ClickHouseTableName finalTable,
@@ -536,7 +595,7 @@ public sealed class LoadStatementTests
                 throw new InvalidOperationException("materialize failed");
             }
 
-            return ValueTask.CompletedTask;
+            return ValueTask.FromResult(FinalRowCount);
         }
 
         protected override ValueTask DropTempTableAsync(
@@ -573,6 +632,17 @@ public sealed class LoadStatementTests
         public Stream OpenRead(string fileName)
         {
             throw new FileNotFoundException("missing", fileName);
+        }
+    }
+
+    private sealed class RecordingProgressLogger : IProgressLogger
+    {
+        public List<ScriptProgressEvent> Events { get; } = [];
+
+        public ValueTask ReportAsync(ScriptProgressEvent progressEvent, CancellationToken cancellationToken = default)
+        {
+            Events.Add(progressEvent);
+            return ValueTask.CompletedTask;
         }
     }
 }

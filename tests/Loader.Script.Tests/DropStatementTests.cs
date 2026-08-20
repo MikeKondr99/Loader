@@ -2,7 +2,6 @@ using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Loader.Script.Tests;
 
@@ -104,8 +103,7 @@ public sealed class DropStatementTests
         return new ScriptContext
         {
             FileStorage = new StubFileSource(),
-            TargetConnectionString = "Host=localhost",
-            Logger = NullLogger.Instance
+            TargetConnectionString = "Host=localhost"
         };
     }
 

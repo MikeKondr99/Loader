@@ -1,5 +1,4 @@
 using Loader.Core.Sources;
-using Microsoft.Extensions.Logging;
 
 namespace Loader.Script;
 
@@ -23,14 +22,14 @@ public sealed record ScriptContext
     /// </summary>
     public required string TargetConnectionString { get; init; }
 
-    /// <summary>
-    /// Logger выполнения script.
-    /// </summary>
-    public required ILogger Logger { get; init; }
-
     public IConnectionRegistry ConnectionRegistry { get; init; } = EmptyConnectionRegistry.Instance;
 
     public ScriptContextOptions Options { get; init; } = new();
+
+    /// <summary>
+    /// Структурный logger пользовательского progress выполнения script.
+    /// </summary>
+    public IProgressLogger Logger { get; init; } = NullProgressLogger.Instance;
 
     /// <summary>
     /// Финальные таблицы, которые script execution уже успешно создал.

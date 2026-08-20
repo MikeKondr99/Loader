@@ -8,7 +8,6 @@ using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
 using Loader.Script.Execution;
-using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions.Enums;
 using LangScript = Loader.Lang.Script;
 
@@ -30,7 +29,6 @@ internal static class ScriptIntegrationAssert
         {
             FileStorage = new FileSystemSource(Path.Combine(AppContext.BaseDirectory, "Fixtures", "Script")),
             TargetConnectionString = database.ConnectionString,
-            Logger = NullLogger.Instance,
             ConnectionRegistry = ContainerConnections(clickHouse: database)
         };
     }

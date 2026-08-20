@@ -7,7 +7,6 @@ using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Script.Execution;
-using Microsoft.Extensions.Logging.Abstractions;
 using TUnit.Assertions.Enums;
 
 namespace Loader.Script.Tests;
@@ -1827,7 +1826,6 @@ public sealed class LoadProviderResolverTests
         {
             FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=clickhouse",
-            Logger = NullLogger.Instance,
             ConnectionRegistry = registry ?? EmptyConnectionRegistry.Instance
         };
     }

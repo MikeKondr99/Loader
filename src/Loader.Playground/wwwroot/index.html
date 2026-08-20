@@ -92,18 +92,35 @@
 
     .files-panel {
       height: 100%;
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr) auto minmax(0, 1fr);
+      overflow: auto;
+      padding: 8px;
     }
 
-    .files-title {
-      padding: 13px 14px 10px;
-      font-weight: 680;
+    .sidebar-section {
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section:last-child {
+      border-bottom: 0;
+    }
+
+    .sidebar-section summary {
+      padding: 10px 6px;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .sidebar-section[open] summary {
+      color: var(--accent);
+    }
+
+    .sidebar-section-body {
+      padding-bottom: 8px;
     }
 
     .upload-row {
-      padding: 0 12px 12px;
-      border-bottom: 1px solid var(--border);
+      padding: 0 4px 8px;
     }
 
     .upload-label {
@@ -126,18 +143,16 @@
     }
 
     .file-list {
-      overflow: auto;
       padding: 8px;
     }
 
-    .connections-title {
-      padding: 12px 14px 8px;
-      border-top: 1px solid var(--border);
-      font-weight: 680;
+    .connection-list {
+      padding: 8px;
     }
 
-    .connection-list {
-      overflow: auto;
+    .other-source-list {
+      display: grid;
+      gap: 6px;
       padding: 8px;
     }
 
@@ -165,6 +180,20 @@
     }
 
     .connection-row:hover {
+      background: var(--accent-soft);
+    }
+
+    .other-source-row {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      text-align: left;
+    }
+
+    .other-source-row:hover {
       background: var(--accent-soft);
     }
 
@@ -247,6 +276,24 @@
       grid-template-rows: auto 1fr;
     }
 
+    .output-tabs {
+      display: flex;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-soft);
+    }
+
+    .output-tab {
+      color: var(--muted);
+    }
+
+    .output-tab.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
     .status {
       padding: 11px 12px;
       border-bottom: 1px solid var(--border);
@@ -300,6 +347,14 @@
       background: #fbfcfa;
     }
 
+    .output-panel {
+      min-height: 100%;
+    }
+
+    .output-panel:not(.active) {
+      display: none;
+    }
+
     .result-body .output-text {
       border-bottom: 1px solid var(--border);
     }
@@ -351,6 +406,35 @@
       white-space: pre-wrap;
     }
 
+    .progress-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      background: #fbfcfa;
+    }
+
+    .progress-event {
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      color: var(--text);
+      font: 13px "Segoe UI", sans-serif;
+    }
+
+    .progress-event.debug {
+      color: var(--muted);
+      font-family: Consolas, monospace;
+      font-size: 12px;
+    }
+
+    .progress-time {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font: 11px Consolas, monospace;
+    }
+
     .preview {
       padding: 12px 14px 14px;
     }
@@ -387,6 +471,7 @@
       width: 100%;
       border-collapse: collapse;
       font: 12px Consolas, monospace;
+      text-align: left;
     }
 
     .preview-table th,
@@ -407,6 +492,14 @@
       background: #f4f6f2;
       color: #3b4238;
       font-weight: 700;
+    }
+
+    .preview-table td.preview-value-right {
+      text-align: right;
+    }
+
+    .preview-table td.preview-value-left {
+      text-align: left;
     }
 
     .preview-null {
@@ -452,22 +545,49 @@
 
   <main>
     <aside class="card files-panel">
-      <div>
-        <div class="files-title">Файлы:</div>
-      </div>
-      <div class="upload-row">
-        <label class="upload-label">
-          Загрузить файл
-          <input type="file" id="file-upload">
-        </label>
-      </div>
-      <div class="file-list" id="file-list">
-        <div class="empty-files">Файлы еще не загружены.</div>
-      </div>
-      <div class="connections-title">Connect:</div>
-      <div class="connection-list" id="connection-list">
-        <div class="empty-files">No connections.</div>
-      </div>
+      <details class="sidebar-section" open>
+        <summary>Файлы</summary>
+        <div class="sidebar-section-body">
+          <div class="upload-row">
+            <label class="upload-label">
+              Загрузить файл
+              <input type="file" id="file-upload">
+            </label>
+          </div>
+          <div class="file-list" id="file-list">
+            <div class="empty-files">Файлы еще не загружены.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="sidebar-section" open>
+        <summary>Подключения</summary>
+        <div class="sidebar-section-body">
+          <div class="connection-list" id="connection-list">
+            <div class="empty-files">No connections.</div>
+          </div>
+        </div>
+      </details>
+
+      <details class="sidebar-section">
+        <summary>Другое</summary>
+        <div class="sidebar-section-body">
+          <div class="other-source-list" id="other-source-list">
+            <button class="other-source-row" type="button" data-source-template="Calendar">
+              <div class="file-name">Calendar</div>
+              <div class="connection-type">Календарь по диапазону дат</div>
+            </button>
+            <button class="other-source-row" type="button" data-source-template="Numbers">
+              <div class="file-name">Numbers</div>
+              <div class="connection-type">Последовательность чисел</div>
+            </button>
+            <button class="other-source-row" type="button" data-source-template="Inline">
+              <div class="file-name">Inline</div>
+              <div class="connection-type">Данные прямо в скрипте</div>
+            </button>
+          </div>
+        </div>
+      </details>
     </aside>
 
     <section class="card">
@@ -484,13 +604,22 @@
     </section>
 
     <section class="card output">
-      <div class="status" id="status">Готово</div>
+      <div class="output-tabs" role="tablist" aria-label="Output tabs">
+        <button class="output-tab active" id="info-tab" type="button" role="tab" aria-selected="true" aria-controls="info-panel">Инфо</button>
+        <button class="output-tab" id="data-tab" type="button" role="tab" aria-selected="false" aria-controls="data-panel">Данные</button>
+      </div>
       <div class="result-body">
-        <div class="output-actions" id="output-actions" hidden>
-          <button class="copy-error" id="copy-error" type="button">Скопировать ошибку</button>
+        <div class="output-panel active" id="info-panel" role="tabpanel" aria-labelledby="info-tab">
+          <div class="status" id="status">Готово</div>
+          <div class="output-actions" id="output-actions" hidden>
+            <button class="copy-error" id="copy-error" type="button">Скопировать ошибку</button>
+          </div>
+          <pre id="output">Напиши script и нажми Run.</pre>
+          <div class="progress-log" id="progress-log" hidden></div>
         </div>
-        <pre id="output">Напиши script и нажми Run.</pre>
-        <div class="preview" id="preview" hidden></div>
+        <div class="output-panel" id="data-panel" role="tabpanel" aria-labelledby="data-tab">
+          <div class="preview" id="preview" hidden></div>
+        </div>
       </div>
     </section>
   </main>
@@ -517,6 +646,7 @@ LIMIT 10;`;
     let editor;
     let decorations = [];
     let lastFailureResponse = null;
+    let progressSource = null;
 
     const status = document.getElementById('status');
     let output = document.getElementById('output');
@@ -529,6 +659,10 @@ LIMIT 10;`;
       output = replacement;
     }
     const preview = document.getElementById('preview');
+    const infoTab = document.getElementById('info-tab');
+    const dataTab = document.getElementById('data-tab');
+    const infoPanel = document.getElementById('info-panel');
+    const dataPanel = document.getElementById('data-panel');
     const runButton = document.getElementById('run');
     const parseButton = document.getElementById('parse');
     const sampleButton = document.getElementById('sample');
@@ -536,11 +670,15 @@ LIMIT 10;`;
     const fileUpload = document.getElementById('file-upload');
     const fileList = document.getElementById('file-list');
     const connectionList = document.getElementById('connection-list');
+    const otherSourceList = document.getElementById('other-source-list');
     const outputActions = document.getElementById('output-actions');
     const copyErrorButton = document.getElementById('copy-error');
+    const progressLog = document.getElementById('progress-log');
     refreshFiles();
     refreshConnections();
     refreshLastRun();
+    infoTab.onclick = () => activateOutputTab('info');
+    dataTab.onclick = () => activateOutputTab('data');
 
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs' } });
     require(['vs/editor/editor.main'], function () {
@@ -621,9 +759,18 @@ LIMIT 10;`;
       editor.setValue(sample);
       clearMarkers();
       clearPreview();
+      clearProgress();
       setResult('Готово', 'Напиши script и нажми Run.', null);
     };
     copyErrorButton.onclick = () => copyLastErrorForAi();
+    otherSourceList?.addEventListener('click', event => {
+      const button = event.target instanceof Element
+        ? event.target.closest('[data-source-template]')
+        : null;
+      if (!button) return;
+
+      insertOtherSourceLoad(button.dataset.sourceTemplate);
+    });
 
     fileUpload.onchange = async () => {
       const file = fileUpload.files && fileUpload.files[0];
@@ -632,6 +779,7 @@ LIMIT 10;`;
       form.append('file', file);
       try {
         clearPreview();
+        clearProgress();
         setResult(`Загружаю файл ${file.name}...`, '', null);
         const response = await fetch('/api/files', {
           method: 'POST',
@@ -653,11 +801,17 @@ LIMIT 10;`;
       clearMarkers();
       clearPreview();
       setResult(pendingText, '', null);
+      const isRun = url === '/api/run';
+      const runId = isRun ? createRunId() : null;
+      if (isRun) {
+        startProgress(runId);
+      }
+
       try {
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ script: editor.getValue(), devMode: devMode?.checked === true })
+          body: JSON.stringify({ script: editor.getValue(), devMode: devMode?.checked === true, runId })
         });
         const json = await response.json();
         if (json.ok) {
@@ -682,8 +836,82 @@ LIMIT 10;`;
         };
         setResult('REQUEST FAIL', error.stack || error.message, false);
       } finally {
+        if (isRun) {
+          setTimeout(stopProgress, 250);
+        }
+
         setBusy(false);
       }
+    }
+
+    function createRunId() {
+      if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function startProgress(runId) {
+      stopProgress();
+      clearProgress();
+      if (!runId) return;
+
+      progressSource = new EventSource(`/api/progress/${encodeURIComponent(runId)}`);
+      progressSource.addEventListener('progress', event => {
+        try {
+          appendProgress(JSON.parse(event.data));
+        } catch {
+          appendProgress({ level: 'Debug', message: event.data });
+        }
+      });
+      progressSource.onerror = () => {
+        // SSE сам переподключается. Явно ничего не пишем, чтобы не шуметь пользователю.
+      };
+    }
+
+    function stopProgress() {
+      if (progressSource) {
+        progressSource.close();
+        progressSource = null;
+      }
+    }
+
+    function clearProgress() {
+      progressLog.hidden = true;
+      progressLog.innerHTML = '';
+    }
+
+    function appendProgress(progressEvent) {
+      const level = String(progressEvent.level || 'User');
+      if (level.toLowerCase() === 'debug' && devMode?.checked !== true) {
+        return;
+      }
+
+      progressLog.hidden = false;
+      const row = document.createElement('div');
+      row.className = `progress-event ${level.toLowerCase()}`;
+
+      const time = document.createElement('span');
+      time.className = 'progress-time';
+      time.textContent = formatProgressTime(progressEvent.occurredAt);
+
+      const message = document.createElement('span');
+      message.textContent = progressEvent.message || progressEvent.kind || 'progress';
+
+      row.appendChild(time);
+      row.appendChild(message);
+      progressLog.appendChild(row);
+      progressLog.scrollTop = progressLog.scrollHeight;
+    }
+
+    function formatProgressTime(value) {
+      const date = value ? new Date(value) : new Date();
+      if (Number.isNaN(date.getTime())) {
+        return '';
+      }
+
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
 
     function setBusy(value) {
@@ -691,7 +919,18 @@ LIMIT 10;`;
       parseButton.disabled = value;
     }
 
+    function activateOutputTab(tab) {
+      const isData = tab === 'data';
+      infoTab.classList.toggle('active', !isData);
+      dataTab.classList.toggle('active', isData);
+      infoTab.setAttribute('aria-selected', String(!isData));
+      dataTab.setAttribute('aria-selected', String(isData));
+      infoPanel.classList.toggle('active', !isData);
+      dataPanel.classList.toggle('active', isData);
+    }
+
     function setResult(text, body, ok) {
+      activateOutputTab('info');
       status.textContent = text;
       status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
       output.textContent = body;
@@ -699,6 +938,7 @@ LIMIT 10;`;
     }
 
     function setResultHtml(text, body, ok) {
+      activateOutputTab('info');
       status.textContent = text;
       status.className = 'status' + (ok === true ? ' ok' : ok === false ? ' fail' : '');
       output.innerHTML = body;
@@ -994,11 +1234,13 @@ LIMIT 10;`;
         for (let i = 0; i < columns.length; i++) {
           const td = document.createElement('td');
           const value = row[i];
+          const field = Array.isArray(fields) ? fields[i] : null;
+          td.classList.add(previewAlignmentClass(field));
           if (value === null || value === undefined) {
             td.textContent = 'NULL';
-            td.className = 'preview-null';
+            td.classList.add('preview-null');
           } else {
-            td.textContent = String(value);
+            td.textContent = formatPreviewValue(value, field);
             td.title = String(value);
           }
 
@@ -1010,6 +1252,73 @@ LIMIT 10;`;
       table.appendChild(tbody);
       wrap.appendChild(table);
       host.appendChild(wrap);
+    }
+
+    function previewAlignmentClass(field) {
+      const type = String(field?.type || '').toLowerCase();
+      return type.includes('text') || type.includes('string')
+        ? 'preview-value-left'
+        : 'preview-value-right';
+    }
+
+    function formatPreviewValue(value, field) {
+      const type = String(field?.type || '').toLowerCase();
+      if (type.includes('date') || type.includes('time')) {
+        return formatPreviewDateValue(value, type) ?? String(value);
+      }
+
+      if (typeof value === 'string' && isIsoDateLike(value)) {
+        return formatPreviewDateValue(value, type) ?? value;
+      }
+
+      return String(value);
+    }
+
+    function formatPreviewDateValue(value, type) {
+      if (value === null || value === undefined) {
+        return null;
+      }
+
+      const text = String(value);
+      if (type.includes('time') && !type.includes('date') && /^\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(text)) {
+        return text.replace(/(\.\d+)?$/, '');
+      }
+
+      const date = new Date(text);
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+
+      if (type.includes('time') && !type.includes('date')) {
+        return date.toLocaleTimeString();
+      }
+
+      return hasZeroTime(date, text)
+        ? date.toLocaleDateString()
+        : date.toLocaleString();
+    }
+
+    function hasZeroTime(date, sourceText) {
+      const explicitTime = sourceText.match(/[T\s](\d{2}):(\d{2}):(\d{2})(\.(\d+))?/);
+      if (explicitTime) {
+        return explicitTime[1] === '00' &&
+          explicitTime[2] === '00' &&
+          explicitTime[3] === '00' &&
+          (!explicitTime[5] || /^0+$/.test(explicitTime[5]));
+      }
+
+      if (/^\d{4}-\d{2}-\d{2}$/.test(sourceText)) {
+        return true;
+      }
+
+      return date.getHours() === 0 &&
+        date.getMinutes() === 0 &&
+        date.getSeconds() === 0 &&
+        date.getMilliseconds() === 0;
+    }
+
+    function isIsoDateLike(value) {
+      return /^\d{4}-\d{2}-\d{2}([T\s]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?)?$/.test(value);
     }
 
     function clearPreview() {
@@ -1250,6 +1559,11 @@ LIMIT 10;`;
       insertScript(buildConnectionLoadScript(connection), 'connections-panel');
     }
 
+    function insertOtherSourceLoad(template) {
+      if (!editor) return;
+      insertScript(buildOtherSourceLoadScript(template), 'other-sources-panel');
+    }
+
     function insertScript(text, source) {
       editor.executeEdits(source, [{
         range: editor.getSelection(),
@@ -1270,6 +1584,22 @@ LIMIT 10;`;
       const table = formatTableName(toTableName(connection.name || 'source'));
       const name = quoteScriptString(connection.name || '');
       return `\n${table}:\nLOAD *\nFROM Connect(${name})\nSQL\n  SELECT *\n  FROM table_name;\n`;
+    }
+
+    function buildOtherSourceLoadScript(template) {
+      switch (template) {
+        case 'Calendar':
+          return "\ncalendar:\nLOAD *\nFROM Calendar(min='2024-01-01', max='2024-01-07');\n";
+
+        case 'Numbers':
+          return '\nnumbers:\nLOAD\n  number\nFROM Numbers(100);\n';
+
+        case 'Inline':
+          return "\ninline_data:\nLOAD *\nFROM Inline(\n  id, name, amount;\n  1, 'Alice', 10.5;\n  2, 'Bob', 20.0\n);\n";
+
+        default:
+          return '';
+      }
     }
 
     function providerForFile(name) {

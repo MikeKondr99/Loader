@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Data.Common;
 using System.Text;
+using System.Text.Json;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -9,7 +10,6 @@ using Loader.Lang;
 using Loader.Script;
 using Loader.Script.Execution;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.Extensions.Logging.Abstractions;
 using LangScript = Loader.Lang.Script;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,6 +28,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartHeadersLengthLimit = int.MaxValue;
 });
 builder.Services.AddSingleton<PlaygroundLastRunStore>();
+builder.Services.AddSingleton<PlaygroundProgressHub>();
 
 var app = builder.Build();
 
@@ -179,11 +180,35 @@ app.MapGet("/api/last-run", (PlaygroundLastRunStore lastRunStore) =>
         : Results.Ok(PlaygroundResponse.Success(ToPlaygroundRunData(snapshot)));
 });
 
+app.MapGet("/api/progress/{runId}", async (
+    string runId,
+    PlaygroundProgressHub progressHub,
+    HttpResponse response,
+    CancellationToken cancellationToken) =>
+{
+    response.Headers.CacheControl = "no-cache";
+    response.Headers.Connection = "keep-alive";
+    response.ContentType = "text/event-stream";
+
+    var reader = progressHub.Subscribe(runId);
+    await foreach (var progressEvent in reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+    {
+        await response.WriteAsync("event: progress\n", cancellationToken).ConfigureAwait(false);
+        await response.WriteAsync("data: ", cancellationToken).ConfigureAwait(false);
+        await response.WriteAsync(
+            JsonSerializer.Serialize(ToPlaygroundProgress(progressEvent), PlaygroundJson.Compact),
+            cancellationToken).ConfigureAwait(false);
+        await response.WriteAsync("\n\n", cancellationToken).ConfigureAwait(false);
+        await response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+    }
+});
+
 app.MapPost("/api/run", async (
     ScriptRequest request,
     IConfiguration configuration,
     IWebHostEnvironment environment,
     PlaygroundLastRunStore lastRunStore,
+    PlaygroundProgressHub progressHub,
     CancellationToken cancellationToken) =>
 {
     var parsed = LangScript.Parse(request.Script);
@@ -197,8 +222,10 @@ app.MapPost("/api/run", async (
     {
         FileStorage = new FileSystemSource(config.FileRoot),
         TargetConnectionString = config.TargetConnectionString,
-        Logger = NullLogger.Instance,
         ConnectionRegistry = config.CreateConnectionRegistry(),
+        Logger = string.IsNullOrWhiteSpace(request.RunId)
+            ? NullProgressLogger.Instance
+            : new PlaygroundProgressLogger(progressHub, request.RunId),
         Options = new ScriptContextOptions
         {
             SourceRowLimit = request.DevMode ? 100 : null
@@ -232,6 +259,13 @@ app.MapPost("/api/run", async (
                 ElapsedMs = stopwatch.ElapsedMilliseconds,
                 LoadedTables = context.LoadedTables.Select(static table => table.Name.ToSql()).ToArray()
             }));
+    }
+    finally
+    {
+        if (!string.IsNullOrWhiteSpace(request.RunId))
+        {
+            progressHub.Complete(request.RunId);
+        }
     }
 });
 
@@ -363,6 +397,15 @@ static PlaygroundError ToPlaygroundError(LangError error)
     };
 }
 
+static PlaygroundProgressData ToPlaygroundProgress(ScriptProgressEvent progressEvent)
+{
+    return new PlaygroundProgressData(
+        progressEvent.Kind,
+        progressEvent.Level.ToString(),
+        progressEvent.Message,
+        progressEvent.OccurredAt);
+}
+
 static PlaygroundError ToPlaygroundException(Exception exception)
 {
     var scriptException = exception as LoadScriptException;
@@ -408,7 +451,21 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
     };
 }
 
-internal sealed record ScriptRequest(string Script, bool DevMode = false);
+internal sealed record ScriptRequest(string Script, bool DevMode = false, string? RunId = null);
+
+internal sealed record PlaygroundProgressData(
+    string Kind,
+    string Level,
+    string Message,
+    DateTimeOffset OccurredAt);
+
+internal static class PlaygroundJson
+{
+    public static readonly JsonSerializerOptions Compact = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = false
+    };
+}
 
 internal sealed record PlaygroundRunSnapshot(
     string TargetConnectionString,
