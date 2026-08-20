@@ -57,6 +57,26 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD FIRST ограничивает исходные строки provider перед LOAD")]
+    public async Task Load_first_parses_source_row_limit_before_load()
+    {
+        var load = ParseLoad(
+            """
+            orders:
+            FIRST 100
+            LOAD *
+            FROM Csv(path='orders.csv');
+            """);
+
+        await Assert.That(load.TableName).IsEqualTo("orders");
+        await Assert.That(load.First).IsEqualTo(100);
+        await Assert.That(load.FirstPart).IsNotNull();
+        await Assert.That(load.FirstPart!.Span.StartRow).IsEqualTo(2u);
+        await Assert.That(load.Fields).IsNull();
+        await AssertOption(load.SourceCall, "path", "orders.csv");
+    }
+
+    [Test]
     [Arguments("LOAD * FROM orders;", "orders")]
     [Arguments("LOAD * FROM [orders 2026];", "orders 2026")]
     [Arguments(@"LOAD * FROM [folder\]orders];", "folder]orders")]
@@ -568,6 +588,10 @@ public sealed class LoadParsingTests
     [Arguments("orders-table: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("orders.table: LOAD id FROM Csv(path='orders.csv');")]
     [Arguments("orders LOAD id FROM Csv(path='orders.csv');")]
+    [Arguments("orders: FIRST LOAD * FROM Csv(path='orders.csv');")]
+    [Arguments("orders: FIRST 10.5 LOAD * FROM Csv(path='orders.csv');")]
+    [Arguments("orders: LOAD FIRST 10 * FROM Csv(path='orders.csv');")]
+    [Arguments("orders: LOAD * FIRST 10 FROM Csv(path='orders.csv');")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

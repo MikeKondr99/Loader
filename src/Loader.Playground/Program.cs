@@ -226,10 +226,7 @@ app.MapPost("/api/run", async (
         Logger = string.IsNullOrWhiteSpace(request.RunId)
             ? NullProgressLogger.Instance
             : new PlaygroundProgressLogger(progressHub, request.RunId),
-        Options = new ScriptContextOptions
-        {
-            SourceRowLimit = request.DevMode ? 100 : null
-        }
+        Options = new ScriptContextOptions()
     };
 
     var stopwatch = Stopwatch.StartNew();
@@ -451,7 +448,7 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
     };
 }
 
-internal sealed record ScriptRequest(string Script, bool DevMode = false, string? RunId = null);
+internal sealed record ScriptRequest(string Script, string? RunId = null);
 
 internal sealed record PlaygroundProgressData(
     string Kind,

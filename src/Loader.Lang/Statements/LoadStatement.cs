@@ -8,7 +8,18 @@ namespace Loader.Lang.Statements;
 /// </summary>
 public sealed record LoadStatement : Statement
 {
+    /// <summary>
+    /// Span keyword-а <c>LOAD</c>.
+    /// </summary>
     public LangSpan? LoadSpan { get; init; }
+
+    /// <summary>
+    /// Опциональный <c>FIRST N</c> перед <c>LOAD</c>.
+    /// Ограничивает количество исходных строк, прочитанных из provider-а до temp table.
+    /// </summary>
+    public FirstPart? FirstPart { get; init; }
+
+    public long? First => FirstPart?.Value;
 
     /// <summary>
     /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.

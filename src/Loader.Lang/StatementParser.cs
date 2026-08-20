@@ -97,6 +97,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         return new LoadStatement
         {
             LoadSpan = Span(context.LOAD()),
+            FirstPart = VisitLoadFirst(context.load_first()),
             TableName = tableName,
             Fields = fields,
             FromSpan = Span(context.FROM()),
@@ -147,6 +148,24 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     {
         // 1. Имя таблицы может быть обычным NAME или blocked name: "[table name]".
         return UnescapeName(context.name().GetText());
+    }
+
+    /// <summary>
+    /// Optional FIRST part before LOAD.
+    /// Пример: <c>FIRST 100 LOAD * FROM Csv('orders.csv');</c>.
+    /// </summary>
+    private static FirstPart? VisitLoadFirst(LangParser.Load_firstContext? context)
+    {
+        if (context is null)
+        {
+            return null;
+        }
+
+        return new FirstPart
+        {
+            Value = long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture),
+            Span = Span(context)
+        };
     }
 
     /// <summary>

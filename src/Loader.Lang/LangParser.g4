@@ -21,6 +21,7 @@ drop_statement
 
 load_statement
     : load_table_name
+    load_first?
     LOAD load_fields
     FROM load_source
     (
@@ -36,6 +37,10 @@ load_statement
 
 load_table_name
     : name COLON
+    ;
+
+load_first
+    : FIRST INTEGER
     ;
 
 load_where
@@ -173,7 +178,7 @@ null: NULL;
 
 boolean: BOOLEAN;
 
-name: NAME | BLOCKED_NAME;
+name: NAME | BLOCKED_NAME | FIRST;
 
 integer: INTEGER;
 

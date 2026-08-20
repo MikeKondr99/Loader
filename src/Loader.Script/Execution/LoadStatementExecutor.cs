@@ -80,7 +80,7 @@ public class LoadStatementExecutor
         // 4. Нормализуем поток перед записью в ClickHouse temp table.
         await using var stageReader = LimitSourceRows(
             NormalizeForTempTable(stageNameReader, source),
-            context.Options.SourceRowLimit);
+            ToInt32(statement.First, nameof(statement.First)));
 
         // 5. Создаем temp table name.
         var tempTable = CreatePhysicalTempTableName(context);
@@ -241,6 +241,21 @@ public class LoadStatementExecutor
         return limit is null
             ? reader
             : reader.Limit(limit.Value);
+    }
+
+    private static int? ToInt32(long? value, string name)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value < 0 || value > int.MaxValue)
+        {
+            throw new ArgumentOutOfRangeException(name, value, "Value must fit Int32.");
+        }
+
+        return (int)value.Value;
     }
 
     protected virtual async ValueTask<long> WriteTempTableAsync(

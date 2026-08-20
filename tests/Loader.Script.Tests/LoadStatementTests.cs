@@ -195,6 +195,33 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("Execute LOAD FIRST ограничивает исходные строки до temp table")]
+    public async Task Execute_load_first_limits_source_rows_before_temp_table()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new LoadProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            numbers:
+            FIRST 3
+            LOAD
+                number AS value
+            FROM Numbers(max=10);
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        await executor.ExecuteAsync(context, statement);
+
+        await Assert.That(statement.First).IsEqualTo(3);
+        await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
+            .IsEquivalentTo([0L, 1L, 2L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(executor.QuerySql).DoesNotContain("LIMIT 3");
+    }
+
+    [Test]
     public async Task Execute_load_drops_temp_table_when_final_materialization_fails()
     {
         var executor = new TestLoadStatementExecutor
