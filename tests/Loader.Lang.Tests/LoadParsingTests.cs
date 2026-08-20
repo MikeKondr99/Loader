@@ -77,6 +77,57 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    [DisplayName("LOAD TEMP помечает таблицу как временную")]
+    public async Task Load_temp_parses_before_load()
+    {
+        var load = ParseLoad(
+            """
+            orders:
+            TEMP LOAD *
+            FROM Csv(path='orders.csv');
+            """);
+
+        await Assert.That(load.TableName).IsEqualTo("orders");
+        await Assert.That(load.Kind).IsEqualTo(LoadTableKind.Temp);
+        await Assert.That(load.IsTemporary).IsTrue();
+        await Assert.That(load.KindSpan).IsNotNull();
+        await Assert.That(load.KindSpan!.Value.StartRow).IsEqualTo(2u);
+        await Assert.That(load.First).IsNull();
+        await AssertOption(load.SourceCall, "path", "orders.csv");
+    }
+
+    [Test]
+    [DisplayName("LOAD FIRST можно сочетать с TEMP")]
+    public async Task Load_first_temp_parses_before_load()
+    {
+        var load = ParseLoad(
+            """
+            orders:
+            FIRST 10
+            TEMP LOAD *
+            FROM Csv(path='orders.csv');
+            """);
+
+        await Assert.That(load.First).IsEqualTo(10);
+        await Assert.That(load.IsTemporary).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("LOAD допускает temp как обычное имя поля и source table")]
+    public async Task Load_allows_temp_keyword_as_name()
+    {
+        var load = ParseLoad("result: LOAD temp FROM temp;");
+
+        await Assert.That(load.TableName).IsEqualTo("result");
+        await Assert.That(load.IsTemporary).IsFalse();
+        await Assert.That(load.Kind).IsEqualTo(LoadTableKind.Normal);
+        await Assert.That(load.KindSpan).IsNull();
+        await AssertField(ExplicitFields(load)[0], "temp", "temp");
+        await Assert.That(load.SourceCall.Name).IsEqualTo("Table");
+        await AssertOption(load.SourceCall, "name", "temp");
+    }
+
+    [Test]
     [Arguments("LOAD * FROM orders;", "orders")]
     [Arguments("LOAD * FROM [orders 2026];", "orders 2026")]
     [Arguments(@"LOAD * FROM [folder\]orders];", "folder]orders")]
@@ -592,6 +643,8 @@ public sealed class LoadParsingTests
     [Arguments("orders: FIRST 10.5 LOAD * FROM Csv(path='orders.csv');")]
     [Arguments("orders: LOAD FIRST 10 * FROM Csv(path='orders.csv');")]
     [Arguments("orders: LOAD * FIRST 10 FROM Csv(path='orders.csv');")]
+    [Arguments("orders: LOAD TEMP * FROM Csv(path='orders.csv');")]
+    [Arguments("orders: TEMP FIRST 10 LOAD * FROM Csv(path='orders.csv');")]
     [DisplayName("Statement.Parse отклоняет невалидные LOAD statements")]
     public async Task Parse_rejects_invalid_load_statements(string text)
     {

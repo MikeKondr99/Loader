@@ -186,12 +186,19 @@ internal static class ScriptIntegrationAssert
         ClickHouseTestDatabase database,
         string prefix)
     {
-        var count = await ExecuteScalarAsync(
-                database,
-                $"SELECT count() FROM system.tables WHERE database = currentDatabase() AND startsWith(name, '{EscapeSqlString(prefix)}')")
-            .ConfigureAwait(false);
+        var count = await CountTablesWithPrefixAsync(database, prefix).ConfigureAwait(false);
 
         await Assert.That(Convert.ToInt64(count, CultureInfo.InvariantCulture)).IsEqualTo(0);
+    }
+
+    public static async Task AssertTableCountWithPrefixAsync(
+        ClickHouseTestDatabase database,
+        string prefix,
+        long expectedCount)
+    {
+        var count = await CountTablesWithPrefixAsync(database, prefix).ConfigureAwait(false);
+
+        await Assert.That(Convert.ToInt64(count, CultureInfo.InvariantCulture)).IsEqualTo(expectedCount);
     }
 
     public static Task AssertNoTempTablesAsync(
@@ -247,6 +254,15 @@ internal static class ScriptIntegrationAssert
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         return await command.ExecuteScalarAsync().ConfigureAwait(false);
+    }
+
+    private static Task<object?> CountTablesWithPrefixAsync(
+        ClickHouseTestDatabase database,
+        string prefix)
+    {
+        return ExecuteScalarAsync(
+            database,
+            $"SELECT count() FROM system.tables WHERE database = currentDatabase() AND startsWith(name, '{EscapeSqlString(prefix)}')");
     }
 
     private static LangScript ParseScript(string text)

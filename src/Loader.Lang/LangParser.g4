@@ -22,6 +22,7 @@ drop_statement
 load_statement
     : load_table_name
     load_first?
+    load_kind?
     LOAD load_fields
     FROM load_source
     (
@@ -41,6 +42,10 @@ load_table_name
 
 load_first
     : FIRST INTEGER
+    ;
+
+load_kind
+    : TEMP
     ;
 
 load_where
@@ -178,7 +183,7 @@ null: NULL;
 
 boolean: BOOLEAN;
 
-name: NAME | BLOCKED_NAME | FIRST;
+name: NAME | BLOCKED_NAME | FIRST | TEMP;
 
 integer: INTEGER;
 

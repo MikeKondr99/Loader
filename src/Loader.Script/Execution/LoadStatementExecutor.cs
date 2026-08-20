@@ -565,6 +565,7 @@ public class LoadStatementExecutor
         {
             Name = finalTable,
             Alias = statement.TableName,
+            Kind = statement.IsTemporary ? LoadedTableKind.Temp : LoadedTableKind.Normal,
             Fields = resolvedQuery.OutputFields.Select(field => new LoadedTableField
             {
                 Name = field.Alias,

@@ -107,10 +107,37 @@ public sealed class LoadStatementTests
         await Assert.That(executor.QuerySql).Contains("OFFSET 1");
         await Assert.That(loadedTable.Name).IsSameReferenceAs(executor.FinalTableName);
         await Assert.That(loadedTable.Alias).IsEqualTo("orders");
+        await Assert.That(loadedTable.Kind).IsEqualTo(LoadedTableKind.Normal);
         await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("city");
         await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
         await Assert.That(context.LoadedTables[0]).IsSameReferenceAs(loadedTable);
+    }
+
+    [Test]
+    [DisplayName("Execute TEMP LOAD регистрирует временную таблицу")]
+    public async Task Execute_temp_load_registers_temp_loaded_table()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            TEMP LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var loadedTable = await executor.ExecuteAsync(context, statement);
+
+        await Assert.That(statement.IsTemporary).IsTrue();
+        await Assert.That(loadedTable.Kind).IsEqualTo(LoadedTableKind.Temp);
+        await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
+        await Assert.That(context.LoadedTables[0].Kind).IsEqualTo(LoadedTableKind.Temp);
     }
 
     [Test]
@@ -287,6 +314,109 @@ public sealed class LoadStatementTests
         await Assert.That(exception.Span).IsEqualTo(statement.LoadSpan);
         await Assert.That(exception.InnerException).IsTypeOf<LoadScriptExecutionException>();
         await Assert.That(exception.InnerException!.InnerException).IsTypeOf<InvalidOperationException>();
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor очищает TEMP LOAD и возвращает только обычные таблицы")]
+    public async Task Execute_script_cleans_temp_loaded_tables_and_returns_normal_tables()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var cleanup = new RecordingTemporaryCleanupExecutor();
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            raw:
+            TEMP LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+
+            final:
+            LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var result = await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor,
+            TemporaryTableCleanupExecutor = cleanup
+        }.ExecuteAsync(context, script);
+
+        await Assert.That(cleanup.ExecuteCalls).IsEqualTo(1);
+        await Assert.That(cleanup.CleanedAliases).IsEquivalentTo(["raw"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(context.LoadedTables.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["final"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(result.Select(static table => table.Alias!).ToArray())
+            .IsEquivalentTo(["final"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(result.All(static table => table.Kind == LoadedTableKind.Normal)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor возвращает пустой result если script создал только TEMP LOAD")]
+    public async Task Execute_script_returns_empty_result_when_only_temp_loads_were_created()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var cleanup = new RecordingTemporaryCleanupExecutor();
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            raw:
+            TEMP LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var result = await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor,
+            TemporaryTableCleanupExecutor = cleanup
+        }.ExecuteAsync(context, script);
+
+        await Assert.That(cleanup.ExecuteCalls).IsEqualTo(1);
+        await Assert.That(cleanup.CleanedAliases).IsEquivalentTo(["raw"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+        await Assert.That(context.LoadedTables).IsEmpty();
+        await Assert.That(result).IsEmpty();
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor чистит TEMP LOAD best-effort если следующий statement падает")]
+    public async Task Execute_script_cleans_temp_loaded_tables_best_effort_on_failure()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver(),
+            ThrowOnSecondMaterialize = true
+        };
+        var cleanup = new RecordingTemporaryCleanupExecutor();
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            raw:
+            TEMP LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+
+            broken:
+            LOAD
+                name AS city
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor,
+            TemporaryTableCleanupExecutor = cleanup
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(cleanup.BestEffortCalls).IsEqualTo(1);
+        await Assert.That(cleanup.CleanedAliases).IsEquivalentTo(["raw"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 
     [Test]
@@ -585,6 +715,8 @@ public sealed class LoadStatementTests
 
         public bool ThrowOnMaterialize { get; init; }
 
+        public bool ThrowOnSecondMaterialize { get; init; }
+
         public long FinalRowCount { get; init; }
 
         public List<object[]> Rows { get; } = [];
@@ -617,7 +749,7 @@ public sealed class LoadStatementTests
             MaterializeCalls++;
             QuerySql = querySql;
             FinalTableName = finalTable;
-            if (ThrowOnMaterialize)
+            if (ThrowOnMaterialize || (ThrowOnSecondMaterialize && MaterializeCalls == 2))
             {
                 throw new InvalidOperationException("materialize failed");
             }
@@ -643,6 +775,42 @@ public sealed class LoadStatementTests
             DropFinalCalls++;
             DropFinalTableName = finalTable;
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingTemporaryCleanupExecutor : TemporaryLoadedTableCleanupExecutor
+    {
+        public int ExecuteCalls { get; private set; }
+
+        public int BestEffortCalls { get; private set; }
+
+        public List<string> CleanedAliases { get; } = [];
+
+        public override ValueTask ExecuteAsync(
+            ScriptContext context,
+            CancellationToken cancellationToken = default)
+        {
+            ExecuteCalls++;
+            Clean(context);
+            return ValueTask.CompletedTask;
+        }
+
+        public override ValueTask ExecuteBestEffortAsync(ScriptContext context)
+        {
+            BestEffortCalls++;
+            Clean(context);
+            return ValueTask.CompletedTask;
+        }
+
+        private void Clean(ScriptContext context)
+        {
+            foreach (var table in context.LoadedTables
+                         .Where(static table => table.Kind == LoadedTableKind.Temp)
+                         .ToArray())
+            {
+                CleanedAliases.Add(table.Alias!);
+                context.RemoveLoadedTable(table);
+            }
         }
     }
 

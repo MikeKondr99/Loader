@@ -18,6 +18,11 @@ public sealed record LoadedTable
     public required string? Alias { get; init; }
 
     /// <summary>
+    /// Runtime-вид таблицы: обычный результат или временная промежуточная таблица.
+    /// </summary>
+    public LoadedTableKind Kind { get; init; } = LoadedTableKind.Normal;
+
+    /// <summary>
     /// Количество строк в таблице, если оно известно.
     /// </summary>
     public long? RowCount { get; init; }

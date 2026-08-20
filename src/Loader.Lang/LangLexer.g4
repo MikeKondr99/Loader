@@ -2,6 +2,7 @@ lexer grammar LangLexer;
 
 LOAD: [Ll] [Oo] [Aa] [Dd];
 FIRST: [Ff] [Ii] [Rr] [Ss] [Tt];
+TEMP: [Tt] [Ee] [Mm] [Pp];
 DROP: [Dd] [Rr] [Oo] [Pp];
 AS: [Aa] [Ss];
 FROM: [Ff] [Rr] [Oo] [Mm];

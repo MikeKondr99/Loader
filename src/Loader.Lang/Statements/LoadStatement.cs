@@ -19,7 +19,25 @@ public sealed record LoadStatement : Statement
     /// </summary>
     public FirstPart? FirstPart { get; init; }
 
+    /// <summary>
+    /// Ограничение исходных строк из опционального <c>FIRST N</c>.
+    /// </summary>
     public long? First => FirstPart?.Value;
+
+    /// <summary>
+    /// Вид результата LOAD из опционального keyword-а перед <c>LOAD</c>.
+    /// </summary>
+    public LoadTableKind Kind { get; init; } = LoadTableKind.Normal;
+
+    /// <summary>
+    /// Span keyword-а вида таблицы, например <c>TEMP</c>. <c>null</c> означает обычный LOAD.
+    /// </summary>
+    public LangSpan? KindSpan { get; init; }
+
+    /// <summary>
+    /// <c>true</c>, если LOAD создает промежуточную таблицу, которую нужно удалить после выполнения script.
+    /// </summary>
+    public bool IsTemporary => Kind == LoadTableKind.Temp;
 
     /// <summary>
     /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.

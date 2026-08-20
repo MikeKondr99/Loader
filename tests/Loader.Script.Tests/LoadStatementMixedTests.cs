@@ -193,6 +193,44 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script очищает TEMP LOAD в конце выполнения после использования в следующих LOAD")]
+    public async Task Execute_script_cleans_temp_load_after_it_was_used_by_table_source()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            raw_names:
+            TEMP LOAD
+                id,
+                name
+            FROM Csv(path='orders.csv')
+            ORDER BY id ASC;
+
+            final_names:
+            LOAD
+                Text(Int(id)) AS id,
+                Upper(name) AS name
+            FROM raw_names
+            WHERE name != 'Bob'
+            ORDER BY id DESC;
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await Assert.That(execution.Tables[0].Alias).IsEqualTo("final_names");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["id", "name"],
+            [
+                ["3", "CHARLIE"],
+                ["1", "ALICE"]
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+        await ScriptIntegrationAssert.AssertTableCountWithPrefixAsync(database, execution.FinalTablePrefix, 1);
+    }
+
+    [Test]
     [DisplayName("Script выполняет LOAD из результата предыдущего LOAD с blocked table name")]
     public async Task Execute_script_loads_from_previous_blocked_load_table()
     {

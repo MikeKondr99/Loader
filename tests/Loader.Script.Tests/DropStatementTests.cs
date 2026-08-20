@@ -27,6 +27,35 @@ public sealed class DropStatementTests
     }
 
     [Test]
+    [DisplayName("Script не чистит TEMP LOAD повторно если его уже удалил DROP")]
+    public async Task Execute_script_drop_temp_load_prevents_second_cleanup_drop()
+    {
+        var cleanupExecutor = new RecordingTemporaryCleanupExecutor();
+        var executor = new ScriptExecutor
+        {
+            LoadStatementExecutor = new NoopLoadStatementExecutor(),
+            DropStatementExecutor = new TestDropStatementExecutor(),
+            TemporaryTableCleanupExecutor = cleanupExecutor
+        };
+        var dropExecutor = (TestDropStatementExecutor)executor.DropStatementExecutor;
+
+        var tables = await executor.ExecuteAsync(
+            CreateContext(),
+            Parse(
+                """
+                orders:
+                TEMP LOAD * FROM Csv(path='orders.csv');
+                DROP orders;
+                """));
+
+        await Assert.That(dropExecutor.DropCalls).IsEqualTo(1);
+        await Assert.That(dropExecutor.DroppedTableName!.Table).IsEqualTo("physical_orders");
+        await Assert.That(cleanupExecutor.ExecuteCalls).IsEqualTo(1);
+        await Assert.That(cleanupExecutor.CleanedAliases).IsEmpty();
+        await Assert.That(tables).IsEmpty();
+    }
+
+    [Test]
     [DisplayName("Script DROP неизвестной таблицы оборачивается с номером statement и span имени")]
     public async Task Execute_script_drop_unknown_alias_throws_script_exception()
     {
@@ -138,9 +167,35 @@ public sealed class DropStatementTests
             LoadStatement statement,
             CancellationToken cancellationToken = default)
         {
-            var table = LoadedTable("physical_orders", statement.TableName);
+            var table = LoadedTable("physical_orders", statement.TableName) with
+            {
+                Kind = statement.IsTemporary ? LoadedTableKind.Temp : LoadedTableKind.Normal
+            };
             context.AddLoadedTable(table);
             return ValueTask.FromResult(table);
+        }
+    }
+
+    private sealed class RecordingTemporaryCleanupExecutor : TemporaryLoadedTableCleanupExecutor
+    {
+        public int ExecuteCalls { get; private set; }
+
+        public List<string> CleanedAliases { get; } = [];
+
+        public override ValueTask ExecuteAsync(
+            ScriptContext context,
+            CancellationToken cancellationToken = default)
+        {
+            ExecuteCalls++;
+            foreach (var table in context.LoadedTables
+                         .Where(static table => table.Kind == LoadedTableKind.Temp)
+                         .ToArray())
+            {
+                CleanedAliases.Add(table.Alias!);
+                context.RemoveLoadedTable(table);
+            }
+
+            return ValueTask.CompletedTask;
         }
     }
 
