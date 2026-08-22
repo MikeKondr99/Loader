@@ -9,24 +9,61 @@ namespace Loader.Query.Resolve;
 /// </summary>
 public sealed record FunctionDefinition
 {
+    /// <summary>
+    /// Имя функции в выражениях Loader.
+    /// </summary>
     public required string Name { get; init; }
 
+    /// <summary>
+    /// Пользовательское описание функции для документации и подсказок.
+    /// </summary>
     public string? Doc { get; init; }
 
+    /// <summary>
+    /// Описание аргументов функции и их требований к типам/nullability/константности.
+    /// </summary>
     public required IReadOnlyList<FunctionArgument> Arguments { get; init; }
 
+    /// <summary>
+    /// Тип результата функции после успешного выбора overload-а.
+    /// </summary>
     public required FunctionReturnType ReturnType { get; init; }
 
+    /// <summary>
+    /// Динамический тип результата, которому кроме аргументов нужен context resolve-а выражений.
+    /// Используется редкими функциями, чей тип зависит от внешней metadata.
+    /// </summary>
+    public Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, FunctionReturnType>? ContextReturnTypeProvider { get; init; }
+
+    /// <summary>
+    /// Синтаксический вид функции: обычная функция, method, unary или binary operator.
+    /// </summary>
     public required FuncExprKind Kind { get; init; }
 
+    /// <summary>
+    /// Статический SQL-шаблон функции. Используется большинством функций.
+    /// </summary>
     public required ITemplate Template { get; init; }
 
-    public Func<IReadOnlyList<ResolvedExpression>, ITemplate>? TemplateProvider { get; init; }
+    /// <summary>
+    /// Динамический SQL-шаблон, которому кроме аргументов может понадобиться внешний read-only context.
+    /// Используется редкими функциями, чей SQL зависит от resolved типов или внешней metadata.
+    /// </summary>
+    public Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, ITemplate>? TemplateProvider { get; init; }
 
+    /// <summary>
+    /// Метаданные implicit cast-а, если эта definition описывает не пользовательскую функцию, а cast.
+    /// </summary>
     public ImplicitCastMetadata? ImplicitCast { get; init; }
 
+    /// <summary>
+    /// Переопределение стандартного null propagation для функций с особой семантикой.
+    /// </summary>
     public Func<IEnumerable<bool>, bool>? CustomNullPropagation { get; init; }
 
+    /// <summary>
+    /// Правила вывода константности результата функции.
+    /// </summary>
     public required ConstPropagation ConstPropagation { get; init; }
 
     public override string ToString()

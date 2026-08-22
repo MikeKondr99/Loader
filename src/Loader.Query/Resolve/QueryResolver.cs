@@ -13,12 +13,16 @@ public sealed class QueryResolver
 {
     private readonly ExpressionResolver expressionResolver = new();
 
-    public ResolveResult<ResolvedQuery> Resolve(QueryModel query, IFunctionResolver functions)
+    public ResolveResult<ResolvedQuery> Resolve(
+        QueryModel query,
+        IFunctionResolver functions,
+        ExpressionResolutionContext? expressionContext = null)
     {
         var context = new ResolutionContext
         {
             Source = query.Source,
             Functions = functions,
+            ExpressionContext = expressionContext ?? ExpressionResolutionContext.Empty,
             Errors = []
         };
 
@@ -30,6 +34,7 @@ public sealed class QueryResolver
         ValidateLimit(query, context);
         ValidateWhere(where, context);
         ValidateAggregations(query, select, groupBy, context);
+        context.Errors.AddRange(context.ExpressionContext.Errors);
 
         if (context.Errors.Count > 0)
         {

@@ -98,7 +98,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         {
             LoadSpan = Span(context.LOAD()),
             FirstPart = VisitLoadFirst(context.load_first()),
-            Kind = context.load_kind() is null ? LoadTableKind.Normal : LoadTableKind.Temp,
+            Kind = VisitLoadKind(context.load_kind()),
             KindSpan = context.load_kind() is null ? null : Span(context.load_kind()),
             TableName = tableName,
             Fields = fields,
@@ -119,6 +119,26 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Offset = offset,
             OffsetSpan = limitContext?.load_offset() is null ? null : Span(limitContext.load_offset().OFFSET())
         };
+    }
+
+    private static LoadTableKind VisitLoadKind(LangParser.Load_kindContext? context)
+    {
+        if (context is null)
+        {
+            return LoadTableKind.Normal;
+        }
+
+        if (context.TEMP() is not null)
+        {
+            return LoadTableKind.Temp;
+        }
+
+        if (context.MAPPED() is not null)
+        {
+            return LoadTableKind.Mapped;
+        }
+
+        throw new InvalidOperationException($"Unsupported LOAD kind '{context.GetText()}'.");
     }
 
     /// <summary>

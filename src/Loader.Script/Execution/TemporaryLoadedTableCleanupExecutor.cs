@@ -17,7 +17,7 @@ public class TemporaryLoadedTableCleanupExecutor
         CancellationToken cancellationToken = default)
     {
         var temporaryTables = context.LoadedTables
-            .Where(static table => table.Kind == LoadedTableKind.Temp)
+            .Where(static table => table.Kind is LoadedTableKind.Temp or LoadedTableKind.Mapped)
             .ToArray();
 
         if (temporaryTables.Length > 0)

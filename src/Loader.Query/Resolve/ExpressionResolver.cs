@@ -87,19 +87,25 @@ public sealed class ExpressionResolver
         var resolvedArguments = arguments
             .Zip(resolution.Casts, static (argument, cast) => argument with
             {
-                Template = cast.TemplateProvider?.Invoke([argument]) ?? cast.Template,
+                Template = cast.Template,
                 Arguments = [argument]
             })
             .ToArray();
+
+        // Собираем потанциально динимические template и returnType
+        var returnType = definition.ContextReturnTypeProvider?.Invoke(resolvedArguments, context.ExpressionContext) ??
+                definition.ReturnType;
+        var template = definition.TemplateProvider?.Invoke(resolvedArguments, context.ExpressionContext) ??
+                definition.Template;
 
         // 3. Собираем resolved node: compiler позже раскроет Template через Arguments.
         return new ResolvedExpression
         {
             Expression = function,
-            Template = definition.TemplateProvider?.Invoke(resolvedArguments) ?? definition.Template,
+            Template = template,
             Type = new ExprType
             {
-                DataType = definition.ReturnType.DataType,
+                DataType = returnType.DataType,
                 CanBeNull = resolution.PropagatesNull,
                 Aggregated = resolution.ReturnsAggregated,
                 IsConstant = resolution.ReturnsConst
