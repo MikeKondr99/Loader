@@ -13,5 +13,10 @@ public enum LoadTableKind
     /// <summary>
     /// Временный результат LOAD, доступный следующим statement-ам и удаляемый после выполнения script.
     /// </summary>
-    Temp
+    Temp,
+
+    /// <summary>
+    /// Mapping-таблица для lookup-функции Map.
+    /// </summary>
+    Mapped
 }

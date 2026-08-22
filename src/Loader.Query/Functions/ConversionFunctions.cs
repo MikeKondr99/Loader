@@ -137,7 +137,7 @@ public sealed class ConversionFunctions : FunctionDescriptor
         Method("Text")
             .Arg("input", DataType.Null)
             .Returns(DataType.Text)
-            .Template("NULL");
+            .Template("CAST(NULL AS Nullable(String))");
 
         Method("Text")
             .Doc("Преобразует дату в текстовое представление в формате ISO")

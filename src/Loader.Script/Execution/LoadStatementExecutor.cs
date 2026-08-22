@@ -31,6 +31,8 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
+        ValidateMappedStatementFields(statement);
+
         await context.Logger.LoadTableStartedAsync(statement.TableName, cancellationToken).ConfigureAwait(false);
 
         // 1. Сырые данные source кладем в физическую temp table column1, column2...
@@ -38,7 +40,7 @@ public class LoadStatementExecutor
             .ConfigureAwait(false);
 
         // 2. LOAD выражения превращаем в типизированный Query поверх temp table.
-        var (resolvedQuery, querySql) = BuildResolvedQuerySql(statement, tempTable);
+        var (resolvedQuery, querySql) = BuildResolvedQuerySql(context, statement, tempTable);
 
         // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
         await using var finalTable = CreateFinalTable(context);
@@ -81,6 +83,8 @@ public class LoadStatementExecutor
         await using var stageReader = LimitSourceRows(
             NormalizeForTempTable(stageNameReader, source),
             ToInt32(statement.First, nameof(statement.First)));
+
+        ValidateMappedTempTableSchema(statement, stageReader.DataSchema.Fields.Count);
 
         // 5. Создаем temp table name.
         var tempTable = CreatePhysicalTempTableName(context);
@@ -274,14 +278,15 @@ public class LoadStatementExecutor
             .WriteAsync(
                 source,
                 metaReader,
-                new ClickHouseWriteOptions { TableName = tempTable },
+                CreateWriteOptions(tempTable, LoadClickHouseTableKind.Temp),
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return meta.RowCount;
     }
 
-    private static ResolvedQuerySql BuildResolvedQuerySql(
+    private ResolvedQuerySql BuildResolvedQuerySql(
+        ScriptContext context,
         LoadStatement statement,
         TemporaryClickHouseTable tempTable)
     {
@@ -292,9 +297,14 @@ public class LoadStatementExecutor
 
         ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, tempTable);
-        var resolvedQuery = ResolveQuery(query);
+        var resolvedQuery = ResolveQuery(query, CreateExpressionResolutionContext(context));
         var querySql = CompileQuery(statement, resolvedQuery);
         return new ResolvedQuerySql(resolvedQuery, querySql);
+    }
+
+    protected virtual ExpressionResolutionContext CreateExpressionResolutionContext(ScriptContext context)
+    {
+        return new ScriptExpressionResolutionContext(context);
     }
 
     private static QueryModel BuildQuery(LoadStatement statement, TemporaryClickHouseTable tempTable)
@@ -365,9 +375,9 @@ public class LoadStatementExecutor
         }).ToArray();
     }
 
-    private static ResolvedQuery ResolveQuery(QueryModel query)
+    private static ResolvedQuery ResolveQuery(QueryModel query, ExpressionResolutionContext expressionContext)
     {
-        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver(), expressionContext);
         if (result.IsSuccess)
         {
             return result.Value!;
@@ -414,7 +424,7 @@ public class LoadStatementExecutor
         try
         {
             await context.Logger.TransformationWriteStartedAsync(cancellationToken).ConfigureAwait(false);
-            return await MaterializeFinalTableAsync(context, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+            return await MaterializeFinalTableAsync(context, statement, querySql, finalTable, cancellationToken).ConfigureAwait(false);
         }
         catch (LoadScriptStageException)
         {
@@ -432,6 +442,7 @@ public class LoadStatementExecutor
 
     protected virtual async ValueTask<long> MaterializeFinalTableAsync(
         ScriptContext context,
+        LoadStatement statement,
         string querySql,
         ClickHouseTableName finalTable,
         CancellationToken cancellationToken)
@@ -452,11 +463,35 @@ public class LoadStatementExecutor
             .WriteAsync(
                 source,
                 metaReader,
-                new ClickHouseWriteOptions { TableName = finalTable },
+                CreateWriteOptions(
+                    finalTable,
+                    statement.IsMapped ? LoadClickHouseTableKind.Mapped : LoadClickHouseTableKind.Final),
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
         return meta.RowCount;
+    }
+
+    private static ClickHouseWriteOptions CreateWriteOptions(
+        ClickHouseTableName tableName,
+        LoadClickHouseTableKind kind)
+    {
+        return new ClickHouseWriteOptions
+        {
+            TableName = tableName,
+            Engine = kind switch
+            {
+                // Log не требует ORDER BY и подходит для stage/intermediate таблиц.
+                LoadClickHouseTableKind.Temp => "Log",
+
+                // Пока стратегия MergeTree ORDER BY для пользовательских final tables не определена.
+                LoadClickHouseTableKind.Final => "Log",
+
+                // ApplyMap читает mapping через joinGetOrNull, поэтому нужна ClickHouse Join-таблица.
+                LoadClickHouseTableKind.Mapped => "Join(ANY, LEFT, `column1`)",
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+            }
+        };
     }
 
     protected virtual async ValueTask DropTempTableAsync(
@@ -565,7 +600,12 @@ public class LoadStatementExecutor
         {
             Name = finalTable,
             Alias = statement.TableName,
-            Kind = statement.IsTemporary ? LoadedTableKind.Temp : LoadedTableKind.Normal,
+            Kind = statement.Kind switch
+            {
+                LoadTableKind.Temp => LoadedTableKind.Temp,
+                LoadTableKind.Mapped => LoadedTableKind.Mapped,
+                _ => LoadedTableKind.Normal
+            },
             Fields = resolvedQuery.OutputFields.Select(field => new LoadedTableField
             {
                 Name = field.Alias,
@@ -620,6 +660,32 @@ public class LoadStatementExecutor
                 $"LOAD select alias '{field.Name}' is duplicated.",
                 field.Span);
         }
+    }
+
+    private static void ValidateMappedStatementFields(LoadStatement statement)
+    {
+        if (!statement.IsMapped || statement.Fields is null || statement.Fields.Count == 2)
+        {
+            return;
+        }
+
+        throw new QueryResolutionException(
+            "MAPPED LOAD должен возвращать ровно два поля: key и value.",
+            statement.KindSpan ?? statement.LoadSpan);
+    }
+
+    private static void ValidateMappedTempTableSchema(
+        LoadStatement statement,
+        int fieldCount)
+    {
+        if (!statement.IsMapped || statement.Fields is not null || fieldCount == 2)
+        {
+            return;
+        }
+
+        throw new QueryResolutionException(
+            $"MAPPED LOAD * получил source с {fieldCount} полями, ожидалось 2: key и value.",
+            statement.KindSpan ?? statement.LoadSpan);
     }
 
     private static QueryDataType ToQueryDataType(CoreDataType dataType)

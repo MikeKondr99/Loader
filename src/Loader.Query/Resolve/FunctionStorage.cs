@@ -149,6 +149,7 @@ public sealed class FunctionStorage : IFunctionResolver
 
     private static FunctionDefinition IdentityCast(FunctionArgumentType from, FunctionArgumentType to)
     {
+        var cost = from.DataType == DataType.Null && to.DataType != DataType.Null ? 2U : 0U;
         return new FunctionDefinition
         {
             Name = string.Empty,
@@ -170,7 +171,7 @@ public sealed class FunctionStorage : IFunctionResolver
             Template = QueryTemplate.FromTokens([new ArgToken(0)]),
             ImplicitCast = new ImplicitCastMetadata
             {
-                Cost = 0
+                Cost = cost
             },
             CustomNullPropagation = null,
             ConstPropagation = ConstPropagation.Default

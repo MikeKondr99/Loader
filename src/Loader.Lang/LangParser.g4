@@ -46,6 +46,7 @@ load_first
 
 load_kind
     : TEMP
+    | MAPPED
     ;
 
 load_where
@@ -183,7 +184,7 @@ null: NULL;
 
 boolean: BOOLEAN;
 
-name: NAME | BLOCKED_NAME | FIRST | TEMP;
+name: NAME | BLOCKED_NAME | FIRST | TEMP | MAPPED;
 
 integer: INTEGER;
 

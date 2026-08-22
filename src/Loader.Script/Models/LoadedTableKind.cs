@@ -13,5 +13,10 @@ public enum LoadedTableKind
     /// <summary>
     /// Промежуточная таблица, доступная во время выполнения script и удаляемая cleanup-ом.
     /// </summary>
-    Temp
+    Temp,
+
+    /// <summary>
+    /// Mapping-таблица, используемая функцией Map и удаляемая cleanup-ом.
+    /// </summary>
+    Mapped
 }

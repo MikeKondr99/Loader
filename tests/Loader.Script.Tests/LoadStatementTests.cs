@@ -2,6 +2,7 @@
 using System.Data.Common;
 using Loader.Core.Decorators;
 using Loader.Core.Exceptions;
+using Loader.Core.Models;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
@@ -138,6 +139,161 @@ public sealed class LoadStatementTests
         await Assert.That(loadedTable.Kind).IsEqualTo(LoadedTableKind.Temp);
         await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
         await Assert.That(context.LoadedTables[0].Kind).IsEqualTo(LoadedTableKind.Temp);
+    }
+
+    [Test]
+    [DisplayName("Execute MAPPED LOAD с явными полями требует ровно key и value")]
+    public async Task Execute_mapped_load_with_explicit_fields_rejects_not_two_fields()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            map:
+            MAPPED LOAD
+                id AS key,
+                name AS value,
+                name AS extra
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.KindSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("MAPPED LOAD");
+        await Assert.That(((FakeProviderResolver)executor.ProviderResolver).ResolveCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("Execute MAPPED LOAD * требует source reader ровно с двумя полями")]
+    public async Task Execute_mapped_load_star_rejects_source_reader_not_two_fields()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                ColumnNames = ["key", "value", "extra"],
+                RowValues = [1, "Moscow", "extra"]
+            }
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            map:
+            MAPPED LOAD *
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.KindSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("ожидалось 2");
+        await Assert.That(executor.WriteCalls).IsEqualTo(0);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("Execute ApplyMap ругается если mapping-таблица не найдена")]
+    public async Task Execute_apply_map_rejects_missing_mapped_table()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                name.ApplyMap('missing_map') AS mapped_name
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("missing_map");
+        await Assert.That(exception.InnerException!.Message).Contains("не найдена");
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("Execute ApplyMap ругается если таблица существует, но не является MAPPED LOAD")]
+    public async Task Execute_apply_map_rejects_non_mapped_loaded_table()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("not_map", LoadedTableKind.Normal));
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                name.ApplyMap('not_map') AS mapped_name
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("not_map");
+        await Assert.That(exception.InnerException!.Message).Contains("не является MAPPED LOAD");
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("Execute ApplyMap строит joinGetOrNull и берет тип значения из MAPPED LOAD")]
+    public async Task Execute_apply_map_uses_mapped_table_metadata()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("map", LoadedTableKind.Mapped));
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                name.ApplyMap('map') AS mapped_name
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var table = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        await Assert.That(executor.QuerySql).Contains("joinGetOrNull('physical_map', 'column2', stage.`column2`)");
+        await Assert.That(table.Fields).Count().IsEqualTo(1);
+        await Assert.That(table.Fields[0].Name).IsEqualTo("mapped_name");
+        await Assert.That(table.Fields[0].DataType).IsEqualTo(DataType.Text);
     }
 
     [Test]
@@ -644,6 +800,38 @@ public sealed class LoadStatementTests
         return new LangSpan(1, 1, 1, 1);
     }
 
+    private static LoadedTable LoadedTable(
+        string alias,
+        LoadedTableKind kind)
+    {
+        return new LoadedTable
+        {
+            Name = new ClickHouseTableName
+            {
+                Table = $"physical_{alias}"
+            },
+            Alias = alias,
+            Kind = kind,
+            Fields =
+            [
+                Field("key", DataType.Text),
+                Field("value", DataType.Text)
+            ]
+        };
+    }
+
+    private static LoadedTableField Field(
+        string name,
+        DataType dataType)
+    {
+        return new LoadedTableField
+        {
+            Name = name,
+            DataType = dataType,
+            CanBeNull = true
+        };
+    }
+
     private static LoadSourceCall SourceCall(string provider, string path)
     {
         return new LoadSourceCall
@@ -669,6 +857,10 @@ public sealed class LoadStatementTests
 
         public string SourceKind { get; init; } = "fake";
 
+        public IReadOnlyList<string> ColumnNames { get; init; } = ["id", "name"];
+
+        public IReadOnlyList<object?> RowValues { get; init; } = [1, "Moscow"];
+
         public ValueTask<LoadProviderSource> ResolveAsync(
             LoadStatement statement,
             ScriptContext context,
@@ -683,12 +875,15 @@ public sealed class LoadStatementTests
             });
         }
 
-        private static DbDataReader CreateReader()
+        private DbDataReader CreateReader()
         {
             var table = new DataTable();
-            table.Columns.Add("id", typeof(int));
-            table.Columns.Add("name", typeof(string));
-            table.Rows.Add(1, "Moscow");
+            for (var ordinal = 0; ordinal < ColumnNames.Count; ordinal++)
+            {
+                table.Columns.Add(ColumnNames[ordinal], RowValues[ordinal]?.GetType() ?? typeof(string));
+            }
+
+            table.Rows.Add(RowValues.ToArray());
             return table.CreateDataReader();
         }
     }
@@ -742,6 +937,7 @@ public sealed class LoadStatementTests
 
         protected override ValueTask<long> MaterializeFinalTableAsync(
             ScriptContext context,
+            LoadStatement statement,
             string querySql,
             ClickHouseTableName finalTable,
             CancellationToken cancellationToken)
