@@ -73,7 +73,7 @@ public sealed class TrigonometryFunctions : FunctionDescriptor
             .Arg("y", DataType.Number)
             .Arg("x", DataType.Number)
             .Returns(DataType.Number)
-            .Template($"atan2({1}, {0})");
+            .Template($"atan2({0}, {1})");
 
         Method("Acosh")
             .Doc("Вычисляет гиперболический арккосинус")

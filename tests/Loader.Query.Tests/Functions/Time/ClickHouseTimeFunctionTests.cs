@@ -70,9 +70,17 @@ public sealed class ClickHouseTimeFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Time('03:04:05').Hour()", 3)]
+    [Arguments("Time('00:04:05').Hour()", 0)]
+    [Arguments("Time('23:04:05').Hour()", 23)]
     [Arguments("Time('03:04:05').Minute()", 4)]
+    [Arguments("Time('03:00:05').Minute()", 0)]
+    [Arguments("Time('03:59:05').Minute()", 59)]
     [Arguments("Time('03:04:05').Second()", 5)]
+    [Arguments("Time('03:04:00').Second()", 0)]
+    [Arguments("Time('03:04:59').Second()", 59)]
     [Arguments("Time(null).Hour()", null)]
+    [Arguments("Time(null).Minute()", null)]
+    [Arguments("Time(null).Second()", null)]
     [DisplayName("Hour Minute Second возвращают компоненты Time")]
     public Task Time_parts(string expression, object? expected)
     {

@@ -91,6 +91,24 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("AVG(date): считает среднюю дату с точностью до секунды")]
+    public async Task Avg_datetime()
+    {
+        var inline = CreateSingleColumnInline(
+            DataType.DateTime,
+            [
+                "toDateTime('2023-01-01 00:00:00')",
+                "NULL",
+                "toDateTime('2023-01-03 00:00:00')"
+            ]);
+        var query = CreateSingleColumnQuery(inline, "AVG(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertDateTimeAsync(result, "2023-01-02 00:00:00");
+    }
+
+    [Test]
     [DisplayName("MIN/MAX: работают для integer")]
     public async Task Min_max_integer()
     {
@@ -162,6 +180,38 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("COUNT_DISTINCT: работает для text")]
+    public async Task Count_distinct_text()
+    {
+        string?[] values = ["a", null, "b", "a"];
+        var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "COUNT_DISTINCT(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
+    [DisplayName("COUNT_DISTINCT: работает для time")]
+    public async Task Count_distinct_time()
+    {
+        var inline = CreateSingleColumnInline(
+            DataType.Time,
+            [
+                "toDateTime('1970-01-01 03:04:05')",
+                "NULL",
+                "toDateTime('1970-01-01 03:04:05')",
+                "toDateTime('1970-01-01 05:06:07')"
+            ]);
+        var query = CreateSingleColumnQuery(inline, "COUNT_DISTINCT(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
     [DisplayName("ONLY: возвращает единственное уникальное non-null значение")]
     public async Task Only_single_value_with_nulls()
     {
@@ -185,6 +235,37 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         var result = await GetScalarAsync(query);
 
         await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    [DisplayName("ONLY: работает для text")]
+    public async Task Only_text()
+    {
+        string?[] values = ["a", null, "a"];
+        var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "ONLY(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsEqualTo("a");
+    }
+
+    [Test]
+    [DisplayName("ONLY: работает для time")]
+    public async Task Only_time()
+    {
+        var inline = CreateSingleColumnInline(
+            DataType.Time,
+            [
+                "toDateTime('1970-01-01 03:04:05')",
+                "NULL",
+                "toDateTime('1970-01-01 03:04:05')"
+            ]);
+        var query = CreateSingleColumnQuery(inline, "ONLY(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertDateTimeAsync(result, "1970-01-01 03:04:05");
     }
 
     [Test]
@@ -214,6 +295,41 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("CONCAT(value, delimiter, sort): склеивает text после сортировки")]
+    public async Task Concat_with_delimiter_and_sort()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Text),
+                new InlineField("sort", DataType.Integer)
+            ],
+            [
+                ["'a'", "2"],
+                ["NULL", "3"],
+                ["'b'", "1"],
+                ["'c'", "4"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CONCAT(x, '|', sort)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsEqualTo("b|a|c");
+    }
+
+    [Test]
+    [DisplayName("CONCAT(value): all-null набор возвращает NULL")]
+    public async Task Concat_all_null()
+    {
+        string?[] values = [null, null];
+        var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "CONCAT(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
     [DisplayName("MODE(text): возвращает моду текстового поля")]
     public async Task Mode_text()
     {
@@ -224,6 +340,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         var result = await GetScalarAsync(query);
 
         await Assert.That(result).IsEqualTo("a");
+    }
+
+    [Test]
+    [DisplayName("MODE(text): all-null набор возвращает NULL")]
+    public async Task Mode_all_null()
+    {
+        string?[] values = [null, null];
+        var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "MODE(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
     }
 
     [Test]
@@ -354,5 +483,11 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         await Assert.That(Convert.ToDouble(actual, CultureInfo.InvariantCulture))
             .IsEqualTo(expected)
             .Within(0.000001);
+    }
+
+    private static async Task AssertDateTimeAsync(object? actual, string expected)
+    {
+        await Assert.That(Convert.ToDateTime(actual, CultureInfo.InvariantCulture))
+            .IsEqualTo(DateTime.Parse(expected, CultureInfo.InvariantCulture));
     }
 }

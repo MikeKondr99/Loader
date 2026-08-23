@@ -23,6 +23,8 @@ public sealed class ClickHouseReflectionFunctionTests : ClickHouseExpressionTest
     [Arguments("Type(Date(null, 1, 1))", "date")]
     [Arguments("Type(true)", "bool!")]
     [Arguments("Type(Bool(null))", "bool")]
+    [Arguments("Type(Time('03:04:05'))", "time")]
+    [Arguments("Type(Time(null))", "time")]
     [Arguments("Type(null)", "null")]
     public Task Type_function(string expression, object? expected)
     {
