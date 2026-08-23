@@ -24,7 +24,8 @@ public static class ClickHouseFunctions
         ..new FinancialFunctions().GetFunctions(),
         ..new ReflectionFunctions().GetFunctions(),
         ..new JsonFunctions().GetFunctions(),
-        ..new StringFunctions().GetFunctions()
+        ..new StringFunctions().GetFunctions(),
+        ..new ScriptFunctions().GetFunctions()
     ];
 
     public static IFunctionResolver CreateResolver()

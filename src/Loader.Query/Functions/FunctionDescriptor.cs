@@ -66,7 +66,8 @@ public sealed class FunctionBuilder
     private string? doc;
     private FunctionReturnType? returnType;
     private QueryTemplate? template;
-    private Func<IReadOnlyList<ResolvedExpression>, ITemplate>? templateProvider;
+    private Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, ITemplate>? templateProvider;
+    private Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, FunctionReturnType>? contextReturnTypeProvider;
     private Func<IEnumerable<bool>, bool>? customNullPropagation;
     private uint? implicitCastCost;
     private ConstPropagation constPropagation = ConstPropagation.Default;
@@ -212,6 +213,17 @@ public sealed class FunctionBuilder
         return this;
     }
 
+    public FunctionBuilder Returns(Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, FunctionReturnType> provider)
+    {
+        returnType = new FunctionReturnType
+        {
+            DataType = DataType.Unknown,
+            CanBeNull = true
+        };
+        contextReturnTypeProvider = provider;
+        return this;
+    }
+
     public FunctionBuilder ImplicitCast(uint cost)
     {
         implicitCastCost = cost;
@@ -231,6 +243,13 @@ public sealed class FunctionBuilder
     }
 
     public FunctionBuilder Template(Func<IReadOnlyList<ResolvedExpression>, ITemplate> provider)
+    {
+        template = QueryTemplate.Text(string.Empty);
+        templateProvider = (args, _) => provider(args);
+        return this;
+    }
+
+    public FunctionBuilder Template(Func<IReadOnlyList<ResolvedExpression>, ExpressionResolutionContext, ITemplate> provider)
     {
         template = QueryTemplate.Text(string.Empty);
         templateProvider = provider;
@@ -255,6 +274,7 @@ public sealed class FunctionBuilder
             Doc = doc,
             Arguments = arguments,
             ReturnType = returnType,
+            ContextReturnTypeProvider = contextReturnTypeProvider,
             Kind = Kind,
             Template = template.Value,
             TemplateProvider = templateProvider,

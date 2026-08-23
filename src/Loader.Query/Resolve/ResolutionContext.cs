@@ -12,5 +12,7 @@ public sealed record ResolutionContext
 
     public required IFunctionResolver Functions { get; init; }
 
+    public ExpressionResolutionContext ExpressionContext { get; init; } = ExpressionResolutionContext.Empty;
+
     public required List<LangError> Errors { get; init; }
 }

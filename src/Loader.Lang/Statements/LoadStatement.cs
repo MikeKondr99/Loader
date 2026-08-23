@@ -40,6 +40,11 @@ public sealed record LoadStatement : Statement
     public bool IsTemporary => Kind == LoadTableKind.Temp;
 
     /// <summary>
+    /// <c>true</c>, если LOAD создает mapping-таблицу для lookup-функции Map.
+    /// </summary>
+    public bool IsMapped => Kind == LoadTableKind.Mapped;
+
+    /// <summary>
     /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.
     /// </summary>
     public required string TableName { get; init; }
