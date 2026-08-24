@@ -48,20 +48,49 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [Arguments("10 / 2", 5)]
-    [Arguments("10 / 6", 1)]
-    [Arguments("-5 / 2", -2)]
-    [Arguments("5 / -2", -2)]
-    [Arguments("-5 / -2", 2)]
-    [Arguments("If((100 / 3) > 33.2, 'fail', 'success')", "success")]
+    [Arguments("10 / 2", 5.0)]
+    [Arguments("10 / 3", 3.3333333333333335)]
+    [Arguments("10 / 6", 1.6666666666666667)]
+    [Arguments("-5 / 2", -2.5)]
+    [Arguments("5 / -2", -2.5)]
+    [Arguments("-5 / -2", 2.5)]
+    [Arguments("Type(10 / 3)", "num")]
+    [Arguments("RawType(10 / 3)", "Nullable(Float64)")]
+    [Arguments("If((100 / 3) > 33.2, 'success', 'fail')", "success")]
     [Arguments("If((10 / 3) > 3.4, 1, 0)", 0)]
-    [Arguments("If((-5 / 2) > -2.5, 1, 0)", 1)]
+    [Arguments("If((-5 / 2) > -2.5, 1, 0)", 0)]
     [Arguments("10.0 / 4.0", 2.5)]
     [Arguments("1 / 0", null)]
     [Arguments("1.0 / 0.0", null)]
     [Arguments("If((1 / 0) > 1, 1, 0)", 0)]
     [Arguments("If((1.0 / 0.0) > 1.0, 1, 0)", 0)]
     public Task Divide(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [Arguments("Div(10, 3)", 3)]
+    [Arguments("Div(10, 6)", 1)]
+    [Arguments("Div(7, 2)", 3)]
+    [Arguments("Div(7.1, 2.3)", 3)]
+    [Arguments("Div(7.1, 2)", 3)]
+    [Arguments("Div(7, 2.3)", 3)]
+    [Arguments("Div(9, 3)", 3)]
+    [Arguments("Div(-4, 3)", -1)]
+    [Arguments("Div(4, -3)", -1)]
+    [Arguments("Div(-4, -3)", 1)]
+    [Arguments("Div(-5, 2)", -2)]
+    [Arguments("Div(5, -2)", -2)]
+    [Arguments("Div(-5, -2)", 2)]
+    [Arguments("Div(1, 0)", null)]
+    [Arguments("Div(1.0, 0.0)", null)]
+    [Arguments("Type(Div(10, 3))", "int")]
+    [Arguments("Type(Div(7.1, 2.3))", "int")]
+    [Arguments("Type(Div(1, 0))", "int")]
+    [Arguments("RawType(Div(10, 3))", "Nullable(UInt8)")]
+    [Arguments("RawType(Div(7.1, 2.3))", "Nullable(Int64)")]
+    public Task Integer_divide(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
     }

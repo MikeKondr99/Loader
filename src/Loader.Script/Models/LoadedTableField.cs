@@ -75,7 +75,6 @@ public sealed record LoadedTableField
         return value is null ? null : (T)value;
     }
 
-    //  TODO: поправить какая-то дичь
     private static object? GetValue(object? value, Type expectedType, string name)
     {
         if (value is null)

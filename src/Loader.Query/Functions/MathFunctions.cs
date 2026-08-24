@@ -41,7 +41,23 @@ public sealed class MathFunctions : FunctionDescriptor
             .Template($"({0} / nullIf({1}, 0))");
 
         Binary("/", DataType.Integer, DataType.Integer)
-            .Doc("Целочисленное деление")
+            .Doc("Деление целых чисел с дробным результатом")
+            .Returns(DataType.Number)
+            .CustomNullPropagation(_ => true)
+            .Template($"({0} / nullIf({1}, 0))");
+
+        Function("Div")
+            .Doc("Возвращает целую часть арифметического деления")
+            .Arg("left", DataType.Integer)
+            .Arg("right", DataType.Integer)
+            .Returns(DataType.Integer)
+            .CustomNullPropagation(_ => true)
+            .Template($"intDiv({0}, nullIf({1}, 0))");
+
+        Function("Div")
+            .Doc("Возвращает целую часть арифметического деления")
+            .Arg("left", DataType.Number)
+            .Arg("right", DataType.Number)
             .Returns(DataType.Integer)
             .CustomNullPropagation(_ => true)
             .Template($"intDiv({0}, nullIf({1}, 0))");
