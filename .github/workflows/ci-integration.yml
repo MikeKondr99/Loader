@@ -1,0 +1,164 @@
+name: CI Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: Test category to run
+        required: true
+        default: clickhouse
+        type: choice
+        options:
+          - clickhouse
+          - postgres
+          - sqlserver
+          - oracle
+          - hive
+          - all
+  pull_request:
+    types:
+      - labeled
+      - synchronize
+      - reopened
+
+concurrency:
+  group: ci-integration-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event.inputs.category || 'labels' }}
+  cancel-in-progress: true
+
+jobs:
+  select-categories:
+    name: Select categories
+    runs-on: ubuntu-latest
+    outputs:
+      categories: ${{ steps.select.outputs.categories }}
+      should-run: ${{ steps.select.outputs.should-run }}
+
+    steps:
+      - name: Select categories
+        id: select
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const eventName = context.eventName;
+            let categories = [];
+
+            if (eventName === 'workflow_dispatch') {
+              categories = [core.getInput('category')];
+            } else if (context.payload.pull_request) {
+              const labels = context.payload.pull_request.labels.map(label => label.name);
+              const mapping = {
+                'ci:clickhouse': 'clickhouse',
+                'ci:postgres': 'postgres',
+                'ci:sqlserver': 'sqlserver',
+                'ci:oracle': 'oracle',
+                'ci:hive': 'hive',
+                'ci:all': 'all'
+              };
+
+              categories = Object
+                .entries(mapping)
+                .filter(([label]) => labels.includes(label))
+                .map(([, category]) => category);
+            }
+
+            categories = [...new Set(categories)];
+            core.setOutput('categories', JSON.stringify(categories));
+            core.setOutput('should-run', categories.length > 0 ? 'true' : 'false');
+
+  integration-tests:
+    name: Integration tests (${{ matrix.category }})
+    needs: select-categories
+    if: needs.select-categories.outputs.should-run == 'true'
+    runs-on:
+      - self-hosted
+      - loader-db
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        category: ${{ fromJson(needs.select-categories.outputs.categories) }}
+
+    env:
+      CI: "true"
+      LOADER_TEST_CI: "1"
+      LOADER_TEST_EXTERNAL_DATABASES: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Show Docker images
+        run: docker images
+
+      - name: Verify preloaded database images
+        shell: pwsh
+        run: |
+          $imagesByCategory = @{
+            clickhouse = @("clickhouse/clickhouse-server:24.8.14.39")
+            postgres = @("postgres:18.4-alpine", "clickhouse/clickhouse-server:24.8.14.39")
+            sqlserver = @("mcr.microsoft.com/mssql/server:2022-CU23-ubuntu-22.04", "clickhouse/clickhouse-server:24.8.14.39")
+            oracle = @("gvenzl/oracle-free:23.26.2-slim-faststart", "clickhouse/clickhouse-server:24.8.14.39")
+            hive = @()
+            all = @(
+              "clickhouse/clickhouse-server:24.8.14.39",
+              "postgres:18.4-alpine",
+              "mcr.microsoft.com/mssql/server:2022-CU23-ubuntu-22.04",
+              "gvenzl/oracle-free:23.26.2-slim-faststart"
+            )
+          }
+
+          $missing = @()
+          foreach ($image in $imagesByCategory["${{ matrix.category }}"]) {
+            docker image inspect $image *> $null
+            if ($LASTEXITCODE -ne 0) {
+              $missing += $image
+            }
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Error "Missing preloaded Docker images on the loader-db runner: $($missing -join ', ')"
+          }
+
+      - name: Restore
+        run: dotnet restore Loader.sln
+
+      - name: Build
+        run: dotnet build Loader.sln --configuration Release --no-restore
+
+      - name: Run integration tests
+        shell: pwsh
+        run: ./scripts/test.ps1 -Category "${{ matrix.category }}" -Configuration Release -NoRestore -NoBuild -Timeout 600s
+
+      - name: Cleanup test containers
+        if: always()
+        shell: pwsh
+        run: |
+          docker ps -aq --filter "label=org.testcontainers=true" | ForEach-Object {
+            docker rm -f $_
+          }
+          docker network prune -f --filter "label=org.testcontainers=true"
+          docker volume prune -f --filter "label=org.testcontainers=true"
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports-${{ matrix.category }}
+          path: |
+            tests/**/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 7

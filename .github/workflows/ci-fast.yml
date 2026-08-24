@@ -1,0 +1,58 @@
+name: CI Fast
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+concurrency:
+  group: ci-fast-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-fast-tests:
+    name: Build and fast tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('global.json', '**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore Loader.sln
+
+      - name: Build
+        run: dotnet build Loader.sln --configuration Release --no-restore
+
+      - name: Fast tests
+        shell: pwsh
+        env:
+          LOADER_TEST_EXTERNAL_DATABASES: "0"
+        run: ./scripts/test.ps1 -Category fast -Configuration Release -NoRestore -NoBuild -Timeout 120s
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-test-reports
+          path: |
+            tests/**/TestResults/**
+          if-no-files-found: ignore
+          retention-days: 7
