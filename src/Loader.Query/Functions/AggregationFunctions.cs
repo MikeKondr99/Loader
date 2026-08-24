@@ -54,7 +54,12 @@ public sealed class AggregationFunctions : FunctionDescriptor
                 .Arg("value", type)
                 .ReturnsAggregated(type)
                 .CustomNullPropagation(_ => true)
-                .Template($"(CASE WHEN COUNT(DISTINCT {0}) = 1 THEN MAX({0}) ELSE NULL END)");
+                // CH 24.8 не умеет Nullable(Tuple(...)) в singleValueOrNull и падает с
+                // "Nested type Tuple(...) cannot be inside Nullable type".
+                // Когда минимальная версия CH будет >= 26.6, можно заменить на более компактный вариант.
+                // По замерам он не быстрее текущего шаблона, это только упрощение SQL:
+                // .Template($"tupleElement(assumeNotNull(singleValueOrNull(tuple(0, {0}))), 2)");
+                .Template($"if(count() = count({0}), singleValueOrNull({0}), NULL)");
         }
 
         foreach (var type in Numbers())

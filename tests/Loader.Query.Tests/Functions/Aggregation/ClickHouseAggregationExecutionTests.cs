@@ -212,16 +212,42 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
-    [DisplayName("ONLY: возвращает единственное уникальное non-null значение")]
-    public async Task Only_single_value_with_nulls()
+    [DisplayName("ONLY: возвращает единственное повторяющееся значение")]
+    public async Task Only_single_repeated_value()
     {
-        int?[] values = [5, null, null];
+        int?[] values = [5, 5, 5];
         var inline = CreateSingleColumnInline(DataType.Integer, ToExpressions(values));
         var query = CreateSingleColumnQuery(inline, "ONLY(x)");
 
         var result = await GetScalarAsync(query);
 
         await AssertNumberAsync(result, 5);
+    }
+
+    [Test]
+    [DisplayName("ONLY: NULL считается отдельным значением")]
+    public async Task Only_null_makes_value_not_unique()
+    {
+        int?[] values = [5, 5, null];
+        var inline = CreateSingleColumnInline(DataType.Integer, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "ONLY(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    [DisplayName("ONLY: все NULL возвращают NULL")]
+    public async Task Only_all_nulls()
+    {
+        int?[] values = [null, null];
+        var inline = CreateSingleColumnInline(DataType.Integer, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "ONLY(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
     }
 
     [Test]
@@ -241,7 +267,7 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     [DisplayName("ONLY: работает для text")]
     public async Task Only_text()
     {
-        string?[] values = ["a", null, "a"];
+        string?[] values = ["a", "a"];
         var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
         var query = CreateSingleColumnQuery(inline, "ONLY(x)");
 
@@ -258,7 +284,6 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
             DataType.Time,
             [
                 "toDateTime('1970-01-01 03:04:05')",
-                "NULL",
                 "toDateTime('1970-01-01 03:04:05')"
             ]);
         var query = CreateSingleColumnQuery(inline, "ONLY(x)");
