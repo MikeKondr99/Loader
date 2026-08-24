@@ -48,9 +48,9 @@ NAME: [a-zA-Zа-яА-Я_][a-zA-Zа-яА-Я_0-9]*;
 
 BLOCKED_NAME: '[' (ESCAPED_BLOCKED_NAME | ~']')+? ']';
 
-INTEGER: [0-9]+;
+INTEGER: [0-9] [0-9_]*;
 
-NUMBER: ([0-9]* '.' [0-9]+) | ([0-9]+ '.' [0-9]+);
+NUMBER: ([0-9] [0-9_]* '.' [0-9_] [0-9_]*) | ('.' [0-9] [0-9_]*);
 
 LINE_COMMENT: '//' ~[\r\n]* -> skip;
 BLOCK_COMMENT: '/*' .*? '*/' -> skip;
@@ -58,7 +58,6 @@ BLOCK_COMMENT: '/*' .*? '*/' -> skip;
 WS: [ \t\r\n]+ -> skip;
 
 fragment ESCAPED_BLOCKED_NAME: '\\]';
-
 mode IN_STRING;
 
 DQUOTE_IN_STRING: ['] -> type(QUOTE), popMode;

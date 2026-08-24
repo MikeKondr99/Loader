@@ -63,13 +63,13 @@ public sealed class LoadParsingTests
         var load = ParseLoad(
             """
             orders:
-            FIRST 100
+            FIRST 1_000
             LOAD *
             FROM Csv(path='orders.csv');
             """);
 
         await Assert.That(load.TableName).IsEqualTo("orders");
-        await Assert.That(load.First).IsEqualTo(100);
+        await Assert.That(load.First).IsEqualTo(1000);
         await Assert.That(load.FirstPart).IsNotNull();
         await Assert.That(load.FirstPart!.Span.StartRow).IsEqualTo(2u);
         await Assert.That(load.Fields).IsNull();
@@ -280,14 +280,14 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD source options разбирает literal values без marker-ов")]
     public async Task Load_options()
     {
-        var load = ParseLoad("LOAD id AS id FROM Csv(path='orders.csv', delimiter=',', header=true, batch=100, ratio=10.5);");
+        var load = ParseLoad("LOAD id AS id FROM Csv(path='orders.csv', delimiter=',', header=true, batch=1_000, ratio=10_000.5_5);");
 
         await Assert.That(load.SourceCall.Options).Count().IsEqualTo(5);
         await AssertOption(load.SourceCall, "path", "orders.csv");
         await AssertOption(load.SourceCall, "delimiter", ",");
         await AssertOption(load.SourceCall, "header", true);
-        await AssertOption(load.SourceCall, "batch", 100L);
-        await AssertOption(load.SourceCall, "ratio", 10.5);
+        await AssertOption(load.SourceCall, "batch", 1000L);
+        await AssertOption(load.SourceCall, "ratio", 10000.55);
     }
 
     [Test]
@@ -331,7 +331,7 @@ public sealed class LoadParsingTests
     [DisplayName("LOAD Inline разбирает header и rows")]
     public async Task Load_inline_parses_header_and_rows()
     {
-        var load = ParseLoad("LOAD * FROM Inline(id, name, active, amount; 1, 'Mike', true, -10.5; -2, null, false, 0);");
+        var load = ParseLoad("LOAD * FROM Inline(id, name, active, amount; 1_000, 'Mike', true, -10_000.5_5; -2_000, null, false, 0);");
 
         await Assert.That(load.SourceCall.Name).IsEqualTo("Inline");
         await Assert.That(load.SourceCall.Options).IsEmpty();
@@ -339,11 +339,11 @@ public sealed class LoadParsingTests
         await Assert.That(load.SourceCall.InlineData!.Columns.Select(static column => column.Name).ToArray())
             .IsEquivalentTo(["id", "name", "active", "amount"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(load.SourceCall.InlineData.Rows).Count().IsEqualTo(2);
-        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[0].Values[0]).Value).IsEqualTo(1);
+        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[0].Values[0]).Value).IsEqualTo(1000);
         await Assert.That(((StringLiteral)load.SourceCall.InlineData.Rows[0].Values[1]).Value).IsEqualTo("Mike");
         await Assert.That(((BooleanLiteral)load.SourceCall.InlineData.Rows[0].Values[2]).Value).IsTrue();
-        await Assert.That(((NumberLiteral)load.SourceCall.InlineData.Rows[0].Values[3]).Value).IsEqualTo(-10.5);
-        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[1].Values[0]).Value).IsEqualTo(-2);
+        await Assert.That(((NumberLiteral)load.SourceCall.InlineData.Rows[0].Values[3]).Value).IsEqualTo(-10000.55);
+        await Assert.That(((IntegerLiteral)load.SourceCall.InlineData.Rows[1].Values[0]).Value).IsEqualTo(-2000);
         await Assert.That(load.SourceCall.InlineData.Rows[1].Values[1]).IsTypeOf<NullLiteral>();
     }
 
@@ -530,6 +530,7 @@ public sealed class LoadParsingTests
     [Arguments("LIMIT 10", 10L, null)]
     [Arguments("limit 10", 10L, null)]
     [Arguments("LIMIT 10 OFFSET 20", 10L, 20L)]
+    [Arguments("LIMIT 1_000 OFFSET 2_000", 1000L, 2000L)]
     [Arguments("LiMiT 10 OfFsEt 20", 10L, 20L)]
     [DisplayName("LOAD LIMIT OFFSET разбирается после source clauses")]
     public async Task Load_limit_offset_parses_integer_values(string clause, long expectedLimit, long? expectedOffset)
@@ -744,6 +745,21 @@ public sealed class LoadParsingTests
         await Assert.That(result.IsSuccess).IsFalse();
         await Assert.That(result.Error).IsTypeOf<LangError>();
         await Assert.That(result.Error.Message).IsNotEmpty();
+    }
+
+    [Test]
+    [Arguments("tmp: FIRST 10_ LOAD * FROM Numbers(10);")]
+    [Arguments("tmp: LOAD * FROM Numbers(10_) LIMIT 10;")]
+    [Arguments("tmp: LOAD * FROM Numbers(10) LIMIT 10_;")]
+    [Arguments("tmp: LOAD * FROM Inline(id; 1_);")]
+    [DisplayName("LOAD возвращает понятную ошибку для некорректного числового литерала")]
+    public async Task Load_invalid_numeric_literal_returns_domain_error(string text)
+    {
+        var result = Statement.Parse(text);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error).IsTypeOf<LangError>();
+        await Assert.That(result.Error.Message).Contains("Некорректный числовой литерал");
     }
 
     private static LoadStatement ParseLoad(string text)

@@ -6,6 +6,7 @@ public sealed class LiteralsTests
 {
     [Test]
     [Arguments("name", "name")]
+    [Arguments("_10", "_10")]
     [Arguments("[first name]", "first name")]
     [Arguments("[ first name  ]", " first name  ")]
     [Arguments(@"[arr[i\]]", "arr[i]")]
@@ -58,6 +59,10 @@ public sealed class LiteralsTests
 
     [Test]
     [Arguments("1.3", 1.3)]
+    [Arguments("1_000.25", 1000.25)]
+    [Arguments("1__000.25", 1000.25)]
+    [Arguments("1_000_000.125_5", 1000000.1255)]
+    [Arguments(".123_456", .123456)]
     [Arguments("0.0", 0.0)]
     [Arguments(".3", .3)]
     [Arguments("5.0", 5.0)]
@@ -85,6 +90,9 @@ public sealed class LiteralsTests
     [Test]
     [Arguments("0", 0L)]
     [Arguments("10", 10L)]
+    [Arguments("1_000", 1000L)]
+    [Arguments("1__000", 1000L)]
+    [Arguments("1_000_000", 1000000L)]
     [Arguments("123", 123L)]
     [Arguments("4567", 4567L)]
     [Arguments("9999", 9999L)]
@@ -116,10 +124,27 @@ public sealed class LiteralsTests
     [Test]
     [Arguments("#")]
     [Arguments("a % 3")]
+    [Arguments("1_")]
+    [Arguments("1_.0")]
+    [Arguments("1._0")]
+    [Arguments("1.")]
     public async Task ShouldThrowUnexpectedToken(string input)
     {
         var result = Expr.Parse(input);
         await Assert.That(result.IsSuccess).IsFalse();
+    }
+
+    [Test]
+    [Arguments("1_")]
+    [Arguments("1_.0")]
+    [Arguments("1._0")]
+    [DisplayName("Некорректный числовой литерал возвращает понятную ошибку")]
+    public async Task Invalid_numeric_literal_returns_domain_error(string input)
+    {
+        var result = Expr.Parse(input);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Error.Message).Contains("Некорректный числовой литерал");
     }
 
     private static Expr Parse(string text)

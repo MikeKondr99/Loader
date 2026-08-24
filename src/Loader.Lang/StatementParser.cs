@@ -185,7 +185,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         return new FirstPart
         {
-            Value = long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture),
+            Value = NumericLiteralText.ParseInteger(context.INTEGER().GetText(), Span(context)),
             Span = Span(context)
         };
     }
@@ -311,7 +311,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     {
         if (context.inline_integer() is { } integer)
         {
-            var value = long.Parse(integer.INTEGER().GetText(), CultureInfo.InvariantCulture);
+            var value = NumericLiteralText.ParseInteger(integer.INTEGER().GetText(), Span(integer));
             if (integer.MINUS() is not null)
             {
                 value = -value;
@@ -325,7 +325,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
 
         if (context.inline_number() is { } number)
         {
-            var value = double.Parse(number.NUMBER().GetText(), CultureInfo.InvariantCulture);
+            var value = NumericLiteralText.ParseNumber(number.NUMBER().GetText(), Span(number));
             if (number.MINUS() is not null)
             {
                 value = -value;
@@ -437,7 +437,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         // 2. LIMIT принимает только INTEGER, без expression, чтобы не смешивать синтаксис с вычислениями.
         return new LimitPart
         {
-            Value = long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture),
+            Value = NumericLiteralText.ParseInteger(context.INTEGER().GetText(), Span(context)),
             Span = Span(context)
         };
     }
@@ -455,7 +455,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
         }
 
         // 2. OFFSET принимает только INTEGER и по грамматике разрешен только после LIMIT.
-        return long.Parse(context.INTEGER().GetText(), CultureInfo.InvariantCulture);
+        return NumericLiteralText.ParseInteger(context.INTEGER().GetText(), Span(context));
     }
 
     /// <summary>

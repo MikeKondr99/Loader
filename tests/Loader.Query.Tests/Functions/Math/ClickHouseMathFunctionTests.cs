@@ -11,7 +11,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("2 + 2", 4)]
+    [Arguments("1_000 + 2_000", 3000)]
     [Arguments("2.5 + 3.5", 6.0)]
+    [Arguments("1_000.25 + 2_000.75", 3001.0)]
     [Arguments("2.5 + 4", 6.5)]
     [Arguments("Type(3 + 3)", "int!")]
     [Arguments("2 + null", null)]
