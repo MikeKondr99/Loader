@@ -213,6 +213,14 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Reverse('')", "")]
     [Arguments("Reverse(null)", null)]
     [Arguments("Reverse('Привет мир!')", "!рим тевирП")]
+    [Arguments("Reverse('é')", "́e")]
+    // CH 24.8 reverseUTF8 ломает 4-byte UTF-8 code points вроде emoji.
+    // На CH 26.6 эти кейсы уже проходят, точную минимальную версию исправления нужно определить отдельно.
+    // [Arguments("Reverse('😀👍👋')", "👋👍😀")]
+    // [Arguments("Reverse('a😀b👍c')", "c👍b😀a")]
+    // [Arguments("Reverse('👨‍👩‍👧‍👦')", "👦‍👧‍👩‍👨")]
+    // [Arguments("Reverse('🇷🇺')", "🇺🇷")]
+    // [Arguments("Reverse('👍🏽')", "🏽👍")]
     public Task FuncReverseTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);

@@ -85,6 +85,13 @@ public sealed class StringFunctions : FunctionDescriptor
             .Doc("Разворачивает строку")
             .Arg("input", DataType.Text)
             .Returns(DataType.Text)
+            // Проверено: CH 24.8 reverseUTF8 ломает 4-byte UTF-8 code points вроде emoji:
+            // reverseUTF8('😀') возвращает невалидные байты 80 98 9F F0.
+            // Проверено: CH 26.6 reverseUTF8 для таких code points уже работает.
+            // Точную минимальную версию, где это исправлено, нужно определить отдельно.
+            // Если нужно поддержать старый CH без обновления, можно выбрать более корректный, но медленный fallback:
+            // .CustomNullPropagation(_ => true)
+            // .Template($"if(isNull({0}), CAST(NULL AS Nullable(String)), arrayStringConcat(arrayReverse(extractAll(assumeNotNull({0}), '.')), ''))");
             .Template($"reverseUTF8({0})");
 
         Binary("+", DataType.Text, DataType.Text)
