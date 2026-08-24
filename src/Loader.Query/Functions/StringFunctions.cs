@@ -11,7 +11,7 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("input", DataType.Text)
             .Arg("start", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"SUBSTRING({0}, {1}, LENGTH({0}) - ({1} - 1))");
+            .Template($"substringUTF8({0}, {1}, lengthUTF8({0}) - ({1} - 1))");
 
         Method("Substring")
             .Doc("Возвращает подстроку указанной длины")
@@ -19,7 +19,7 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("start", DataType.Integer)
             .Arg("count", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"SUBSTRING({0}, {1}, {2})");
+            .Template($"substringUTF8({0}, {1}, {2})");
 
         Method("PadLeft")
             .Doc("Дополняет строку слева пробелами до указанной длины")
@@ -55,13 +55,13 @@ public sealed class StringFunctions : FunctionDescriptor
             .Doc("Преобразует текст в нижний регистр")
             .Arg("input", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"LOWER({0})");
+            .Template($"lowerUTF8({0})");
 
         Method("Upper")
             .Doc("Преобразует текст в верхний регистр")
             .Arg("input", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"UPPER({0})");
+            .Template($"upperUTF8({0})");
 
         Method("Trim")
             .Doc("Удаляет пробелы в начале и конце строки")

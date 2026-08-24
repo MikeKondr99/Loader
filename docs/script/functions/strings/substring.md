@@ -4,7 +4,7 @@
 
 Позиция `start` начинается с `1`.
 
-TODO: текущая реализация `Substring` использует byte-based поведение ClickHouse `SUBSTRING`, поэтому не является Unicode-safe для кириллицы и emoji. Нужно перейти на UTF-8-safe вариант.
+Функция работает по UTF-8 символам, а не по байтам.
 
 ## Substring(value, start)
 
@@ -20,6 +20,8 @@ TODO: текущая реализация `Substring` использует byte-
 | `Substring('Hello World!', 5)` | `'o World!'` |
 | `Substring('Hello World!', 12)` | `'!'` |
 | `Substring('Hello World!', 13)` | `''` |
+| `Substring('Привет мир!', 3)` | `'ивет мир!'` |
+| `Substring('😀👍👋', 2)` | `'👍👋'` |
 | `Substring(null, 1)` | `null` |
 | `Substring('Hello World!', null)` | `null` |
 
@@ -41,5 +43,8 @@ TODO: текущая реализация `Substring` использует byte-
 | `Substring('Hello World!', 1, 5)` | `'Hello'` |
 | `Substring('Hello World!', 5, 0)` | `''` |
 | `Substring('Hello World!', 5, -1)` | `'o World'` |
+| `Substring('Привет мир!', 3, 4)` | `'ивет'` |
+| `Substring('😀👍👋', 2, 1)` | `'👍'` |
+| `Substring('a😀b👍c', 2, 3)` | `'😀b👍'` |
 | `Substring(null, 1, 3)` | `null` |
 | `Substring('Hello World!', 1, null)` | `null` |
