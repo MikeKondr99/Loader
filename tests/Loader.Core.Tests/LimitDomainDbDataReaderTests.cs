@@ -62,9 +62,12 @@ public sealed class LimitDomainDataReaderTests
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader.Normalize();
 
-        await Assert.That(() => reader.Limit(-1))
-            .ThrowsExactly<ArgumentOutOfRangeException>()
-            .WithMessage("Limit must be greater than or equal to zero. (Parameter 'count')\r\nActual value was -1.");
+        var exception = await Assert.That(() => reader.Limit(-1))
+            .ThrowsExactly<ArgumentOutOfRangeException>();
+
+        await Assert.That(exception!.ParamName).IsEqualTo("count");
+        await Assert.That(exception.ActualValue).IsEqualTo(-1);
+        await Assert.That(exception.Message).Contains("Limit must be greater than or equal to zero.");
     }
 
     [Test]

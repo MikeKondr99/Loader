@@ -11,7 +11,8 @@ public sealed class ConditionalFunctions : FunctionDescriptor
                      DataType.Number,
                      DataType.Text,
                      DataType.Integer,
-                     DataType.DateTime
+                     DataType.DateTime,
+                     DataType.Time
                  })
         {
             Function("If")
@@ -25,7 +26,7 @@ public sealed class ConditionalFunctions : FunctionDescriptor
             Function("Case")
                 .Doc("Возвращает значение, если условие истинно, иначе NULL")
                 .Arg("condition", DataType.Boolean)
-                .ReqArg("then", type)
+                .Arg("then", type)
                 .Returns(type)
                 .CustomNullPropagation(static _ => true)
                 .Template($"CASE WHEN {0} THEN {1} ELSE NULL END");
@@ -34,7 +35,7 @@ public sealed class ConditionalFunctions : FunctionDescriptor
                 .Doc("Возвращает input, если он не NULL, иначе возвращает alt при истинном condition")
                 .Arg("input", type)
                 .Arg("condition", DataType.Boolean)
-                .ReqArg("alt", type)
+                .Arg("alt", type)
                 .Returns(type)
                 .CustomNullPropagation(static _ => true)
                 .Template($"COALESCE({0}, CASE WHEN {1} THEN {2} ELSE NULL END)");
@@ -63,6 +64,7 @@ public sealed class ConditionalFunctions : FunctionDescriptor
                      DataType.Text,
                      DataType.Integer,
                      DataType.DateTime,
+                     DataType.Time,
                      DataType.Boolean,
                      DataType.Unknown
                  })

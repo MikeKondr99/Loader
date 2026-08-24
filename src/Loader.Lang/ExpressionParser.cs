@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.RegularExpressions;
 using Antlr4.Runtime;
 using Antlr4.Runtime.Tree;
@@ -143,7 +142,7 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
 
     public override Expr VisitInteger(LangParser.IntegerContext context)
     {
-        return new IntegerLiteral(long.Parse(context.GetText(), CultureInfo.InvariantCulture))
+        return new IntegerLiteral(NumericLiteralText.ParseInteger(context.GetText(), Span(context)))
         {
             Span = Span(context)
         };
@@ -151,7 +150,7 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
 
     public override Expr VisitNumber(LangParser.NumberContext context)
     {
-        return new NumberLiteral(double.Parse(context.GetText(), CultureInfo.InvariantCulture))
+        return new NumberLiteral(NumericLiteralText.ParseNumber(context.GetText(), Span(context)))
         {
             Span = Span(context)
         };

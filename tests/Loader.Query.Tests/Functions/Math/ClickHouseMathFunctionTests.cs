@@ -11,7 +11,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("2 + 2", 4)]
+    [Arguments("1_000 + 2_000", 3000)]
     [Arguments("2.5 + 3.5", 6.0)]
+    [Arguments("1_000.25 + 2_000.75", 3001.0)]
     [Arguments("2.5 + 4", 6.5)]
     [Arguments("Type(3 + 3)", "int!")]
     [Arguments("2 + null", null)]
@@ -48,14 +50,17 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [Arguments("10 / 2", 5)]
-    [Arguments("10 / 6", 1)]
-    [Arguments("-5 / 2", -2)]
-    [Arguments("5 / -2", -2)]
-    [Arguments("-5 / -2", 2)]
-    [Arguments("If((100 / 3) > 33.2, 'fail', 'success')", "success")]
+    [Arguments("10 / 2", 5.0)]
+    [Arguments("10 / 3", 3.3333333333333335)]
+    [Arguments("10 / 6", 1.6666666666666667)]
+    [Arguments("-5 / 2", -2.5)]
+    [Arguments("5 / -2", -2.5)]
+    [Arguments("-5 / -2", 2.5)]
+    [Arguments("Type(10 / 3)", "num")]
+    [Arguments("RawType(10 / 3)", "Nullable(Float64)")]
+    [Arguments("If((100 / 3) > 33.2, 'success', 'fail')", "success")]
     [Arguments("If((10 / 3) > 3.4, 1, 0)", 0)]
-    [Arguments("If((-5 / 2) > -2.5, 1, 0)", 1)]
+    [Arguments("If((-5 / 2) > -2.5, 1, 0)", 0)]
     [Arguments("10.0 / 4.0", 2.5)]
     [Arguments("1 / 0", null)]
     [Arguments("1.0 / 0.0", null)]
@@ -67,11 +72,49 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("Div(10, 3)", 3)]
+    [Arguments("Div(10, 6)", 1)]
+    [Arguments("Div(7, 2)", 3)]
+    [Arguments("Div(7.1, 2.3)", 3)]
+    [Arguments("Div(7.1, 2)", 3)]
+    [Arguments("Div(7, 2.3)", 3)]
+    [Arguments("Div(9, 3)", 3)]
+    [Arguments("Div(-4, 3)", -1)]
+    [Arguments("Div(4, -3)", -1)]
+    [Arguments("Div(-4, -3)", 1)]
+    [Arguments("Div(-5, 2)", -2)]
+    [Arguments("Div(5, -2)", -2)]
+    [Arguments("Div(-5, -2)", 2)]
+    [Arguments("Div(1, 0)", null)]
+    [Arguments("Div(1.0, 0.0)", null)]
+    [Arguments("Type(Div(10, 3))", "int")]
+    [Arguments("Type(Div(7.1, 2.3))", "int")]
+    [Arguments("Type(Div(1, 0))", "int")]
+    [Arguments("RawType(Div(10, 3))", "Nullable(UInt8)")]
+    [Arguments("RawType(Div(7.1, 2.3))", "Nullable(Int64)")]
+    public Task Integer_divide(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
     [Arguments("2 + 2 * 2", 6)]
     [Arguments("(2 + 2) * 2", 8)]
     [Arguments("(-10 + 1).Sign()", -1)]
     [Arguments("-10 + 1.Sign()", -9)]
     public Task Priority(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
+    [Arguments("Pow(2.0, 3.0)", 8.0)]
+    [Arguments("Pow(4.0, 0.5)", 2.0)]
+    [Arguments("Pow(2.0, -1.0)", 0.5)]
+    [Arguments("2.0 ^ 3.0", 8.0)]
+    [Arguments("Pow(null, 2.0)", null)]
+    [Arguments("Pow(2.0, null)", null)]
+    public Task Power(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
     }
