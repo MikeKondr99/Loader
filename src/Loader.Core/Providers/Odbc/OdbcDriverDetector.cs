@@ -24,7 +24,8 @@ public static class OdbcDriverDetector
                    || normalized.Contains("msodbcsql", StringComparison.Ordinal) => OdbcDriverKind.SqlServer,
             _ when normalized.Contains("postgresql", StringComparison.Ordinal)
                    || normalized.Contains("psqlodbc", StringComparison.Ordinal) => OdbcDriverKind.Postgres,
-            _ when normalized.Contains("mariadb", StringComparison.Ordinal) => OdbcDriverKind.MariaDb,
+            _ when normalized.Contains("mariadb", StringComparison.Ordinal)
+                   || normalized.Contains("maodbc", StringComparison.Ordinal) => OdbcDriverKind.MariaDb,
             _ when normalized.Contains("mysql", StringComparison.Ordinal) => OdbcDriverKind.MySql,
             _ when normalized.Contains("oracle", StringComparison.Ordinal) => OdbcDriverKind.Oracle,
             _ when normalized.Contains("sqlite", StringComparison.Ordinal) => OdbcDriverKind.SQLite,

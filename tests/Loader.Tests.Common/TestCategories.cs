@@ -6,6 +6,8 @@ public static class TestCategories
 
     public const string Postgres = "Postgres";
 
+    public const string OdbcMariaDb = "OdbcMariaDb";
+
     public const string SqlServer = "SqlServer";
 
     public const string Oracle = "Oracle";

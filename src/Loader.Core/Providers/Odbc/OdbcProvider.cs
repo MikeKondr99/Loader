@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Data.Odbc;
+using System.Diagnostics;
 using Loader.Core.Abstractions;
 using Loader.Core.Providers.Sql;
 using Loader.Core.Sources;
@@ -16,6 +17,8 @@ namespace Loader.Core.Providers.Odbc;
 /// </remarks>
 public sealed class OdbcProvider : IProvider<IDatabaseSource, SqlTableConfig>
 {
+    private static readonly ActivitySource ActivitySource = new("Loader.Core.Odbc");
+
     /// <summary>
     /// Provider marker, используемый в скриптах и диагностике.
     /// </summary>
@@ -33,24 +36,45 @@ public sealed class OdbcProvider : IProvider<IDatabaseSource, SqlTableConfig>
         SqlTableConfig config,
         CancellationToken cancellationToken = default)
     {
+        using var activity = ActivitySource.StartActivity("OdbcProvider.OpenReader");
+        activity?.SetTag("db.system", "odbc");
+        activity?.SetTag("db.query.text", config.Sql);
+
         var driverInfo = OdbcDriverDetector.FromConnectionString(source.ConnectionString);
+        SetDriverTags(activity, driverInfo);
+
         var connection = new OdbcConnection(source.ConnectionString);
 
         try
         {
-            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            using (ActivitySource.StartActivity("OdbcProvider.ConnectionOpen"))
+            {
+                await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             driverInfo = OdbcDriverDetector.FromDriverName(connection.Driver);
+            SetDriverTags(activity, driverInfo);
 
             var command = connection.CreateCommand();
             command.CommandText = config.Sql;
 
-            var reader = await command
-                .ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.CloseConnection, cancellationToken)
-                .ConfigureAwait(false);
-            return new OdbcTemporalDataReader(reader);
+            DbDataReader reader;
+            using (ActivitySource.StartActivity("OdbcProvider.ExecuteReader"))
+            {
+                reader = await command
+                    .ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.CloseConnection, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
+            using (ActivitySource.StartActivity("OdbcProvider.WrapReader"))
+            {
+                return new OdbcTemporalDataReader(reader);
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            activity?.SetStatus(ActivityStatusCode.Error);
+            activity?.AddException(ex);
             await connection.DisposeAsync().ConfigureAwait(false);
 
             var exception = new DbExecutionException(Kind, config.Sql, ErrorMessage(config.Sql, driverInfo), ex);
@@ -58,6 +82,13 @@ public sealed class OdbcProvider : IProvider<IDatabaseSource, SqlTableConfig>
             exception.Data["OdbcDriverName"] = driverInfo.Name;
             throw exception;
         }
+    }
+
+    private static void SetDriverTags(Activity? activity, OdbcDriverInfo driverInfo)
+    {
+        activity?
+            .SetTag("odbc.driver.name", driverInfo.Name)
+            .SetTag("odbc.driver.kind", driverInfo.Kind.ToString());
     }
 
     private static string ErrorMessage(string sql, OdbcDriverInfo driverInfo)

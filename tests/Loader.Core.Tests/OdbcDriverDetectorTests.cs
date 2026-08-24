@@ -56,6 +56,7 @@ public sealed class OdbcDriverDetectorTests
         yield return ("Cloudera Hive ODBC Driver", OdbcDriverKind.Hive);
         yield return ("MySQL ODBC 8.0 Unicode Driver", OdbcDriverKind.MySql);
         yield return ("MariaDB ODBC 3.1 Driver", OdbcDriverKind.MariaDb);
+        yield return ("maodbc.dll", OdbcDriverKind.MariaDb);
         yield return ("Oracle in OraClient19Home1", OdbcDriverKind.Oracle);
         yield return ("SQLite3 ODBC Driver", OdbcDriverKind.SQLite);
         yield return ("Microsoft Access Driver (*.mdb, *.accdb)", OdbcDriverKind.Access);

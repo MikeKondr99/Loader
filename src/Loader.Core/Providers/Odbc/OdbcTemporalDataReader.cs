@@ -84,6 +84,9 @@ public sealed class OdbcTemporalDataReader : DbDataReaderDecorator
             return table;
         }
 
+        table = table.Copy();
+        table.Columns[SchemaTableColumn.DataType]!.ReadOnly = false;
+
         foreach (DataRow row in table.Rows)
         {
             if (row[SchemaTableColumn.ColumnOrdinal] is not int ordinal)

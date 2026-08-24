@@ -1,6 +1,8 @@
 ﻿using TUnit.Core;
 using TUnit.Core.Interfaces;
 
+using System.Diagnostics;
+
 namespace Loader.Tests.Common;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, Inherited = true, AllowMultiple = false)]
@@ -111,6 +113,8 @@ public sealed class TestWithDependencyAttribute :
                 await CreateDependencyFactoryAsync<ClickHouseTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
             DatabaseDependency.Postgres =>
                 await CreateDependencyFactoryAsync<PostgresTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
+            DatabaseDependency.OdbcMariaDb =>
+                await CreateDependencyFactoryAsync<OdbcMariaDbTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
             DatabaseDependency.SqlServer =>
                 await CreateDependencyFactoryAsync<SqlServerTestDatabase>(dataGeneratorMetadata).ConfigureAwait(false),
             DatabaseDependency.Oracle =>
@@ -158,6 +162,7 @@ public sealed class TestWithDependencyAttribute :
             DatabaseDependency.ClickHouse => TestCategories.ClickHouse,
             DatabaseDependency.ClickHouseDwh => null,
             DatabaseDependency.Postgres => TestCategories.Postgres,
+            DatabaseDependency.OdbcMariaDb => TestCategories.OdbcMariaDb,
             DatabaseDependency.SqlServer => TestCategories.SqlServer,
             DatabaseDependency.Oracle => TestCategories.Oracle,
             DatabaseDependency.ApacheHive => TestCategories.ApacheHive,
@@ -179,6 +184,7 @@ public sealed class TestWithDependencyAttribute :
         {
             DatabaseDependency.ClickHouse or DatabaseDependency.ClickHouseDwh => new ClickHouseParallelLimit(),
             DatabaseDependency.Postgres => new PostgresParallelLimit(),
+            DatabaseDependency.OdbcMariaDb => new OdbcMariaDbParallelLimit(),
             DatabaseDependency.SqlServer => new SqlServerParallelLimit(),
             DatabaseDependency.Oracle => new OracleParallelLimit(),
             DatabaseDependency.ApacheHive => new ApacheHiveParallelLimit(),
@@ -194,15 +200,22 @@ public sealed class TestWithDependencyAttribute :
         }
 
         if (!CheckExternalDependencies ||
-            !dependencies.Contains(DatabaseDependency.ApacheHive) ||
             TestEnvironment.IsCi)
         {
             return null;
         }
 
-        return ApacheHiveDriver.IsInstalled
-            ? null
-            : "Apache Hive ODBC driver is not installed.";
+        if (dependencies.Contains(DatabaseDependency.ApacheHive) && !OdbcDriver.ApacheHiveInstalled)
+        {
+            return "Apache Hive ODBC driver is not installed.";
+        }
+
+        if (dependencies.Contains(DatabaseDependency.OdbcMariaDb) && !OdbcDriver.OdbcMariaDbInstalled)
+        {
+            return "MariaDB ODBC driver is not installed.";
+        }
+
+        return null;
     }
 
     private bool ShouldSkipOracle()
@@ -210,39 +223,48 @@ public sealed class TestWithDependencyAttribute :
         return SkipOracle && dependencies.Contains(DatabaseDependency.Oracle);
     }
 
-    private static class ApacheHiveDriver
+    private static class OdbcDriver
     {
-        private static readonly Lazy<bool> Installed = new(Detect);
+        private static readonly Lazy<bool> ApacheHive = new(() => Detect("LOADER_TEST_APACHE_HIVE_ODBC", "Hive"));
+        private static readonly Lazy<bool> OdbcMariaDb = new(() => Detect("LOADER_TEST_MARIADB_ODBC", "MariaDB"));
 
-        public static bool IsInstalled => Installed.Value;
+        public static bool ApacheHiveInstalled => ApacheHive.Value;
 
-        private static bool Detect()
+        public static bool OdbcMariaDbInstalled => OdbcMariaDb.Value;
+
+        private static bool Detect(string overrideEnvironmentVariable, string driverNamePart)
         {
-            if (Environment.GetEnvironmentVariable("LOADER_TEST_APACHE_HIVE_ODBC") == "1")
+            if (Environment.GetEnvironmentVariable(overrideEnvironmentVariable) == "1")
             {
                 return true;
             }
 
-            if (!OperatingSystem.IsWindows())
+            if (OperatingSystem.IsWindows())
             {
-                return false;
+                return HasWindowsOdbcDriver(Microsoft.Win32.Registry.LocalMachine) ||
+                       HasWindowsOdbcDriver(Microsoft.Win32.Registry.CurrentUser);
             }
 
-            return HasWindowsOdbcDriver(Microsoft.Win32.Registry.LocalMachine) ||
-                   HasWindowsOdbcDriver(Microsoft.Win32.Registry.CurrentUser);
-        }
+            return HasUnixOdbcDriver(driverNamePart);
 
-        [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-        private static bool HasWindowsOdbcDriver(Microsoft.Win32.RegistryKey root)
-        {
-            try
+            [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+            bool HasWindowsOdbcDriver(Microsoft.Win32.RegistryKey root)
             {
-                using var key = root.OpenSubKey(@"SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers");
-                return key?.GetValueNames()
-                    .Any(static name => name.Contains("Hive", StringComparison.OrdinalIgnoreCase)) == true;
+                try
+                {
+                    using var key = root.OpenSubKey(@"SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers");
+                    return key?.GetValueNames()
+                        .Any(name => name.Contains(driverNamePart, StringComparison.OrdinalIgnoreCase)) == true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
-            catch
+
+            static bool HasUnixOdbcDriver(string namePart)
             {
+                // TODO: сделать выбор odbc драйвера для unix
                 return false;
             }
         }
