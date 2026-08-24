@@ -67,7 +67,7 @@ public sealed class TestWithDependencyAttribute :
     private async IAsyncEnumerable<Func<Task<object?[]?>>> GenerateDataSourceAsync(
         DataGeneratorMetadata dataGeneratorMetadata)
     {
-        if (ShouldSkipOracle())
+        if (ShouldSkipOracle() || ShouldSkipExternalDependency())
         {
             yield break;
         }
@@ -193,6 +193,11 @@ public sealed class TestWithDependencyAttribute :
             return "Oracle tests are temporarily skipped.";
         }
 
+        if (ShouldSkipExternalDependency())
+        {
+            return "External database tests are disabled.";
+        }
+
         if (!CheckExternalDependencies ||
             !dependencies.Contains(DatabaseDependency.ApacheHive) ||
             TestEnvironment.IsCi)
@@ -208,6 +213,11 @@ public sealed class TestWithDependencyAttribute :
     private bool ShouldSkipOracle()
     {
         return SkipOracle && dependencies.Contains(DatabaseDependency.Oracle);
+    }
+
+    private bool ShouldSkipExternalDependency()
+    {
+        return !TestEnvironment.ExternalDatabasesEnabled;
     }
 
     private static class ApacheHiveDriver
