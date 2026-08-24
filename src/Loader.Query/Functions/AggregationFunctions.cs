@@ -41,7 +41,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
                 .Template($"if(COUNT({0}) = 0, NULL, arrayElement(topK(1)({0}), 1))");
         }
 
-        foreach (var type in new[] { DataType.Integer, DataType.Number, DataType.DateTime, DataType.Text })
+        foreach (var type in new[] { DataType.Integer, DataType.Number, DataType.DateTime, DataType.Time, DataType.Text })
         {
             Function("COUNT_DISTINCT")
                 .Doc("Подсчитывает количество уникальных отличных от NULL значений")

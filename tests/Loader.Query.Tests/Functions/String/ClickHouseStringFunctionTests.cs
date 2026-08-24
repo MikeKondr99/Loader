@@ -41,6 +41,12 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Upper('Hello World!')", "HELLO WORLD!")]
+    [Arguments("Upper('')", "")]
+    [Arguments("Upper('ALREADY UPPER')", "ALREADY UPPER")]
+    [Arguments("Upper('abc 123 !?')", "ABC 123 !?")]
+    [Arguments("Upper('ПрИвЕт Мир!')", "ПрИвЕт Мир!")]
+    [Arguments("Upper('😀Hello👍')", "😀HELLO👍")]
+    [Arguments("Upper(null)", null)]
     public Task FuncUpperTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -48,6 +54,12 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Lower('Hello World!')", "hello world!")]
+    [Arguments("Lower('')", "")]
+    [Arguments("Lower('already lower')", "already lower")]
+    [Arguments("Lower('ABC 123 !?')", "abc 123 !?")]
+    [Arguments("Lower('ПрИвЕт Мир!')", "ПрИвЕт Мир!")]
+    [Arguments("Lower('😀Hello👍')", "😀hello👍")]
+    [Arguments("Lower(null)", null)]
     public Task FuncLowerTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -59,6 +71,9 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Trim('')", "")]
     [Arguments("Trim('привет  ')", "привет")]
     [Arguments("Trim('😀  👍  ')", "😀  👍")]
+    [Arguments("Trim('\\thello\\t')", "\thello\t")]
+    [Arguments("Trim('\\nhello\\n')", "\nhello\n")]
+    [Arguments("Trim('\\r\\n hello \\t')", "\r\n hello \t")]
     [Arguments("Trim(null)", null)]
     public Task FuncTrimTests(string expr, object? expected)
     {
@@ -71,6 +86,9 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("TrimLeft('')", "")]
     [Arguments("TrimLeft('  привет')", "привет")]
     [Arguments("TrimLeft('  😀👍')", "😀👍")]
+    [Arguments("TrimLeft('\\thello\\t')", "\thello\t")]
+    [Arguments("TrimLeft('\\nhello\\n')", "\nhello\n")]
+    [Arguments("TrimLeft('\\r\\n hello \\t')", "\r\n hello \t")]
     [Arguments("TrimLeft(null)", null)]
     public Task FuncTrimLeftTests(string expr, object? expected)
     {
@@ -83,6 +101,9 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("TrimRight('')", "")]
     [Arguments("TrimRight('привет  ')", "привет")]
     [Arguments("TrimRight('😀👍  ')", "😀👍")]
+    [Arguments("TrimRight('\\thello\\t')", "\thello\t")]
+    [Arguments("TrimRight('\\nhello\\n')", "\nhello\n")]
+    [Arguments("TrimRight('\\r\\n hello \\t')", "\r\n hello \t")]
     [Arguments("TrimRight(null)", null)]
     public Task FuncTrimRightTests(string expr, object? expected)
     {
@@ -90,6 +111,7 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("PadLeft('abc', null)", "")]
     [Arguments("PadLeft('abc', 5)", "  abc")]
     [Arguments("PadLeft('abc', 3)", "abc")]
     [Arguments("PadLeft('abc', 2)", "ab")]
@@ -105,6 +127,7 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("PadRight('abc', null)", "")]
     [Arguments("PadRight('abc', 5)", "abc  ")]
     [Arguments("PadRight('abc', 3)", "abc")]
     [Arguments("PadRight('abc', 2)", "ab")]
@@ -120,6 +143,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("PadLeft('abc', null, '*')", "")]
+    [Arguments("PadLeft('abc', 5, null)", null)]
     [Arguments("PadLeft('abc', 5, '*')", "**abc")]
     [Arguments("PadLeft('abc', 5, '0')", "00abc")]
     [Arguments("PadLeft('abc', 3, '*')", "abc")]
@@ -138,6 +163,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("PadRight('abc', null, '*')", "")]
+    [Arguments("PadRight('abc', 5, null)", null)]
     [Arguments("PadRight('abc', 5, '*')", "abc**")]
     [Arguments("PadRight('abc', 5, '0')", "abc00")]
     [Arguments("PadRight('abc', 3, '*')", "abc")]
@@ -156,8 +183,18 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("Substring('Hello World!',1)", "Hello World!")]
     [Arguments("Substring('Hello World!',5)", "o World!")]
+    [Arguments("Substring('Hello World!',12)", "!")]
+    [Arguments("Substring('Hello World!',13)", "")]
     [Arguments("Substring('Hello World!',5,3)", "o W")]
+    [Arguments("Substring('Hello World!',1,5)", "Hello")]
+    [Arguments("Substring('Hello World!',5,0)", "")]
+    [Arguments("Substring('Hello World!',5,-1)", "o World")]
+    [Arguments("Substring(null,1)", null)]
+    [Arguments("Substring('Hello World!',null)", null)]
+    [Arguments("Substring(null,1,3)", null)]
+    [Arguments("Substring('Hello World!',1,null)", null)]
     public Task FuncSubstringTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -165,6 +202,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Reverse('Hello')", "olleH")]
+    [Arguments("Reverse('')", "")]
+    [Arguments("Reverse(null)", null)]
     [Arguments("Reverse('Привет мир!')", "!рим тевирП")]
     public Task FuncReverseTests(string expr, object? expected)
     {
@@ -301,12 +340,14 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Index('abc', 'b')", 2)]
     [Arguments("Index('abc', 'c')", 3)]
     [Arguments("Index('abc', 'bc')", 2)]
-    [Arguments("Index('aaaaAaaa', 'A')", 5)]
+    [Arguments("LastIndex('aaaaAaaa', 'A')", 5)]
     [Arguments("Index('abc', 'd')", null)]
     [Arguments("Index('', 'a')", null)]
     [Arguments("Index('abc', '')", 1)]
     [Arguments("Index('aabaa', 'aa')", 1)]
     [Arguments("Index('привет', 'ив')", 3)]
+    [Arguments("Index(null, 'a')", null)]
+    [Arguments("Index('abc', null)", null)]
     public Task FuncIndexTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -323,6 +364,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("LastIndex('abc', '')", 4)]
     [Arguments("LastIndex('aabaa', 'aa')", 4)]
     [Arguments("LastIndex('привет', 'е')", 5)]
+    [Arguments("LastIndex(null, 'a')", null)]
+    [Arguments("LastIndex('abc', null)", null)]
     public Task FuncLastIndexTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -352,6 +395,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("'😀👍👋'.Contains('👍')", true)]
     [Arguments("'Apple'.Contains('P')", false)]
     [Arguments("'Apple'.Contains('p')", true)]
+    [Arguments("Contains(null,'a')", null)]
+    [Arguments("Contains('abc',null)", null)]
     public Task FuncContainsTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -367,6 +412,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("'😀👍👋'.StartsWith('😀')", true)]
     [Arguments("'Apple'.StartsWith('A')", true)]
     [Arguments("'Apple'.StartsWith('a')", false)]
+    [Arguments("StartsWith(null,'a')", null)]
+    [Arguments("StartsWith('abc',null)", null)]
     public Task FuncStartsWithTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
@@ -382,6 +429,8 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     [Arguments("'😀👍👋'.EndsWith('👋')", true)]
     [Arguments("'Apple'.EndsWith('e')", true)]
     [Arguments("'Apple'.EndsWith('E')", false)]
+    [Arguments("EndsWith(null,'a')", null)]
+    [Arguments("EndsWith('abc',null)", null)]
     public Task FuncEndsWithTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);

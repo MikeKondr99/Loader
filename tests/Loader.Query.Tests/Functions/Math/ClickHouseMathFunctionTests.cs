@@ -77,6 +77,18 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("Pow(2.0, 3.0)", 8.0)]
+    [Arguments("Pow(4.0, 0.5)", 2.0)]
+    [Arguments("Pow(2.0, -1.0)", 0.5)]
+    [Arguments("2.0 ^ 3.0", 8.0)]
+    [Arguments("Pow(null, 2.0)", null)]
+    [Arguments("Pow(2.0, null)", null)]
+    public Task Power(string expression, object? expected)
+    {
+        return AssertExpressionAsync(expression, expected);
+    }
+
+    [Test]
     [Arguments("E()", 2.718281828459045)]
     [Arguments("E() > 2.71", true)]
     [Arguments("E() < 2.72", true)]
