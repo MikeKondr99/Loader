@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Data.Common;
 using System.Text;
 using System.Text.Json;
+using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -63,6 +64,54 @@ app.MapGet("/api/files", () => Results.Ok(new
     RootPath = PlaygroundFiles.RootPath,
     Files = PlaygroundFiles.ListFiles()
 }));
+
+app.MapGet("/api/files/{fileName}/content", async (
+    string fileName,
+    int? maxLines,
+    int? maxBytes,
+    CancellationToken cancellationToken) =>
+{
+    var path = PlaygroundFiles.ResolveSafeFilePath(fileName);
+    if (!File.Exists(path))
+    {
+        return Results.NotFound(new { Error = $"File '{fileName}' was not found." });
+    }
+
+    var byteLimit = Math.Clamp(maxBytes ?? 16 * 1024, 1, 256 * 1024);
+    var lineLimit = Math.Clamp(maxLines ?? 50, 1, 1000);
+    var file = new FileInfo(path);
+    var bytesToRead = (int)Math.Min(file.Length, byteLimit);
+    var buffer = new byte[bytesToRead];
+
+    await using (var stream = File.OpenRead(path))
+    {
+        _ = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+    }
+
+    if (buffer.AsSpan().IndexOf((byte)0) >= 0)
+    {
+        return Results.Ok(new
+        {
+            File = PlaygroundFiles.ToFileInfo(path),
+            IsText = false,
+            Truncated = file.Length > bytesToRead,
+            Content = (string?)null
+        });
+    }
+
+    var text = Encoding.UTF8.GetString(buffer);
+    var lines = text.ReplaceLineEndings("\n").Split('\n');
+    var content = string.Join('\n', lines.Take(lineLimit));
+    var truncated = file.Length > bytesToRead || lines.Length > lineLimit;
+
+    return Results.Ok(new
+    {
+        File = PlaygroundFiles.ToFileInfo(path),
+        IsText = true,
+        Truncated = truncated,
+        Content = content
+    });
+});
 
 app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvironment environment, CancellationToken cancellationToken) =>
 {
@@ -211,13 +260,21 @@ app.MapPost("/api/run", async (
     PlaygroundProgressHub progressHub,
     CancellationToken cancellationToken) =>
 {
+    var config = PlaygroundConfig.From(configuration, environment);
     var parsed = LangScript.Parse(request.Script);
     if (!parsed.TryGetValue(out var script, out var parseError))
     {
-        return Results.Ok(PlaygroundResponse.Fail("parse", ToPlaygroundError(parseError!)));
+        var error = ToPlaygroundError(parseError!);
+        lastRunStore.Set(new PlaygroundRunSnapshot(
+            false,
+            config.TargetConnectionString,
+            0,
+            [],
+            "parse",
+            error));
+        return Results.Ok(PlaygroundResponse.Fail("parse", error));
     }
 
-    var config = PlaygroundConfig.From(configuration, environment);
     var context = new ScriptContext
     {
         FileStorage = new FileSystemSource(config.FileRoot),
@@ -239,18 +296,29 @@ app.MapPost("/api/run", async (
 
         stopwatch.Stop();
         var snapshot = new PlaygroundRunSnapshot(
+            true,
             config.TargetConnectionString,
             stopwatch.ElapsedMilliseconds,
-            loadedTables);
+            loadedTables,
+            null,
+            null);
         lastRunStore.Set(snapshot);
         return Results.Ok(PlaygroundResponse.Success(ToPlaygroundRunData(snapshot)));
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
     {
         stopwatch.Stop();
+        var snapshot = new PlaygroundRunSnapshot(
+            false,
+            config.TargetConnectionString,
+            stopwatch.ElapsedMilliseconds,
+            context.LoadedTables.ToArray(),
+            "execute",
+            ToPlaygroundException(exception));
+        lastRunStore.Set(snapshot);
         return Results.Ok(PlaygroundResponse.Fail(
             "execute",
-            ToPlaygroundException(exception),
+            snapshot.Error!,
             new
             {
                 ElapsedMs = stopwatch.ElapsedMilliseconds,
@@ -259,6 +327,84 @@ app.MapPost("/api/run", async (
     }
     finally
     {
+        if (!string.IsNullOrWhiteSpace(request.RunId))
+        {
+            progressHub.Complete(request.RunId);
+        }
+    }
+});
+
+app.MapPost("/api/test-run", async (
+    TestRunRequest request,
+    IConfiguration configuration,
+    IWebHostEnvironment environment,
+    PlaygroundProgressHub progressHub,
+    CancellationToken cancellationToken) =>
+{
+    var parsed = LangScript.Parse(request.Script);
+    if (!parsed.TryGetValue(out var script, out var parseError))
+    {
+        return Results.Ok(PlaygroundResponse.Fail("parse", ToPlaygroundError(parseError!)));
+    }
+
+    var config = PlaygroundConfig.From(configuration, environment);
+    var context = new ScriptContext
+    {
+        FileStorage = new FileSystemSource(config.FileRoot),
+        TargetConnectionString = config.TargetConnectionString,
+        ConnectionRegistry = config.CreateConnectionRegistry(),
+        Logger = string.IsNullOrWhiteSpace(request.RunId)
+            ? NullProgressLogger.Instance
+            : new PlaygroundProgressLogger(progressHub, request.RunId),
+        Options = new ScriptContextOptions
+        {
+            TempTablePrefix = "loader_playground_test_temp_",
+            FinalTablePrefix = "loader_playground_test_final_"
+        }
+    };
+
+    var previewRows = Math.Clamp(request.PreviewRows ?? 20, 0, 100);
+    var stopwatch = Stopwatch.StartNew();
+    try
+    {
+        var tables = await new ScriptExecutor()
+            .ExecuteAsync(context, script!, cancellationToken)
+            .ConfigureAwait(false);
+        var loadedTables = tables.ToArray();
+        var previews = await ReadTablePreviewsAsync(
+                config.TargetConnectionString,
+                loadedTables,
+                previewRows,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        stopwatch.Stop();
+        return Results.Ok(PlaygroundResponse.Success(new PlaygroundTestRunData(
+            stopwatch.ElapsedMilliseconds,
+            ToPlaygroundTables(loadedTables),
+            previews)));
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+        stopwatch.Stop();
+        var loadedTables = context.LoadedTables.ToArray();
+        var previews = await ReadTablePreviewsBestEffortAsync(
+                config.TargetConnectionString,
+                loadedTables,
+                previewRows)
+            .ConfigureAwait(false);
+
+        return Results.Ok(PlaygroundResponse.Fail(
+            "execute",
+            ToPlaygroundException(exception),
+            new PlaygroundTestRunData(
+                stopwatch.ElapsedMilliseconds,
+                ToPlaygroundTables(loadedTables),
+                previews)));
+    }
+    finally
+    {
+        await DropLoadedTablesBestEffortAsync(context).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(request.RunId))
         {
             progressHub.Complete(request.RunId);
@@ -356,15 +502,103 @@ static async Task<PlaygroundPreviewRows> ReadPreviewRowsAsync(
     return new PlaygroundPreviewRows(columns, rows);
 }
 
+static async Task<IReadOnlyList<PlaygroundTablePreviewData>> ReadTablePreviewsAsync(
+    string targetConnectionString,
+    IReadOnlyList<LoadedTable> tables,
+    int previewRows,
+    CancellationToken cancellationToken)
+{
+    var previews = new List<PlaygroundTablePreviewData>(tables.Count);
+    foreach (var table in tables)
+    {
+        var sql = BuildPreviewSql(table, previewRows);
+        var source = new ConnectionStringSource
+        {
+            ConnectionString = targetConnectionString
+        };
+        await using var rawReader = await new ClickHouseProvider()
+            .OpenReaderAsync(source, new SqlTableConfig { Sql = sql }, cancellationToken)
+            .ConfigureAwait(false);
+        await using var reader = rawReader.Normalize();
+        var rows = await ReadPreviewRowsAsync(reader, cancellationToken).ConfigureAwait(false);
+        previews.Add(new PlaygroundTablePreviewData(
+            table.Alias,
+            ResolvePreviewColumns(table, rows.Columns),
+            rows.Rows,
+            null));
+    }
+
+    return previews;
+}
+
+static async Task<IReadOnlyList<PlaygroundTablePreviewData>> ReadTablePreviewsBestEffortAsync(
+    string targetConnectionString,
+    IReadOnlyList<LoadedTable> tables,
+    int previewRows)
+{
+    try
+    {
+        return await ReadTablePreviewsAsync(
+                targetConnectionString,
+                tables,
+                previewRows,
+                CancellationToken.None)
+            .ConfigureAwait(false);
+    }
+    catch (Exception exception) when (exception is not OperationCanceledException)
+    {
+        return tables.Select(static table => new PlaygroundTablePreviewData(
+            table.Alias,
+            [],
+            [],
+            "Preview failed.")).ToArray();
+    }
+}
+
+static async Task DropLoadedTablesBestEffortAsync(ScriptContext context)
+{
+    foreach (var table in context.LoadedTables.ToArray())
+    {
+        try
+        {
+            await using var connection = new ClickHouseConnection(context.TargetConnectionString);
+            await connection.OpenAsync(CancellationToken.None).ConfigureAwait(false);
+
+            await using var command = connection.CreateCommand();
+            command.CommandText = new StringBuilder()
+                .Append("DROP TABLE IF EXISTS ")
+                .Append(table.Name.ToSql())
+                .ToString();
+            await command.ExecuteNonQueryAsync(CancellationToken.None).ConfigureAwait(false);
+            context.RemoveLoadedTable(table);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Test-run cleanup should not hide the original script result.
+        }
+    }
+}
+
 static PlaygroundRunData ToPlaygroundRunData(PlaygroundRunSnapshot snapshot)
 {
     return new PlaygroundRunData(
+        snapshot.Ok,
         snapshot.ElapsedMs,
-        snapshot.Tables.Select(static (table, index) => new PlaygroundTableData(
-            index,
-            table.Name.ToSql(),
-            table.Alias,
-            table.RowCount)).ToArray());
+        ToPlaygroundTables(snapshot.Tables),
+        snapshot.Stage,
+        snapshot.Error);
+}
+
+static IReadOnlyList<PlaygroundTableData> ToPlaygroundTables(IReadOnlyList<LoadedTable> tables)
+{
+    return tables.Select(static (table, index) => new PlaygroundTableData(
+        index,
+        table.Name.ToSql(),
+        table.Alias,
+        table.RowCount,
+        table.Fields.Select(static field => new PlaygroundFieldData(
+            field.Name,
+            FormatQueryType(field.DataType, field.CanBeNull))).ToArray())).ToArray();
 }
 
 static string FormatQueryType(Loader.Core.Models.DataType dataType, bool canBeNull)
@@ -450,6 +684,8 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
 
 internal sealed record ScriptRequest(string Script, string? RunId = null);
 
+internal sealed record TestRunRequest(string Script, int? PreviewRows = null, string? RunId = null);
+
 internal sealed record PlaygroundProgressData(
     string Kind,
     string Level,
@@ -465,19 +701,37 @@ internal static class PlaygroundJson
 }
 
 internal sealed record PlaygroundRunSnapshot(
+    bool Ok,
     string TargetConnectionString,
     long ElapsedMs,
-    IReadOnlyList<LoadedTable> Tables);
+    IReadOnlyList<LoadedTable> Tables,
+    string? Stage,
+    PlaygroundError? Error);
 
 internal sealed record PlaygroundRunData(
+    bool Ok,
     long ElapsedMs,
-    IReadOnlyList<PlaygroundTableData> Tables);
+    IReadOnlyList<PlaygroundTableData> Tables,
+    string? Stage,
+    PlaygroundError? Error);
+
+internal sealed record PlaygroundTestRunData(
+    long ElapsedMs,
+    IReadOnlyList<PlaygroundTableData> Tables,
+    IReadOnlyList<PlaygroundTablePreviewData> Previews);
 
 internal sealed record PlaygroundTableData(
     int Index,
     string Name,
     string? Alias,
-    long? RowCount);
+    long? RowCount,
+    IReadOnlyList<PlaygroundFieldData> Fields);
+
+internal sealed record PlaygroundTablePreviewData(
+    string? Alias,
+    string[] Columns,
+    IReadOnlyList<object?[]> Rows,
+    string? Warning);
 
 internal sealed record PlaygroundFieldData(
     string Name,
