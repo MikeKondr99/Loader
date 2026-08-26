@@ -671,7 +671,7 @@ LIMIT 10;`;
             [/\/\*/, 'comment', '@comment'],
             [/\/\/.*$/, 'comment'],
             [/\bSQL\b/, 'keyword.sql', '@sql'],
-            [/\b(DROP|FIRST|TEMP|MAPPED|LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|true|false|null)\b/, 'keyword'],
+            [/\b(DROP|FIRST|TEMP|MAPPED|LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|AND|OR|NOT|true|false|null)\b/, 'keyword'],
             [/\[[^\]]*\]/, 'blocked-name'],
             [/'([^'\\]|\\.)*'/, 'string'],
             [/[0-9]+(\.[0-9]+)?/, 'number'],
