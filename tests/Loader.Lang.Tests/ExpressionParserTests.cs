@@ -15,6 +15,32 @@ public sealed class ExpressionParserTests
     }
 
     [Test]
+    [DisplayName("Expression parser parses OR as binary operator")]
+    public async Task Parses_or_as_binary_operator()
+    {
+        var result = Expr.Parse("active OR archived");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsTypeOf<FuncExpr>();
+        var expression = (FuncExpr)result.Value;
+        await Assert.That(expression.Kind).IsEqualTo(FuncExprKind.Binary);
+        await Assert.That(expression.Name).IsEqualTo("or");
+    }
+
+    [Test]
+    [DisplayName("Expression parser parses AND as binary operator")]
+    public async Task Parses_and_as_binary_operator()
+    {
+        var result = Expr.Parse("active AND archived");
+
+        await Assert.That(result.IsSuccess).IsTrue();
+        await Assert.That(result.Value).IsTypeOf<FuncExpr>();
+        var expression = (FuncExpr)result.Value;
+        await Assert.That(expression.Kind).IsEqualTo(FuncExprKind.Binary);
+        await Assert.That(expression.Name).IsEqualTo("and");
+    }
+
+    [Test]
     [DisplayName("Expression parser разбирает method call")]
     public async Task Parses_method_call()
     {

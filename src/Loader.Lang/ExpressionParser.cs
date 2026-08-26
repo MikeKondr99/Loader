@@ -40,7 +40,7 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
             return new FuncExpr
             {
                 Span = Span(context),
-                Name = op.GetText(),
+                Name = BinaryOperatorName(op.GetText()),
                 Arguments = [Visit(left), Visit(right)],
                 Kind = FuncExprKind.Binary
             };
@@ -191,6 +191,16 @@ internal sealed partial class ExpressionParser : LangParserBaseVisitor<Expr>
             (uint)context.Start.Column,
             (uint)context.Stop.Line,
             (uint)(context.Stop.Column + context.Stop.Text.Length));
+    }
+
+    private static string BinaryOperatorName(string text)
+    {
+        return text switch
+        {
+            var value when string.Equals(value, "AND", StringComparison.OrdinalIgnoreCase) => "and",
+            var value when string.Equals(value, "OR", StringComparison.OrdinalIgnoreCase) => "or",
+            _ => text
+        };
     }
 
     [GeneratedRegex(@"\\\]")]

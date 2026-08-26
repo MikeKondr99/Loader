@@ -46,6 +46,46 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query resolves OR keyword as binary operator")]
+    public async Task Or_keyword_is_resolved_as_binary_operator()
+    {
+        // Arrange
+        var query = new Query.Models.Query
+        {
+            Source = NullableBoolSource(),
+            Select = ["flag OR false".As("value")],
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Values("value"))
+            .IsEquivalentTo((object?[])[true, false, null], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query resolves AND keyword as binary operator")]
+    public async Task And_keyword_is_resolved_as_binary_operator()
+    {
+        // Arrange
+        var query = new Query.Models.Query
+        {
+            Source = NullableBoolSource(),
+            Select = ["flag AND true".As("value")],
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Values("value"))
+            .IsEquivalentTo((object?[])[true, false, null], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query сейчас не резолвит equality для boolean")]
     public async Task Boolean_equality_is_not_supported_yet()
     {
