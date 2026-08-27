@@ -1,14 +1,10 @@
-using Loader.Core.Decorators;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Table</c>. Создает источник чтения уже загруженной script-таблицы из DWH.
+/// Resolver provider-а <c>Table</c>. Создает SQL-source для чтения уже загруженной script-таблицы из DWH.
 /// Параметры:
 /// name: Text - alias таблицы, созданной предыдущим LOAD statement.
 /// </summary>
@@ -16,7 +12,7 @@ internal sealed class TableLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Table";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -32,7 +28,7 @@ internal sealed class TableLoadSourceResolver : LoadSourceResolverBase
             "Для provider-а Table требуется опция name='table_name'.");
         if (tableName is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         var loadedTable = context.LoadedTables.SingleOrDefault(table => string.Equals(
@@ -46,35 +42,19 @@ internal sealed class TableLoadSourceResolver : LoadSourceResolverBase
                 Message = $"Таблица '{tableName}' не найдена среди уже загруженных LOAD таблиц.",
                 Span = options.GetOption("name")?.Span ?? statement.SourceCall.Span
             });
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        var source = new ConnectionStringSource { ConnectionString = context.TargetConnectionString };
-        var config = new SqlTableConfig
+        return ValueTask.FromResult<LoadFromSource>(new SqlLoadFromSource
         {
-            Sql = BuildSelectSql(loadedTable)
-        };
-        return ValueTask.FromResult(new LoadProviderSource
-        {
-            Kind = "table",
-            RequiresBuffer = false,
-            OpenReaderAsync = async token =>
+            Sql = loadedTable.Name.ToSql(),
+            Fields = loadedTable.Fields.Select((field, ordinal) => new LoadFromSqlField
             {
-                // Читаем физическую final table из DWH. В ClickHouse там всегда columnN и CH-типы.
-                var reader = await new ClickHouseProvider()
-                    .OpenReaderAsync(source, config, token)
-                    .ConfigureAwait(false);
-
-                // Возвращаем наружу пользовательские имена и логические типы из LoadedTable.
-                // Например Time физически лежит в CH как DateTime, но для следующего LOAD остается Time.
-                var renamedReader = reader.RenameColumns(loadedTable.Fields.Select(static field => field.Name).ToArray());
-                return new LoadedTableDataReader(renamedReader, loadedTable.Fields);
-            }
+                Name = field.Name,
+                PhysicalName = $"column{ordinal + 1}",
+                DataType = field.DataType,
+                CanBeNull = field.CanBeNull
+            }).ToArray()
         });
-    }
-
-    private static string BuildSelectSql(LoadedTable table)
-    {
-        return $"SELECT * FROM {table.Name.ToSql()}";
     }
 }

@@ -1,8 +1,3 @@
-using System.Data.Common;
-using Loader.Core.Decorators;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
@@ -10,7 +5,7 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-ов <c>Join</c>, <c>LeftJoin</c>, <c>RightJoin</c> и <c>FullJoin</c>. Создает источник соединения двух уже загруженных script-таблиц.
+/// Resolver provider-ов <c>Join</c>, <c>LeftJoin</c>, <c>RightJoin</c> и <c>FullJoin</c>. Создает SQL-source соединения двух уже загруженных script-таблиц.
 /// Параметры:
 /// leftTable: Name - имя левой таблицы.
 /// leftField: Name - поле-ключ в левой таблице.
@@ -30,7 +25,7 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
 
     public override string Name { get; }
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -45,13 +40,13 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
         var arguments = ResolveArguments(statement, options, errors);
         if (arguments is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         RejectSameTable(arguments, options, statement, errors);
         if (errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         // Находим таблицы в текущем ScriptContext: Join не открывает внешний provider.
@@ -59,7 +54,7 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
         var right = ResolveTable(context, arguments.RightTable, options, 2, statement, errors);
         if (left is null || right is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         // Проверяем, что ключевые поля существуют в соответствующих таблицах.
@@ -67,7 +62,7 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
         var rightKeyIndex = ValidateKey(right, arguments.RightField, options, 3, statement, errors);
         if (leftKeyIndex < 0 || rightKeyIndex < 0 || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         // Типы ключей должны совпадать до генерации SQL, иначе ClickHouse ошибка будет поздней и менее понятной.
@@ -80,33 +75,26 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
                 Message = $"Join keys должны иметь одинаковый тип. '{arguments.LeftField}' имеет тип {leftKey.DataType}, '{arguments.RightField}' имеет тип {rightKey.DataType}.",
                 Span = statement.SourceCall.Span
             });
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         // Строим SQL чтения из DWH и логическую схему результата с разрешенными конфликтами имен.
         var joinSql = JoinSqlBuilder.Build(left, arguments.LeftField, right, arguments.RightField, kind, statement.SourceCall.Span, errors);
         if (joinSql is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        var source = new ConnectionStringSource { ConnectionString = context.TargetConnectionString };
-        var config = new SqlTableConfig { Sql = joinSql.Sql };
-
-        return ValueTask.FromResult(new LoadProviderSource
+        return ValueTask.FromResult<LoadFromSource>(new SqlLoadFromSource
         {
-            Kind = Name.ToLowerInvariant(),
-            RequiresBuffer = false,
-            OpenReaderAsync = async token =>
+            Sql = $"({joinSql.Sql})",
+            Fields = joinSql.Fields.Select((field, ordinal) => new LoadFromSqlField
             {
-                // ClickHouse возвращает служебные join_columnN, а наружу должен уйти доменный reader с пользовательскими именами.
-                var reader = await new ClickHouseProvider()
-                    .OpenReaderAsync(source, config, token)
-                    .ConfigureAwait(false);
-
-                var renamedReader = reader.RenameColumns(joinSql.Fields.Select(static field => field.Name).ToArray());
-                return new LoadedTableDataReader(renamedReader, joinSql.Fields);
-            }
+                Name = field.Name,
+                PhysicalName = $"join_column{ordinal + 1}",
+                DataType = field.DataType,
+                CanBeNull = field.CanBeNull
+            }).ToArray()
         });
     }
 

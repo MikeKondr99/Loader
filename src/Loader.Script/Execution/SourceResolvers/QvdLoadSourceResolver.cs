@@ -5,7 +5,7 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Qvd</c>. Создает источник чтения QVD-файла из <see cref="ScriptContext.FileStorage"/>.
+/// Resolver provider-а <c>Qvd</c>. Создает reader-source для чтения QVD-файла из <see cref="ScriptContext.FileStorage"/>.
 /// Параметры:
 /// path: Text - путь к файлу внутри file storage.
 /// </summary>
@@ -13,7 +13,7 @@ internal sealed class QvdLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Qvd";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -26,11 +26,10 @@ internal sealed class QvdLoadSourceResolver : LoadSourceResolverBase
         var path = RequiredPath("qvd", statement, options, errors);
         if (path is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        return ValueTask.FromResult(File(
-            "qvd",
+        return ValueTask.FromResult<LoadFromSource>(File(
             context.FileStorage,
             path,
             static (source, fileName, token) => new QvdProvider().OpenReaderAsync(

@@ -14,7 +14,7 @@ internal sealed class XmlLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Xml";
 
-    public override async ValueTask<LoadProviderSource> ResolveAsync(
+    public override async ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -39,9 +39,8 @@ internal sealed class XmlLoadSourceResolver : LoadSourceResolverBase
             .AnalyzeSchemaAsync(context.FileStorage, path, tableName, cancellationToken)
             .ConfigureAwait(false);
 
-        return new LoadProviderSource
+        return new ReaderLoadFromSource
         {
-            Kind = "xml",
             RequiresBuffer = false,
             OpenReaderAsync = token => provider.OpenReaderAsync(
                 context.FileStorage,

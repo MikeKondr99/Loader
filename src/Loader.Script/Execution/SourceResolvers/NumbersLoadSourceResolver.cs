@@ -5,7 +5,7 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Numbers</c>. Создает источник с последовательностью целых чисел.
+/// Resolver provider-а <c>Numbers</c>. Создает reader-source с последовательностью целых чисел.
 /// Параметры:
 /// max: Integer - последнее допустимое значение последовательности.
 /// min: Integer - первое значение последовательности, по умолчанию <c>0</c>.
@@ -15,7 +15,7 @@ internal sealed class NumbersLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Numbers";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -56,12 +56,11 @@ internal sealed class NumbersLoadSourceResolver : LoadSourceResolverBase
 
         if (max is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        return ValueTask.FromResult(new LoadProviderSource
+        return ValueTask.FromResult<LoadFromSource>(new ReaderLoadFromSource
         {
-            Kind = "numbers",
             RequiresBuffer = false,
             OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(new NumbersDataReader(min, max.Value, step))
         });

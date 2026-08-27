@@ -13,7 +13,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Connect";
 
-    public override async ValueTask<LoadProviderSource> ResolveAsync(
+    public override async ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,

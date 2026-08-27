@@ -493,10 +493,8 @@ public sealed class LoadStatementMixedTests
             FROM Calendar(table=orders, field=CreatedAt);
             """).Value!;
         var statement = (Loader.Lang.Statements.LoadStatement)script.Statements[0];
-        var source = await new LoadProviderResolver().ResolveAsync(statement, context);
-
         // Act
-        var exception = await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
+        var exception = await Assert.That(async () => await new LoadStatementExecutor().ExecuteAsync(context, statement))
             .Throws<Exception>();
 
         // Assert

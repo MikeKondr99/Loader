@@ -23,8 +23,8 @@ public sealed class LoadProviderResolverTests
             CreateStatement("Csv", [Option("path", "orders.csv")]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("csv");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -37,8 +37,8 @@ public sealed class LoadProviderResolverTests
             CreateStatement("Csv", [Positional("orders.csv")]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("csv");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -85,10 +85,10 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Option("max", 3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("numbers");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("number");
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
@@ -105,7 +105,7 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
@@ -138,7 +138,7 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(2, 0), Positional(8, 1), Option("step", 3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
@@ -159,7 +159,7 @@ public sealed class LoadProviderResolverTests
                     Option("step", 3)
                 ]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
@@ -280,9 +280,9 @@ public sealed class LoadProviderResolverTests
             "test: LOAD * FROM Inline(id, name, active, amount; 1, 'Mike', true, -10.5; -2, null, false, 0);");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("inline");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
         await Assert.That(reader.FieldCount).IsEqualTo(4);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
@@ -309,7 +309,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement("test: LOAD * FROM Inline(a; 1; 2.0;);");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("a");
@@ -336,7 +336,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(string));
         await Assert.That(await reader.ReadAsync()).IsTrue();
@@ -361,7 +361,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
         var schema = reader.GetSchemaTable();
 
         await Assert.That(schema).IsNotNull();
@@ -458,8 +458,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -477,8 +476,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -616,8 +614,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             context);
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -686,8 +683,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM dbo.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("odbc");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsTrue();
     }
 
     [Test]
@@ -712,8 +709,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM public.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("postgres");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -738,8 +735,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM events"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("clickhouse");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -938,7 +935,7 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM public.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("postgres");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
     }
 
     [Test]
@@ -992,8 +989,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM default.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("hive");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsTrue();
     }
 
     [Test]
@@ -1018,7 +1015,7 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM default.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
+        await Assert.That(async () => await Reader(source).OpenReaderAsync(CancellationToken.None))
             .ThrowsExactly<DbExecutionException>()
             .WithMessage("Database query failed for provider 'hive': SELECT * FROM default.orders");
     }
@@ -1180,9 +1177,9 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("json");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
         await Assert.That(reader.GetName(1)).IsEqualTo("city");
@@ -1220,7 +1217,7 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1260,7 +1257,7 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1816,6 +1813,12 @@ public sealed class LoadProviderResolverTests
         }
 
         return values.ToArray();
+    }
+
+    private static ReaderLoadFromSource Reader(LoadFromSource source)
+    {
+        return source as ReaderLoadFromSource
+               ?? throw new InvalidOperationException($"Expected {nameof(ReaderLoadFromSource)}, got {source.GetType().Name}.");
     }
 
     private static ScriptContext CreateContext(

@@ -11,7 +11,7 @@ internal sealed class InlineLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Inline";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -30,7 +30,7 @@ internal sealed class InlineLoadSourceResolver : LoadSourceResolverBase
                 Message = "Provider 'Inline' требует inline-данные: Inline(col1, col2; value1, value2).",
                 Span = statement.SourceCall.Span
             });
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         ValidateColumns(inline, errors);
@@ -38,12 +38,11 @@ internal sealed class InlineLoadSourceResolver : LoadSourceResolverBase
 
         if (errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        return ValueTask.FromResult(new LoadProviderSource
+        return ValueTask.FromResult<LoadFromSource>(new ReaderLoadFromSource
         {
-            Kind = "inline",
             RequiresBuffer = false,
             OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(new InlineDataReader(inline))
         });

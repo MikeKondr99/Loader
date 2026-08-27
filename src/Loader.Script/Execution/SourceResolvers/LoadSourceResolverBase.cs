@@ -13,22 +13,22 @@ internal abstract class LoadSourceResolverBase : ILoadSourceResolver
 {
     public abstract string Name { get; }
 
-    public abstract ValueTask<LoadProviderSource> ResolveAsync(
+    public abstract ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
         List<LangError> errors,
         CancellationToken cancellationToken);
 
-    protected static LoadProviderSource File(
-        string kind,
+    protected static ValueTask<LoadFromSource> Error() => ValueTask.FromResult<LoadFromSource>(null!);
+
+    protected static ReaderLoadFromSource File(
         IFileSource source,
         string fileName,
         Func<IFileSource, string, CancellationToken, ValueTask<DbDataReader>> open)
     {
-        return new LoadProviderSource
+        return new ReaderLoadFromSource
         {
-            Kind = kind,
             RequiresBuffer = false,
             OpenReaderAsync = token => open(source, fileName, token)
         };

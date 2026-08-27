@@ -15,7 +15,7 @@ internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Excel";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -30,11 +30,10 @@ internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
         var hasHeader = options.Boolean("header", true);
         if (path is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        return ValueTask.FromResult(File(
-            "excel",
+        return ValueTask.FromResult<LoadFromSource>(File(
             context.FileStorage,
             path,
             (source, fileName, token) => new ExcelProvider().OpenReaderAsync(

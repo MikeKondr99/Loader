@@ -464,6 +464,29 @@ public sealed class MappedLoadStatementTests
     }
 
     [Test]
+    [DisplayName("Script MAPPED LOAD * проверяет число полей для Table source")]
+    public async Task Execute_script_mapped_load_star_rejects_table_source_with_not_two_fields()
+    {
+        var exception = await Assert.That(async () => await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            raw:
+            LOAD *
+            FROM Inline(key, value, extra;
+                'a', 'A', 'extra');
+
+            labels:
+            MAPPED LOAD *
+            FROM raw;
+            """))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Message).Contains("ожидалось 2");
+    }
+
+    [Test]
     [DisplayName("Script MAPPED LOAD * выдает ошибку если source возвращает одно поле")]
     public async Task Execute_script_mapped_load_star_rejects_source_with_one_field()
     {
@@ -673,14 +696,13 @@ public sealed class MappedLoadStatementTests
 
     private sealed class ZeroFieldProviderResolver : ILoadProviderResolver
     {
-        public ValueTask<LoadProviderSource> ResolveAsync(
+        public ValueTask<LoadFromSource> ResolveAsync(
             LoadStatement statement,
             ScriptContext context,
             CancellationToken cancellationToken = default)
         {
-            return ValueTask.FromResult(new LoadProviderSource
+            return ValueTask.FromResult<LoadFromSource>(new ReaderLoadFromSource
             {
-                Kind = "fake",
                 RequiresBuffer = false,
                 OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(CreateReader())
             });

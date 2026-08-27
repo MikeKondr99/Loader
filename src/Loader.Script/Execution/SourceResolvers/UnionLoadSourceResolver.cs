@@ -1,8 +1,3 @@
-using System.Data.Common;
-using Loader.Core.Decorators;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
@@ -10,7 +5,7 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Union</c>. Создает источник объединения нескольких уже загруженных script-таблиц по логическим именам полей.
+/// Resolver provider-а <c>Union</c>. Создает SQL-source объединения нескольких уже загруженных script-таблиц по логическим именам полей.
 /// Параметры:
 /// table1, table2, ...: Name - позиционные имена таблиц; требуется минимум две таблицы.
 /// Поведение: resolver строит UNION ALL с одинаковым порядком внутренних union_columnN и NULL для отсутствующих логических полей.
@@ -19,7 +14,7 @@ internal sealed class UnionLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Union";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -32,32 +27,26 @@ internal sealed class UnionLoadSourceResolver : LoadSourceResolverBase
         var tableNames = ResolveTableNames(statement, options, errors);
         if (errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         var tables = ResolveTables(context, tableNames, options, statement, errors);
         if (errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
         var unionSql = UnionSqlBuilder.Build(tables);
-        var source = new ConnectionStringSource { ConnectionString = context.TargetConnectionString };
-        var config = new SqlTableConfig { Sql = unionSql.Sql };
-
-        return ValueTask.FromResult(new LoadProviderSource
+        return ValueTask.FromResult<LoadFromSource>(new SqlLoadFromSource
         {
-            Kind = "union",
-            RequiresBuffer = false,
-            OpenReaderAsync = async token =>
+            Sql = $"({unionSql.Sql})",
+            Fields = unionSql.Fields.Select((field, ordinal) => new LoadFromSqlField
             {
-                var reader = await new ClickHouseProvider()
-                    .OpenReaderAsync(source, config, token)
-                    .ConfigureAwait(false);
-
-                var renamedReader = reader.RenameColumns(unionSql.Fields.Select(static field => field.Name).ToArray());
-                return new LoadedTableDataReader(renamedReader, unionSql.Fields);
-            }
+                Name = field.Name,
+                PhysicalName = $"union_column{ordinal + 1}",
+                DataType = field.DataType,
+                CanBeNull = field.CanBeNull
+            }).ToArray()
         });
     }
 
