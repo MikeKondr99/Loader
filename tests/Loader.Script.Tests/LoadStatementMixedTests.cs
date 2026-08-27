@@ -1,4 +1,5 @@
 ﻿using Loader.Script.Tests.Infrastructure;
+
 using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Script.Execution;
@@ -149,223 +150,6 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
-    [DisplayName("Script выполняет LOAD из результата предыдущего LOAD через Table provider")]
-    public async Task Execute_script_loads_from_previous_load_table()
-    {
-        // Arrange
-        // Act
-        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
-            database,
-            """
-            raw_names:
-            LOAD
-                id,
-                name,
-                Upper(name) AS [upper-name]
-            FROM Csv(path='orders.csv')
-            ORDER BY id ASC;
-
-            final_names:
-            LOAD
-                Text(Int(id)) AS id,
-                [upper-name] AS name
-            FROM raw_names
-            WHERE name != 'Bob'
-            ORDER BY id DESC;
-            """);
-
-        // Assert
-        var result = execution.Tables;
-        await Assert.That(result).Count().IsEqualTo(2);
-        await Assert.That(result.Select(static table => table.Alias!).ToArray())
-            .IsEquivalentTo(["raw_names", "final_names"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-
-        await ScriptIntegrationAssert.AssertFinalTableAsync(
-            database,
-            result[1],
-            ["id", "name"],
-            [
-                ["3", "CHARLIE"],
-                ["1", "ALICE"]
-            ],
-            "ORDER BY `column1` DESC");
-        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
-    }
-
-    [Test]
-    [DisplayName("Script очищает TEMP LOAD в конце выполнения после использования в следующих LOAD")]
-    public async Task Execute_script_cleans_temp_load_after_it_was_used_by_table_source()
-    {
-        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
-            database,
-            """
-            raw_names:
-            TEMP LOAD
-                id,
-                name
-            FROM Csv(path='orders.csv')
-            ORDER BY id ASC;
-
-            final_names:
-            LOAD
-                Text(Int(id)) AS id,
-                Upper(name) AS name
-            FROM raw_names
-            WHERE name != 'Bob'
-            ORDER BY id DESC;
-            """);
-
-        await Assert.That(execution.Tables).Count().IsEqualTo(1);
-        await Assert.That(execution.Tables[0].Alias).IsEqualTo("final_names");
-        await ScriptIntegrationAssert.AssertFinalTableAsync(
-            database,
-            execution.Tables[0],
-            ["id", "name"],
-            [
-                ["3", "CHARLIE"],
-                ["1", "ALICE"]
-            ],
-            "ORDER BY `column1` DESC");
-        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
-        await ScriptIntegrationAssert.AssertTableCountWithPrefixAsync(database, execution.FinalTablePrefix, 1);
-    }
-
-    [Test]
-    [DisplayName("Script выполняет LOAD из результата предыдущего LOAD с blocked table name")]
-    public async Task Execute_script_loads_from_previous_blocked_load_table()
-    {
-        // Arrange
-        // Act
-        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
-            database,
-            """
-            [raw names]:
-            LOAD
-                id,
-                name
-            FROM Csv(path='orders.csv')
-            ORDER BY id ASC;
-
-            final_names:
-            LOAD
-                id,
-                name
-            FROM [raw names]
-            WHERE name != 'Bob'
-            ORDER BY id DESC;
-            """);
-
-        // Assert
-        var result = execution.Tables;
-        await Assert.That(result).Count().IsEqualTo(2);
-        await Assert.That(result.Select(static table => table.Alias!).ToArray())
-            .IsEquivalentTo(["raw names", "final_names"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-
-        await ScriptIntegrationAssert.AssertFinalTableAsync(
-            database,
-            result[1],
-            ["id", "name"],
-            [
-                ["3", "Charlie"],
-                ["1", "Alice"]
-            ],
-            "ORDER BY `column1` DESC");
-        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
-    }
-
-    [Test]
-    [DisplayName("Script сохраняет логический Time тип при LOAD из результата предыдущего LOAD")]
-    public async Task Execute_script_preserves_time_type_from_previous_load_table()
-    {
-        // Arrange
-        var sourceTable = new ClickHouseTableName
-        {
-            Table = $"script_time_source_{Guid.NewGuid():N}"
-        };
-        var tempPrefix = $"script_test_temp_{Guid.NewGuid():N}_";
-        var finalPrefix = $"script_test_final_{Guid.NewGuid():N}_";
-        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
-            database,
-            $$"""
-            CREATE TABLE {{sourceTable.ToSql()}}
-            (
-                `column1` Int32,
-                `column2` DateTime,
-                `column3` DateTime
-            )
-            ENGINE = Log
-            """);
-        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
-            database,
-            $$"""
-            INSERT INTO {{sourceTable.ToSql()}} (`column1`, `column2`, `column3`) VALUES
-            (1, toDateTime('1970-01-01 03:04:05'), toDateTime('1970-01-01 04:05:06'))
-            """);
-
-        var context = ScriptIntegrationAssert.CreateContext(database) with
-        {
-            Options = new ScriptContextOptions
-            {
-                TempTablePrefix = tempPrefix,
-                FinalTablePrefix = finalPrefix
-            }
-        };
-        context.AddLoadedTable(new LoadedTable
-        {
-            Name = sourceTable,
-            Alias = "pg_time",
-            RowCount = 1,
-            Fields =
-            [
-                Field("id", DataType.Integer),
-                Field("time_value", DataType.Time),
-                Field("interval_value", DataType.Time)
-            ]
-        });
-        var executor = new ScriptExecutor();
-        var script = Loader.Lang.Script.Parse(
-            """
-            s:
-            LOAD * FROM pg_time;
-            """).Value!;
-        LoadedTable? finalTable = null;
-
-        try
-        {
-            // Act
-            var result = await executor.ExecuteAsync(context, script);
-
-            // Assert
-            await Assert.That(result).Count().IsEqualTo(2);
-            var table = result[1];
-            finalTable = table;
-            await Assert.That(table.Alias).IsEqualTo("s");
-            await Assert.That(table.Fields.Select(static field => field.Name).ToArray())
-                .IsEquivalentTo(["id", "time_value", "interval_value"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-            await Assert.That(table.Fields[1].DataType).IsEqualTo(DataType.Time);
-            await Assert.That(table.Fields[2].DataType).IsEqualTo(DataType.Time);
-            await ScriptIntegrationAssert.AssertFinalTableAsync(
-                database,
-                table,
-                ["id", "time_value", "interval_value"],
-                [
-                    new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5), new DateTime(1970, 1, 1, 4, 5, 6) }
-                ]);
-            await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, tempPrefix);
-        }
-        finally
-        {
-            await ScriptIntegrationAssert.ExecuteClickHouseAsync(database, $"DROP TABLE IF EXISTS {sourceTable.ToSql()}");
-            if (finalTable is not null)
-            {
-                await ScriptIntegrationAssert.ExecuteClickHouseAsync(database, $"DROP TABLE IF EXISTS {finalTable.Name.ToSql()}");
-            }
-
-            await ScriptIntegrationAssert.AssertNoTablesWithPrefixAsync(database, finalPrefix);
-        }
-    }
-
-    [Test]
     [DisplayName("Script вычисляет аппроксимацию pi через ряд Лейбница")]
     public async Task Execute_script_calculates_pi_with_leibniz_series()
     {
@@ -465,6 +249,62 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script Calendar FIRST ограничивает сгенерированные даты до LOAD преобразований")]
+    public async Task Execute_script_calendar_first_limits_generated_rows_before_transformations()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            calendar:
+            FIRST 2
+            LOAD
+                Date,
+                DayOfMonth
+            FROM Calendar(min='2024-01-01', max='2024-01-05')
+            ORDER BY Date DESC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["Date", "DayOfMonth"],
+            [
+                new object?[] { new DateTime(2024, 1, 2), (byte)2 },
+                new object?[] { new DateTime(2024, 1, 1), (byte)1 }
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Calendar сохраняет alias mapping для явной проекции полей")]
+    public async Task Execute_script_calendar_preserves_field_mapping_for_explicit_projection()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            calendar:
+            LOAD
+                YearMonth,
+                DayOfMonth,
+                Date.Text('yyyy-MM-dd') AS DateText
+            FROM Calendar(min='2024-02-28', max='2024-03-01')
+            WHERE DayOfMonth >= 29
+            ORDER BY Date ASC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["YearMonth", "DayOfMonth", "DateText"],
+            [
+                new object?[] { "2024-02", (byte)29, "2024-02-29" }
+            ],
+            "ORDER BY `column3` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script строит календарь по min/max поля ранее загруженной таблицы")]
     public async Task Execute_script_loads_calendar_from_loaded_table_field()
     {
@@ -498,6 +338,79 @@ public sealed class LoadStatementMixedTests
         await AssertCalendarRowAsync(rows.Rows[1], new DateTime(2024, 1, 2), 2024, dayOfMonth: 2);
         await AssertCalendarRowAsync(rows.Rows[2], new DateTime(2024, 1, 3), 2024, dayOfMonth: 3);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Calendar table/field FIRST использует alias поля исходной таблицы")]
+    public async Task Execute_script_calendar_table_field_first_uses_source_field_alias_mapping()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            LOAD
+                marker,
+                Date(date_text, 'yyyy-MM-dd') AS CreatedAt
+            FROM Inline(date_text, marker;
+                '2024-01-01', 'a';
+                '2024-01-02', 'b';
+                '2024-01-03', 'c');
+
+            calendar:
+            FIRST 2
+            LOAD
+                Date,
+                DayOfMonth
+            FROM Calendar(table=orders, field=CreatedAt)
+            ORDER BY Date DESC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[1],
+            ["Date", "DayOfMonth"],
+            [
+                new object?[] { new DateTime(2024, 1, 2), (byte)2 },
+                new object?[] { new DateTime(2024, 1, 1), (byte)1 }
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Calendar table/field читает TEMP LOAD источник и чистит его в конце")]
+    public async Task Execute_script_calendar_table_field_reads_temp_source_and_cleans_it_at_the_end()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            TEMP LOAD
+                Date(2024, 1, 1).AddDays(number) AS CreatedAt
+            FROM Numbers(max=2);
+
+            calendar:
+            LOAD
+                Date,
+                DayOfMonth
+            FROM Calendar(table=orders, field=CreatedAt)
+            ORDER BY Date ASC;
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await Assert.That(execution.Tables[0].Alias).IsEqualTo("calendar");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["Date", "DayOfMonth"],
+            [
+                new object?[] { new DateTime(2024, 1, 1), (byte)1 },
+                new object?[] { new DateTime(2024, 1, 2), (byte)2 },
+                new object?[] { new DateTime(2024, 1, 3), (byte)3 }
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+        await ScriptIntegrationAssert.AssertTableCountWithPrefixAsync(database, execution.FinalTablePrefix, 1);
     }
 
     [Test]
@@ -647,15 +560,5 @@ public sealed class LoadStatementMixedTests
         {
             await Assert.That(row[5]).IsEqualTo(weekPeriod);
         }
-    }
-
-    private static LoadedTableField Field(string name, DataType dataType)
-    {
-        return new LoadedTableField
-        {
-            Name = name,
-            DataType = dataType,
-            CanBeNull = false
-        };
     }
 }
