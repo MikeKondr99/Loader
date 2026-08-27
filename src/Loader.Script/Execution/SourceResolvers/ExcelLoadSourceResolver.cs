@@ -4,6 +4,13 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Excel</c>. Создает источник чтения Excel workbook-а из <see cref="ScriptContext.FileStorage"/>.
+/// Параметры:
+/// path: Text - путь к файлу внутри file storage.
+/// sheet: Text - имя листа; если не задано, provider выбирает лист по своей логике.
+/// header: Boolean - указывает, содержит ли первая строка имена колонок, по умолчанию <c>true</c>.
+/// </summary>
 internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Excel";

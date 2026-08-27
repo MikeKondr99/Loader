@@ -10,10 +10,10 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Provider Union объединяет несколько уже загруженных script-таблиц по логическим именам полей.
-/// ClickHouse сам не может сделать это корректно для Loader final tables: физически там только columnN,
-/// а семантика columnN различается между таблицами. Поэтому resolver строит ручной UNION ALL, где каждая
-/// ветка SELECT имеет одинаковый порядок внутренних union_columnN и NULL для отсутствующих логических полей.
+/// Resolver provider-а <c>Union</c>. Создает источник объединения нескольких уже загруженных script-таблиц по логическим именам полей.
+/// Параметры:
+/// table1, table2, ...: Name - позиционные имена таблиц; требуется минимум две таблицы.
+/// Поведение: resolver строит UNION ALL с одинаковым порядком внутренних union_columnN и NULL для отсутствующих логических полей.
 /// </summary>
 internal sealed class UnionLoadSourceResolver : LoadSourceResolverBase
 {

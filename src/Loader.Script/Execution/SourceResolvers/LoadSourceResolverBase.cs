@@ -5,6 +5,10 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Общая база provider resolver-ов.
+/// Содержит повторяемые проверки для файловых и SQL-источников, чтобы конкретные resolver-ы описывали только свою семантику.
+/// </summary>
 internal abstract class LoadSourceResolverBase : ILoadSourceResolver
 {
     public abstract string Name { get; }

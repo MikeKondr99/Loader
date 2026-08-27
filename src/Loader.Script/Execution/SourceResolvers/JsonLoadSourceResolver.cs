@@ -4,6 +4,12 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Json</c>. Создает источник чтения JSON-массива из <see cref="ScriptContext.FileStorage"/>.
+/// Параметры:
+/// path: Text - путь к файлу внутри file storage.
+/// root: Text - dot-path до массива записей внутри JSON; если не задан, корнем считается весь документ.
+/// </summary>
 internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Json";

@@ -4,11 +4,26 @@ using Loader.Core.Writers.ClickHouse;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Строит ClickHouse SQL для provider-а <c>Calendar</c>.
+/// Calendar не читает внешний файл: он генерирует диапазон дат и набор производных календарных полей внутри DWH.
+/// </summary>
 internal static class CalendarSqlBuilder
 {
+    /// <summary>
+    /// Нижняя граница безопасного диапазона. Значение выбрано так, чтобы все calendar expressions
+    /// корректно работали с ClickHouse Date/Date32 и ISO-week вычислениями.
+    /// </summary>
     public static readonly DateOnly MinSupportedDate = new(1970, 1, 5);
+
+    /// <summary>
+    /// Верхняя граница безопасного диапазона для Calendar.
+    /// </summary>
     public static readonly DateOnly MaxSupportedDate = new(2148, 12, 31);
 
+    /// <summary>
+    /// Доменные имена колонок, которые Calendar всегда возвращает в фиксированном порядке.
+    /// </summary>
     public static readonly string[] FieldNames =
     [
         "Date",
@@ -41,6 +56,9 @@ internal static class CalendarSqlBuilder
         "WeekPeriod"
     ];
 
+    /// <summary>
+    /// Строит calendar SQL для явного диапазона <c>Calendar(min='...', max='...')</c>.
+    /// </summary>
     public static string BuildExplicitRangeSql(DateOnly min, DateOnly max)
     {
         var minSql = DateSql(min);
@@ -52,6 +70,10 @@ internal static class CalendarSqlBuilder
                                  """);
     }
 
+    /// <summary>
+    /// Строит calendar SQL, где диапазон берется из min/max значения поля уже загруженной таблицы.
+    /// Проверка диапазона выполняется внутри ClickHouse, чтобы не вычитывать исходную таблицу в C#.
+    /// </summary>
     public static string BuildLoadedTableRangeSql(
         ClickHouseTableName tableName,
         string physicalColumnName)

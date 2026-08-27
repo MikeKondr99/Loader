@@ -217,4 +217,8 @@ internal static class UnionSqlBuilder
     }
 }
 
+/// <summary>
+/// SQL UNION ALL вместе с логической schema результата.
+/// Поля нужны resolver-у, чтобы вернуть пользователю исходные aliases, а не внутренние union_columnN.
+/// </summary>
 internal sealed record UnionSql(string Sql, IReadOnlyList<LoadedTableField> Fields);

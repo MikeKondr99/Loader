@@ -10,6 +10,10 @@ using Loader.Core.Sources;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Фабрика DB provider source для <c>Connect</c>.
+/// Связывает тип подключения из registry с конкретным core provider-ом и его streaming-настройками.
+/// </summary>
 internal sealed class DatabaseLoadProviderFactory
 {
     private static readonly IReadOnlyDictionary<ScriptConnectionType, DatabaseLoadProviderFactory> KnownFactories = CreateKnownFactories();

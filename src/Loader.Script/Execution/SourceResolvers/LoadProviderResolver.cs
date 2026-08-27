@@ -3,6 +3,10 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Диспетчер provider-ов для секции <c>FROM</c>.
+/// Находит конкретный <see cref="ILoadSourceResolver"/> по имени provider-а и агрегирует ошибки resolve.
+/// </summary>
 public sealed class LoadProviderResolver : ILoadProviderResolver
 {
     private static readonly IReadOnlyDictionary<string, ILoadSourceResolver> Resolvers = CreateResolvers();

@@ -5,6 +5,10 @@ using System.Globalization;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Простой <see cref="DbDataReader"/> для provider-а <c>Numbers</c>.
+/// Генерирует одну колонку <c>number</c> без хранения всех значений в памяти.
+/// </summary>
 internal sealed class NumbersDataReader : DbDataReader
 {
     private const string ColumnName = "number";
@@ -25,8 +29,14 @@ internal sealed class NumbersDataReader : DbDataReader
         _finished = min > max;
     }
 
+    /// <summary>
+    /// Возвращает значение текущей строки по ordinal.
+    /// </summary>
     public override object this[int ordinal] => GetValue(ordinal);
 
+    /// <summary>
+    /// Возвращает значение текущей строки по имени колонки.
+    /// </summary>
     public override object this[string name] => GetValue(GetOrdinal(name));
 
     public override int Depth => 0;
@@ -62,6 +72,9 @@ internal sealed class NumbersDataReader : DbDataReader
         return true;
     }
 
+    /// <summary>
+    /// Асинхронная форма чтения. Реальной асинхронной работы нет, потому что значения генерируются в памяти.
+    /// </summary>
     public override Task<bool> ReadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

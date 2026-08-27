@@ -10,9 +10,13 @@ using Loader.Lang.Statements;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Общий разрешатель источника для Join/LeftJoin/RightJoin/FullJoin.
-/// Провайдер соединяет две уже загруженные script-таблицы по равенству ключей и возвращает читатель
-/// с логической схемой результата, после чего обычный конвейер LOAD применяет WHERE/GROUP/ORDER/LIMIT.
+/// Resolver provider-ов <c>Join</c>, <c>LeftJoin</c>, <c>RightJoin</c> и <c>FullJoin</c>. Создает источник соединения двух уже загруженных script-таблиц.
+/// Параметры:
+/// leftTable: Name - имя левой таблицы.
+/// leftField: Name - поле-ключ в левой таблице.
+/// rightTable: Name - имя правой таблицы.
+/// rightField: Name - поле-ключ в правой таблице.
+/// Поведение: ключи должны иметь одинаковый тип, а конфликтующие имена полей переименовываются через prefix имени таблицы.
 /// </summary>
 internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
 {

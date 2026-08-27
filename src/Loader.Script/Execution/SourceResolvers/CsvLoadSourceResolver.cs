@@ -4,6 +4,13 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Csv</c>. Создает источник чтения CSV-файла из <see cref="ScriptContext.FileStorage"/>.
+/// Параметры:
+/// path: Text - путь к файлу внутри file storage.
+/// delimiter: Text - один символ разделителя, по умолчанию <c>,</c>.
+/// header: Boolean - указывает, содержит ли первая строка имена колонок, по умолчанию <c>true</c>.
+/// </summary>
 internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Csv";

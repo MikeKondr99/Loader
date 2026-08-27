@@ -233,4 +233,8 @@ internal static class JoinSqlBuilder
     }
 }
 
+/// <summary>
+/// SQL JOIN вместе с логической schema результата.
+/// Schema уже содержит разрешенные конфликты имен, поэтому resolver может сразу переименовать reader.
+/// </summary>
 internal sealed record JoinSql(string Sql, IReadOnlyList<LoadedTableField> Fields);

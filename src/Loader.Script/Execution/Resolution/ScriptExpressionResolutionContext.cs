@@ -5,6 +5,10 @@ using QueryDataType = Loader.Query.Models.DataType;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Узкий контекст expression resolver-а поверх <see cref="ScriptContext"/>.
+/// Дает функциям доступа только к тем runtime-данным script execution, которые им реально нужны.
+/// </summary>
 internal sealed class ScriptExpressionResolutionContext : ExpressionResolutionContext
 {
     private readonly ScriptContext context;
@@ -14,6 +18,10 @@ internal sealed class ScriptExpressionResolutionContext : ExpressionResolutionCo
         this.context = context;
     }
 
+    /// <summary>
+    /// Ищет загруженную <c>MAPPED LOAD</c> таблицу для функций вроде <c>ApplyMap</c>.
+    /// Возвращает физическое имя таблицы и доменные типы key/value.
+    /// </summary>
     public override MapTableInfo? GetMap(string name)
     {
         var table = context.LoadedTables.FirstOrDefault(table =>
@@ -33,6 +41,10 @@ internal sealed class ScriptExpressionResolutionContext : ExpressionResolutionCo
         };
     }
 
+    /// <summary>
+    /// Проверяет наличие уже загруженной script-таблицы по alias.
+    /// Используется функциями/валидациями, которым достаточно факта существования таблицы.
+    /// </summary>
     public override bool HasTable(string name)
     {
         return context.LoadedTables.Any(table => string.Equals(

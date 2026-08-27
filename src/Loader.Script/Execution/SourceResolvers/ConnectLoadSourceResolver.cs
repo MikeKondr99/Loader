@@ -3,6 +3,12 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Connect</c>. Создает источник чтения БД через подключение из <see cref="ScriptContext.ConnectionRegistry"/>.
+/// Параметры:
+/// name: Text - имя подключения в registry.
+/// SQL после FROM: Text - запрос, который будет выполнен на стороне подключенной БД.
+/// </summary>
 internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Connect";

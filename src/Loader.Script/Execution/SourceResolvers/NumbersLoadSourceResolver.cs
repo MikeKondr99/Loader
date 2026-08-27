@@ -4,6 +4,13 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Numbers</c>. Создает источник с последовательностью целых чисел.
+/// Параметры:
+/// max: Integer - последнее допустимое значение последовательности.
+/// min: Integer - первое значение последовательности, по умолчанию <c>0</c>.
+/// step: Integer - шаг последовательности, должен быть больше <c>0</c>, по умолчанию <c>1</c>.
+/// </summary>
 internal sealed class NumbersLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Numbers";

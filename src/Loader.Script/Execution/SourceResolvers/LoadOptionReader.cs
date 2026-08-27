@@ -4,6 +4,10 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script;
 
+/// <summary>
+/// Утилита чтения options из provider call.
+/// Централизует позиционные параметры, required-проверки, типизацию literal-ов и ошибки по неизвестным options.
+/// </summary>
 internal sealed class LoadOptionReader
 {
     private readonly IReadOnlyList<LoadOption> _options;
@@ -17,8 +21,14 @@ internal sealed class LoadOptionReader
         _optionsByName = BuildOptionMap(options, errors);
     }
 
+    /// <summary>
+    /// Количество options, переданных без имени: например <c>Csv('file.csv')</c>.
+    /// </summary>
     public int PositionalCount => _options.Count(IsPositional);
 
+    /// <summary>
+    /// Возвращает options, которые еще не были сопоставлены с именованным provider-specific параметром.
+    /// </summary>
     public IReadOnlyList<LoadOption> PositionalOptions()
     {
         return _options.Where(IsPositional).ToArray();

@@ -4,6 +4,11 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Qvd</c>. Создает источник чтения QVD-файла из <see cref="ScriptContext.FileStorage"/>.
+/// Параметры:
+/// path: Text - путь к файлу внутри file storage.
+/// </summary>
 internal sealed class QvdLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Qvd";

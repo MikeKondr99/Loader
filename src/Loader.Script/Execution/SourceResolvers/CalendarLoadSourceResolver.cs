@@ -10,6 +10,14 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Calendar</c>. Создает календарную таблицу из явного диапазона или диапазона уже загруженной таблицы.
+/// Параметры:
+/// min: Text - начальная дата в формате <c>yyyy-MM-dd</c> для явного диапазона.
+/// max: Text - конечная дата в формате <c>yyyy-MM-dd</c> для явного диапазона.
+/// table: Name - имя уже загруженной таблицы, из которой нужно взять диапазон дат.
+/// field: Name - поле Date/DateTime в таблице <c>table</c>.
+/// </summary>
 internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Calendar";

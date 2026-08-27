@@ -7,6 +7,11 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Table</c>. Создает источник чтения уже загруженной script-таблицы из DWH.
+/// Параметры:
+/// name: Text - alias таблицы, созданной предыдущим LOAD statement.
+/// </summary>
 internal sealed class TableLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Table";

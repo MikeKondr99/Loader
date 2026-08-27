@@ -4,6 +4,12 @@ using Loader.Lang.Statements;
 
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Resolver provider-а <c>Xml</c>. Создает источник чтения XML-файла из <see cref="ScriptContext.FileStorage"/>.
+/// Параметры:
+/// path: Text - путь к файлу внутри file storage.
+/// table: Text - имя XML-node, которая считается строкой таблицы.
+/// </summary>
 internal sealed class XmlLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Xml";

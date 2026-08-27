@@ -1,5 +1,8 @@
 namespace Loader.Script.Execution;
 
+/// <summary>
+/// Поддерживаемый тип соединения для provider-ов <c>Join</c>, <c>LeftJoin</c>, <c>RightJoin</c> и <c>FullJoin</c>.
+/// </summary>
 internal enum JoinKind
 {
     Inner,
@@ -8,6 +11,9 @@ internal enum JoinKind
     Full
 }
 
+/// <summary>
+/// Преобразует внутренний тип join-а в имя provider-а, которое используется в script syntax.
+/// </summary>
 internal static class JoinKindExtensions
 {
     public static string ProviderName(this JoinKind kind)
