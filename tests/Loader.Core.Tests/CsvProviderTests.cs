@@ -69,6 +69,124 @@ public sealed class CsvProviderTests
     }
 
     [Test]
+    [DisplayName("Csv \"Moscow\" пробел после кавычки сохраняет как часть значения")]
+    public async Task Whitespace_after_closing_quote_is_kept_in_value()
+    {
+        var source = new InlineCsv(
+            "id,name,note\r\n1,\"Moscow\" ,\"quoted value\" ");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name", "note"],
+            types: [DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Moscow ", "quoted value ")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv валидные quoted значения читаются без внешних кавычек")]
+    public async Task Valid_quoted_values_are_read_without_outer_quotes()
+    {
+        var source = new InlineCsv(
+            "id,note\r\n1,\" spaced value \"\r\n2,\"say \"\"hello\"\"\"\r\n3,\"hello\r\nworld\"");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "note"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", " spaced value "),
+                ("2", "say \"hello\""),
+                ("3", "hello\r\nworld")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv пробел перед кавычкой делает кавычки обычным текстом")]
+    public async Task Whitespace_before_opening_quote_keeps_quotes_as_text()
+    {
+        var source = new InlineCsv(
+            ", \"value\" ,");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                HasHeader = false
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["A", "B", "C"],
+            types: [DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("", " \"value\" ", "")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv текст после закрывающей кавычки добавляет в значение")]
+    public async Task Text_after_closing_quote_is_appended_to_value()
+    {
+        var source = new InlineCsv(
+            "value\r\n\"abc\"tail");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create("abctail")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv escaped quote и текст после кавычки остаются в одном значении")]
+    public async Task Escaped_quote_and_text_after_closing_quote_are_read_as_one_value()
+    {
+        var source = new InlineCsv(
+            "value\r\n\"a\"\"b\" tail");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create("a\"b tail")
+            ]);
+    }
+
+    [Test]
     [DisplayName("Csv с UTF-8 BOM не добавляет BOM в имя первой колонки")]
     public async Task Utf8_bom_is_not_part_of_first_header_name()
     {
@@ -540,8 +658,8 @@ public sealed class CsvProviderTests
     }
 
     [Test]
-    [DisplayName("Csv с незакрытой кавычкой кидает MalformedCsvProviderException")]
-    public async Task Unclosed_quote_throws_provider_exception()
+    [DisplayName("Csv незакрытая кавычка читает текст до конца поля")]
+    public async Task Unclosed_quote_reads_text_until_field_end()
     {
         var source = new InlineCsv(
             """
@@ -557,12 +675,145 @@ public sealed class CsvProviderTests
             });
         await using var reader = rawReader.Normalize();
 
-        await Assert.That(reader).HaveSchema(
+        await Assert.That(reader).HaveData(
             columns: ["value"],
-            types: [DataType.Text]);
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create("abc")
+            ]);
+    }
 
-        await Assert.That(() => reader.Read())
-            .ThrowsExactly<MalformedCsvProviderException>()
-            .WithMessage("CSV file 'any-file-name.csv' is malformed.");
+    [Test]
+    [DisplayName("Csv с LF line endings читает строки как обычные записи")]
+    public async Task Lf_line_endings_read_rows()
+    {
+        var source = new InlineCsv("id,name\n1,Alice\n2,Bob");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice"),
+                ("2", "Bob")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv unquoted значение сохраняет пробелы вокруг текста")]
+    public async Task Unquoted_value_preserves_outer_whitespace()
+    {
+        var source = new InlineCsv("value\r\n text ");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create(" text ")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv quoted empty string выдает пустую строку")]
+    public async Task Quoted_empty_string_returns_empty_string()
+    {
+        var source = new InlineCsv("value\r\n\"\"");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value"],
+            types: [DataType.Text],
+            rows: [
+                ValueTuple.Create("")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv строка из delimiters выдает пустые строки по всем колонкам")]
+    public async Task Delimiters_only_row_returns_empty_strings()
+    {
+        var source = new InlineCsv(",,");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                HasHeader = false
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["A", "B", "C"],
+            types: [DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("", "", "")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv header с пустым именем колонки сохраняет пустое имя")]
+    public async Task Header_empty_column_name_is_kept()
+    {
+        var source = new InlineCsv("id,,name\r\n1,2,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "", "name"],
+            types: [DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("1", "2", "Alice")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv header сохраняет пробелы вокруг имени колонки")]
+    public async Task Header_column_name_preserves_outer_whitespace()
+    {
+        var source = new InlineCsv(" id , name \r\n1,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: [" id ", " name "],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice")
+            ]);
     }
 }

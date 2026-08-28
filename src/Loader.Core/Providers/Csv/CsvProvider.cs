@@ -15,6 +15,8 @@ namespace Loader.Core.Providers.Csv;
 /// Missing row values are left as <c>DBNull</c>. Extra row values beyond the schema are ignored.
 /// Empty CSV with required headers is normalized to <see cref="NoHeaderCsvProviderException"/>.
 /// Malformed CSV rows are normalized to <see cref="MalformedCsvProviderException"/>.
+/// Reader uses Sylvan <see cref="CsvStyle.Lax"/> to accept common non-strict CSV files:
+/// whitespace or text after a closing quote and unclosed quotes do not fail parsing.
 /// </summary>
 public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
 {
@@ -31,7 +33,8 @@ public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
         var readerOptions = new CsvDataReaderOptions
         {
             Delimiter = config.Delimiter,
-            HasHeaders = config.HasHeader
+            HasHeaders = config.HasHeader,
+            CsvStyle = CsvStyle.Lax
         };
 
         // 2. Открываем бинарный поток через source, чтобы provider не знал деталей файловой системы.
