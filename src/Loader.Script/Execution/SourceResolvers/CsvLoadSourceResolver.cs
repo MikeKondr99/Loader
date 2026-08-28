@@ -1,6 +1,7 @@
 using Loader.Core.Providers.Csv;
 using Loader.Lang;
 using Loader.Lang.Statements;
+using Sylvan.Data.Csv;
 
 namespace Loader.Script.Execution;
 
@@ -23,11 +24,29 @@ internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
         CancellationToken cancellationToken)
     {
         options = options.MapPositionals(Name, ["path"]);
-        RejectUnknownOptions(Name, options, errors, ["path", "delimiter", "header"]);
+        RejectUnknownOptions(Name, options, errors, ["path", "delimiter", "header", "skipRows", "style", "encoding", "comment", "trimHeaders", "trimValues", "emptyAsNull"]);
         RejectSqlForFileProvider("csv", statement, errors);
         var path = RequiredPath("csv", statement, options, errors);
         var delimiter = options.Character("delimiter", ',');
         var hasHeader = options.Boolean("header", true);
+        var skipRows = options.Integer("skipRows", 0);
+        if (skipRows < 0)
+        {
+            errors.Add(new LangError
+            {
+                Message = "Опция 'skipRows' должна быть больше или равна 0.",
+                Span = options.GetOption("skipRows")?.Span ?? statement.SourceCall.Span
+            });
+        }
+
+        var style = CsvStyleResolver.Optional(Name, "style", options, errors, CsvStyle.Lax);
+        var encoding = FileEncodingResolver.Optional(Name, "encoding", options, errors);
+        var comment = options.GetOption("comment") is null
+            ? (char?)null
+            : options.Character("comment", '\0');
+        var trimHeaders = options.Boolean("trimHeaders", false);
+        var trimValues = options.Boolean("trimValues", false);
+        var emptyAsNull = options.Boolean("emptyAsNull", false);
         if (path is null || errors.Count > 0)
         {
             return ValueTask.FromResult<LoadProviderSource>(null!);
@@ -43,7 +62,14 @@ internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
                 {
                     FileName = fileName,
                     Delimiter = delimiter,
-                    HasHeader = hasHeader
+                    HasHeader = hasHeader,
+                    SkipRows = skipRows,
+                    Style = style,
+                    Encoding = encoding,
+                    Comment = comment,
+                    TrimHeaders = trimHeaders,
+                    TrimValues = trimValues,
+                    EmptyAsNull = emptyAsNull
                 },
                 token)));
     }

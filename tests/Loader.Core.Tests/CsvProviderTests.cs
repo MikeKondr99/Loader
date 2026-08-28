@@ -1,6 +1,7 @@
 using System.Text;
 using Loader.Core.Providers.Csv;
 using Loader.Core.Tests.Infrastructure;
+using Sylvan.Data.Csv;
 using TUnit.Assertions;
 using TUnit.Assertions.Extensions;
 using TUnit.Core;
@@ -160,6 +161,52 @@ public sealed class CsvProviderTests
             types: [DataType.Text],
             rows: [
                 ValueTuple.Create("abctail")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv style=standard отклоняет текст после закрывающей кавычки")]
+    public async Task Standard_style_rejects_text_after_closing_quote()
+    {
+        var source = new InlineCsv(
+            "value\r\n\"abc\"tail");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                Style = CsvStyle.Standard
+            });
+
+        await Assert.That(async () =>
+            {
+                await rawReader.ReadAsync();
+            })
+            .ThrowsExactly<MalformedCsvProviderException>();
+    }
+
+    [Test]
+    [DisplayName("Csv style=escaped использует кавычку как escape для delimiter")]
+    public async Task Escaped_style_uses_quote_as_escape_for_delimiter()
+    {
+        var source = new InlineCsv(
+            "id,note\r\n1,hello\",world");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                Style = CsvStyle.Escaped
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "note"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "hello,world")
             ]);
     }
 
@@ -814,6 +861,230 @@ public sealed class CsvProviderTests
             types: [DataType.Text, DataType.Text],
             rows: [
                 ("1", "Alice")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv skipRows пропускает строки до чтения header")]
+    public async Task Skip_rows_skips_lines_before_header()
+    {
+        var source = new InlineCsv("metadata 1\r\nmetadata 2\r\nid,name\r\n1,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                SkipRows = 2
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv skipRows с header=false пропускает строки до data rows")]
+    public async Task Skip_rows_skips_lines_before_data_when_header_is_false()
+    {
+        var source = new InlineCsv("metadata\r\n1,Alice\r\n2,Bob");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                HasHeader = false,
+                SkipRows = 1
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["A", "B"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice"),
+                ("2", "Bob")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv skipRows с отрицательным значением кидает ошибку конфигурации")]
+    public async Task Negative_skip_rows_throws()
+    {
+        var source = new InlineCsv("id,name\r\n1,Alice");
+
+        await Assert.That(() => Provider.OpenReaderAsync(
+                source,
+                new CsvTableConfig
+                {
+                    FileName = "any-file-name.csv",
+                    SkipRows = -1
+                }).AsTask().GetAwaiter().GetResult())
+            .ThrowsExactly<ArgumentOutOfRangeException>();
+    }
+
+    [Test]
+    [DisplayName("Csv comment=# пропускает строки комментариев")]
+    public async Task Comment_skips_comment_lines()
+    {
+        var source = new InlineCsv("id,name\r\n# ignored\r\n1,Alice\r\n# ignored too\r\n2,Bob");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                Comment = '#'
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice"),
+                ("2", "Bob")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv без comment читает # как обычное значение")]
+    public async Task Comment_is_disabled_by_default()
+    {
+        var source = new InlineCsv("id,name\r\n#,ignored\r\n1,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv"
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("#", "ignored"),
+                ("1", "Alice")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv trimHeaders=true удаляет пробелы вокруг имен колонок")]
+    public async Task Trim_headers_removes_outer_whitespace_from_column_names()
+    {
+        var source = new InlineCsv(" id , name \r\n1,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                TrimHeaders = true
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv trimHeaders=true выявляет дубли после удаления пробелов")]
+    public async Task Trim_headers_duplicate_names_throw_schema_exception()
+    {
+        var source = new InlineCsv("id, id \r\n1,2");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                TrimHeaders = true
+            });
+
+        await Assert.That(() => rawReader.Normalize())
+            .ThrowsExactly<DuplicateDataFieldNameException>()
+            .WithMessage("Column name 'id' is duplicated.");
+    }
+
+    [Test]
+    [DisplayName("Csv trimValues=true удаляет пробелы вокруг значений")]
+    public async Task Trim_values_removes_outer_whitespace_from_values()
+    {
+        var source = new InlineCsv("id,name,note\r\n 1 , Alice ,\" quoted \"");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                TrimValues = true
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name", "note"],
+            types: [DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("1", "Alice", "quoted")
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv emptyAsNull=true превращает пустые строки в DBNull")]
+    public async Task Empty_as_null_converts_empty_strings_to_db_null()
+    {
+        var source = new InlineCsv("id,name\r\n1,\r\n2,\"\"");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                EmptyAsNull = true
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", DBNull.Value),
+                ("2", DBNull.Value)
+            ]);
+    }
+
+    [Test]
+    [DisplayName("Csv trimValues=true и emptyAsNull=true сначала удаляет пробелы потом делает DBNull")]
+    public async Task Trim_values_then_empty_as_null_converts_whitespace_to_db_null()
+    {
+        var source = new InlineCsv("id,name\r\n1,   ");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                TrimValues = true,
+                EmptyAsNull = true
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", DBNull.Value)
             ]);
     }
 }
