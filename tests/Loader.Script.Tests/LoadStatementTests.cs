@@ -912,25 +912,6 @@ public sealed class LoadStatementTests
 
         public List<object[]> Rows { get; } = [];
 
-        protected override async ValueTask<long> WriteTempTableAsync(
-            ScriptContext context,
-            DomainDataReader reader,
-            ClickHouseTableName tableName,
-            CancellationToken cancellationToken)
-        {
-            WriteCalls++;
-            TableName = tableName;
-
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var values = new object[reader.FieldCount];
-                reader.GetValues(values);
-                Rows.Add(values);
-            }
-
-            return Rows.Count;
-        }
-
         protected override ValueTask<long> MaterializeFinalTableAsync(
             ScriptContext context,
             LoadStatement statement,
@@ -947,16 +928,6 @@ public sealed class LoadStatementTests
             }
 
             return ValueTask.FromResult(FinalRowCount);
-        }
-
-        protected override ValueTask DropTempTableAsync(
-            ScriptContext context,
-            ClickHouseTableName tempTable,
-            CancellationToken cancellationToken)
-        {
-            DropCalls++;
-            DropTableName = tempTable;
-            return ValueTask.CompletedTask;
         }
 
         protected override ValueTask DropFinalTableAsync(

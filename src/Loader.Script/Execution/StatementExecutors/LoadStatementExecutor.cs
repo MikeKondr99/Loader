@@ -1,4 +1,3 @@
-using System.Data.Common;
 using System.Text;
 using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
@@ -57,133 +56,6 @@ public class LoadStatementExecutor
         context.AddLoadedTable(loadedTable);
         finalTable.Commit();
         return loadedTable;
-    }
-
-    public async ValueTask<TemporaryClickHouseTable> LoadTempTableAsync(
-        ScriptContext context,
-        LoadStatement statement,
-        ReaderLoadFromSource source,
-        CancellationToken cancellationToken = default)
-    {
-        await using var providerReader = await OpenProviderReaderAsync(context, statement, source, cancellationToken)
-            .ConfigureAwait(false);
-
-        await using var stageNameReader = providerReader.AbstractColumns();
-
-        await using var stageReader = LimitSourceRows(
-            NormalizeForTempTable(stageNameReader, source),
-            ToInt32(statement.First, nameof(statement.First)));
-
-        ValidateMappedTempTableSchema(statement, stageReader.DataSchema.Fields.Count);
-
-        var tempTable = CreatePhysicalTempTableName(context);
-
-        using (var tempTableActivity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.TempTableWrite"))
-        {
-            tempTableActivity?
-                .SetTag("load.table_name", statement.TableName)
-                .SetTag("load.source_provider", statement.SourceCall.Name)
-                .SetTag("load.temp_table", tempTable.Table);
-
-            try
-            {
-                var rowCount = await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
-                await context.Logger.SourceRowsLoadedAsync(rowCount, cancellationToken).ConfigureAwait(false);
-            }
-            catch (LoadScriptStageException)
-            {
-                throw;
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                throw new LoadScriptExecutionException(
-                    LoadScriptStage.TempTableWrite,
-                    $"Не удалось загрузить данные во временную таблицу: {exception.Message}",
-                    statement.LoadSpan ?? statement.FromSpan,
-                    exception);
-            }
-        }
-
-        return CreateTempTableResult(context, stageNameReader, stageReader, tempTable);
-    }
-
-    private static async ValueTask<DbDataReader> OpenProviderReaderAsync(
-        ScriptContext context,
-        LoadStatement statement,
-        ReaderLoadFromSource source,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            return await source.OpenReaderAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (LoadScriptStageException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            throw new LoadScriptExecutionException(
-                LoadScriptStage.SourceOpen,
-                $"Не удалось открыть источник данных: {exception.Message}",
-                statement.SqlPart?.Span ?? statement.FromSpan,
-                exception);
-        }
-    }
-
-    private static DomainDataReader NormalizeForTempTable(
-        RenameColumnDataReader stageNameReader,
-        ReaderLoadFromSource source)
-    {
-        return stageNameReader.Normalize(new NormalizeOptions
-        {
-            Buffer = source.RequiresBuffer
-        });
-    }
-
-    private static DomainDataReader LimitSourceRows(DomainDataReader reader, int? limit)
-    {
-        return limit is null
-            ? reader
-            : reader.Limit(limit.Value);
-    }
-
-    private static int? ToInt32(long? value, string name)
-    {
-        if (value is null)
-        {
-            return null;
-        }
-
-        if (value < 0 || value > int.MaxValue)
-        {
-            throw new ArgumentOutOfRangeException(name, value, "Value must fit Int32.");
-        }
-
-        return (int)value.Value;
-    }
-
-    protected virtual async ValueTask<long> WriteTempTableAsync(
-        ScriptContext context,
-        DomainDataReader stageReader,
-        ClickHouseTableName tempTable,
-        CancellationToken cancellationToken)
-    {
-        var source = new ConnectionStringSource
-        {
-            ConnectionString = context.TargetConnectionString
-        };
-        var meta = new DataMetaContainer();
-        await using var metaReader = stageReader.CollectMeta(meta);
-        await new ClickHouseWriter()
-            .WriteAsync(
-                source,
-                metaReader,
-                CreateWriteOptions(tempTable, LoadClickHouseTableKind.Temp),
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return meta.RowCount;
     }
 
     private ResolvedQuerySql BuildResolvedQuerySql(
@@ -394,14 +266,6 @@ public class LoadStatementExecutor
         };
     }
 
-    protected virtual async ValueTask DropTempTableAsync(
-        ScriptContext context,
-        ClickHouseTableName tempTable,
-        CancellationToken cancellationToken)
-    {
-        await DropTableAsync(context, tempTable, cancellationToken).ConfigureAwait(false);
-    }
-
     protected virtual async ValueTask DropFinalTableAsync(
         ScriptContext context,
         ClickHouseTableName finalTable,
@@ -426,20 +290,6 @@ public class LoadStatementExecutor
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask DropTempTableBestEffortAsync(
-        ScriptContext context,
-        ClickHouseTableName tempTable)
-    {
-        try
-        {
-            await DropTempTableAsync(context, tempTable, CancellationToken.None).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            // Best-effort cleanup: исходная ошибка LOAD важнее ошибки удаления temp table.
-        }
-    }
-
     private async ValueTask DropFinalTableBestEffortAsync(
         ScriptContext context,
         ClickHouseTableName finalTable)
@@ -454,33 +304,12 @@ public class LoadStatementExecutor
         }
     }
 
-    private TemporaryClickHouseTable CreateTempTableResult(
-        ScriptContext context,
-        RenameColumnDataReader stageNameReader,
-        DomainDataReader stageReader,
-        ClickHouseTableName tempTable)
-    {
-        return new TemporaryClickHouseTable(
-            tempTable,
-            stageReader.DataSchema,
-            stageNameReader.OriginalNames.ToArray(),
-            () => DropTempTableBestEffortAsync(context, tempTable));
-    }
-
     private FinalClickHouseTable CreateFinalTable(ScriptContext context)
     {
         var finalTable = CreatePhysicalFinalTableName(context);
         return new FinalClickHouseTable(
             finalTable,
             () => DropFinalTableBestEffortAsync(context, finalTable));
-    }
-
-    private static ClickHouseTableName CreatePhysicalTempTableName(ScriptContext context)
-    {
-        return new ClickHouseTableName
-        {
-            Table = $"{context.Options.TempTablePrefix}{Guid.NewGuid():N}"
-        };
     }
 
     private static ClickHouseTableName CreatePhysicalFinalTableName(ScriptContext context)
