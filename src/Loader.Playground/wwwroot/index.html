@@ -488,7 +488,8 @@
       text-align: left;
     }
 
-    .preview-null {
+    .preview-table td.preview-null,
+    .preview-table td.preview-empty {
       color: var(--muted);
       font-style: italic;
     }
@@ -1220,6 +1221,10 @@ LIMIT 10;`;
           if (value === null || value === undefined) {
             td.textContent = 'NULL';
             td.classList.add('preview-null');
+          } else if (value === '') {
+            td.textContent = 'Пустая строка';
+            td.classList.add('preview-empty');
+            td.title = '';
           } else {
             td.textContent = formatPreviewValue(value, field);
             td.title = String(value);
