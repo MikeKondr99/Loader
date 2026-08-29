@@ -41,7 +41,13 @@ public sealed class FileSystemSource : IPhysicalFileSource
     public Stream OpenRead(string fileName)
     {
         var fullPath = ResolveFilePath(fileName);
-        return File.OpenRead(fullPath);
+        return new FileStream(
+            fullPath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            FileOptions.SequentialScan);
     }
 
     public string ResolveFilePath(string fileName)

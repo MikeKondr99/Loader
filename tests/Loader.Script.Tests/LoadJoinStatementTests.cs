@@ -276,6 +276,173 @@ public sealed class LoadJoinStatementTests
     }
 
     [Test]
+    [DisplayName("Script Join FIRST ограничивает joined source до LOAD преобразований")]
+    public async Task Execute_script_join_first_limits_source_rows_before_transformations()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            LOAD *
+            FROM Inline(id, customer_id;
+                1, 10;
+                2, 20;
+                3, 30);
+
+            customers:
+            LOAD *
+            FROM Inline(id, name;
+                10, 'Zulu';
+                20, 'Yankee';
+                30, 'Alpha');
+
+            result:
+            FIRST 2
+            LOAD
+                [orders.id] AS order_id,
+                name
+            FROM Join(orders, customer_id, customers, id)
+            ORDER BY name ASC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["order_id", "name"],
+            [
+                new object?[] { 2L, "Yankee" },
+                new object?[] { 1L, "Zulu" }
+            ],
+            "ORDER BY `column2` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Join сопоставляет поля сторон по alias при разном physical order")]
+    public async Task Execute_script_join_preserves_alias_mapping_when_physical_order_differs()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            left_source:
+            LOAD
+                raw_key AS left_key,
+                raw_left AS left_value
+            FROM Inline(raw_left, raw_key;
+                10, 1;
+                20, 2);
+
+            right_source:
+            LOAD
+                raw_right AS right_value,
+                raw_key AS right_key
+            FROM Inline(raw_key, raw_right;
+                1, 100;
+                2, 200);
+
+            result:
+            LOAD
+                left_key,
+                left_value,
+                right_value,
+                left_value + right_value AS total
+            FROM Join(left_source, left_key, right_source, right_key)
+            ORDER BY left_key ASC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["left_key", "left_value", "right_value", "total"],
+            [
+                new object?[] { 1L, 10L, 100L, 110L },
+                new object?[] { 2L, 20L, 200L, 220L }
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Join квалифицирует physical columns разных сторон")]
+    public async Task Execute_script_join_qualifies_physical_columns_from_both_sides()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            left_source:
+            LOAD
+                raw_key AS left_key,
+                raw_name AS left_name
+            FROM Inline(raw_key, raw_name;
+                1, 'left-1';
+                2, 'left-2');
+
+            right_source:
+            LOAD
+                raw_key AS right_key,
+                raw_name AS right_name
+            FROM Inline(raw_key, raw_name;
+                1, 'right-1';
+                3, 'right-3');
+
+            result:
+            LOAD
+                left_key,
+                left_name,
+                right_name
+            FROM Join(left_source, left_key, right_source, right_key);
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["left_key", "left_name", "right_name"],
+            [
+                new object?[] { 1L, "left-1", "right-1" }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Join читает TEMP LOAD источники и чистит их в конце")]
+    public async Task Execute_script_join_reads_temp_sources_and_cleans_them_at_the_end()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            orders:
+            TEMP LOAD *
+            FROM Inline(id, customer_id;
+                1, 10;
+                2, 20);
+
+            customers:
+            TEMP LOAD *
+            FROM Inline(id, name;
+                10, 'Ann';
+                30, 'Kate');
+
+            result:
+            LOAD
+                [orders.id] AS order_id,
+                name
+            FROM Join(orders, customer_id, customers, id);
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await Assert.That(execution.Tables[0].Alias).IsEqualTo("result");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["order_id", "name"],
+            [
+                new object?[] { 1L, "Ann" }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+        await ScriptIntegrationAssert.AssertTableCountWithPrefixAsync(database, execution.FinalTablePrefix, 1);
+    }
+
+    [Test]
     [DisplayName("Script Join работает с blocked table и field names")]
     public async Task Execute_script_join_supports_blocked_table_and_field_names()
     {

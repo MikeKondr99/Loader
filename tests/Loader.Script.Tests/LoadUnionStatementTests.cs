@@ -1002,6 +1002,135 @@ public sealed class LoadUnionStatementTests
     }
 
     [Test]
+    [DisplayName("Script Union FIRST ограничивает объединенный source до LOAD преобразований")]
+    public async Task Execute_script_union_first_limits_source_rows_before_transformations()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            first_source:
+            LOAD
+                id,
+                name
+            FROM Inline(id, name;
+                1, 'Zulu';
+                2, 'Yankee';
+                3, 'Xray');
+
+            second_source:
+            LOAD
+                id,
+                name
+            FROM Inline(id, name;
+                4, 'Alpha';
+                5, 'Beta');
+
+            result:
+            FIRST 3
+            LOAD
+                COUNT() AS rows_count
+            FROM Union(first_source, second_source);
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["rows_count"],
+            [
+                new object?[] { 3UL }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Union сохраняет alias mapping при разном physical order источников")]
+    public async Task Execute_script_union_preserves_alias_mapping_for_explicit_expressions_after_alignment()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            first_source:
+            LOAD
+                raw_b AS b,
+                raw_a AS a
+            FROM Inline(raw_a, raw_b;
+                1, 10;
+                2, 20);
+
+            second_source:
+            LOAD
+                raw_a AS a,
+                raw_b AS b
+            FROM Inline(raw_b, raw_a;
+                30, 3;
+                40, 4);
+
+            result:
+            LOAD
+                a,
+                b,
+                a + b AS total
+            FROM Union(first_source, second_source)
+            ORDER BY a ASC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["a", "b", "total"],
+            [
+                new object?[] { 1L, 10L, 11L },
+                new object?[] { 2L, 20L, 22L },
+                new object?[] { 3L, 30L, 33L },
+                new object?[] { 4L, 40L, 44L }
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script Union читает TEMP LOAD источники и чистит их в конце")]
+    public async Task Execute_script_union_reads_temp_sources_and_cleans_them_at_the_end()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            first_source:
+            TEMP LOAD
+                id,
+                name
+            FROM Inline(id, name;
+                1, 'A');
+
+            second_source:
+            TEMP LOAD
+                id,
+                name
+            FROM Inline(id, name;
+                2, 'B');
+
+            result:
+            LOAD *
+            FROM Union(first_source, second_source)
+            ORDER BY id ASC;
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await Assert.That(execution.Tables[0].Alias).IsEqualTo("result");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["id", "name"],
+            [
+                new object?[] { 1L, "A" },
+                new object?[] { 2L, "B" }
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+        await ScriptIntegrationAssert.AssertTableCountWithPrefixAsync(database, execution.FinalTablePrefix, 1);
+    }
+
+    [Test]
     [DisplayName("Script Union после DROP source возвращает script error")]
     public async Task Execute_script_union_after_drop_source_returns_script_error()
     {

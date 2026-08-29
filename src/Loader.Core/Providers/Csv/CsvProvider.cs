@@ -15,6 +15,8 @@ namespace Loader.Core.Providers.Csv;
 /// Missing row values are left as <c>DBNull</c>. Extra row values beyond the schema are ignored.
 /// Empty CSV with required headers is normalized to <see cref="NoHeaderCsvProviderException"/>.
 /// Malformed CSV rows are normalized to <see cref="MalformedCsvProviderException"/>.
+/// Reader uses Sylvan <see cref="CsvStyle.Lax"/> to accept common non-strict CSV files:
+/// whitespace or text after a closing quote and unclosed quotes do not fail parsing.
 /// </summary>
 public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
 {
@@ -26,12 +28,21 @@ public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (config.SkipRows < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(config),
+                config.SkipRows,
+                "SkipRows must be greater than or equal to zero.");
+        }
 
         // 1. Переносим настройки таблицы в настройки Sylvan CSV reader.
         var readerOptions = new CsvDataReaderOptions
         {
             Delimiter = config.Delimiter,
-            HasHeaders = config.HasHeader
+            HasHeaders = config.HasHeader,
+            Comment = config.Comment ?? '\0',
+            CsvStyle = config.Style
         };
 
         // 2. Открываем бинарный поток через source, чтобы provider не знал деталей файловой системы.
@@ -40,6 +51,7 @@ public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
             stream,
             config.Encoding ?? Encoding.UTF8,
             detectEncodingFromByteOrderMarks: true);
+        SkipRows(textReader, config.SkipRows);
 
         // 3. Создаем потоковый reader и нормализуем provider-level поведение.
         DbDataReader reader;
@@ -56,6 +68,20 @@ public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
             new CsvProviderDataReader(
                 reader,
                 config.FileName,
-                useGeneratedColumnNames: !config.HasHeader));
+                useGeneratedColumnNames: !config.HasHeader,
+                trimHeaders: config.TrimHeaders,
+                trimValues: config.TrimValues,
+                emptyAsNull: config.EmptyAsNull));
+    }
+
+    private static void SkipRows(TextReader reader, long count)
+    {
+        for (var index = 0L; index < count; index++)
+        {
+            if (reader.ReadLine() is null)
+            {
+                return;
+            }
+        }
     }
 }

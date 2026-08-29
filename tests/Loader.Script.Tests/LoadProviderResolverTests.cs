@@ -1,6 +1,8 @@
 using System.Data.Common;
+using System.Text;
 using Loader.Core.Exceptions;
 using Loader.Core.Models;
+using Loader.Core.Providers.Csv;
 using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang;
@@ -23,8 +25,8 @@ public sealed class LoadProviderResolverTests
             CreateStatement("Csv", [Option("path", "orders.csv")]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("csv");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -37,8 +39,8 @@ public sealed class LoadProviderResolverTests
             CreateStatement("Csv", [Positional("orders.csv")]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("csv");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -77,6 +79,24 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Excel отклоняет range не в A1-нотации")]
+    public async Task Resolve_excel_rejects_invalid_range()
+    {
+        var resolver = new LoadProviderResolver();
+        var rangeSpan = Span(3, 38, 50);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Excel", [Option("path", "orders.xlsx"), Option("range", "SalesRange", rangeSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(rangeSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("range");
+        await Assert.That(exception.Errors[0].Message).Contains("A1:B20");
+    }
+
+    [Test]
     [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
     public async Task Resolve_numbers_reads_default_range()
     {
@@ -85,10 +105,10 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Option("max", 3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("numbers");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("number");
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
@@ -105,7 +125,7 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
@@ -138,7 +158,7 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(2, 0), Positional(8, 1), Option("step", 3)]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
@@ -159,7 +179,7 @@ public sealed class LoadProviderResolverTests
                     Option("step", 3)
                 ]),
             CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await ReadNumbersAsync(reader))
             .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
@@ -280,9 +300,9 @@ public sealed class LoadProviderResolverTests
             "test: LOAD * FROM Inline(id, name, active, amount; 1, 'Mike', true, -10.5; -2, null, false, 0);");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("inline");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
         await Assert.That(reader.FieldCount).IsEqualTo(4);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
@@ -309,7 +329,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement("test: LOAD * FROM Inline(a; 1; 2.0;);");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("a");
@@ -336,7 +356,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(string));
         await Assert.That(await reader.ReadAsync()).IsTrue();
@@ -361,7 +381,7 @@ public sealed class LoadProviderResolverTests
         var statement = ParseLoadStatement($"test: LOAD * FROM {inline};");
 
         var source = await resolver.ResolveAsync(statement, CreateContext());
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
         var schema = reader.GetSchemaTable();
 
         await Assert.That(schema).IsNotNull();
@@ -458,8 +478,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -477,8 +496,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext());
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -616,8 +634,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             context);
 
-        await Assert.That(source.Kind).IsEqualTo("calendar");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<SqlLoadFromSource>();
     }
 
     [Test]
@@ -686,8 +703,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM dbo.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("odbc");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsTrue();
     }
 
     [Test]
@@ -712,8 +729,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM public.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("postgres");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -738,8 +755,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM events"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("clickhouse");
-        await Assert.That(source.RequiresBuffer).IsFalse();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
     }
 
     [Test]
@@ -938,7 +955,7 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM public.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("postgres");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
     }
 
     [Test]
@@ -992,8 +1009,8 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM default.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(source.Kind).IsEqualTo("hive");
-        await Assert.That(source.RequiresBuffer).IsTrue();
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(Reader(source).RequiresBuffer).IsTrue();
     }
 
     [Test]
@@ -1018,7 +1035,7 @@ public sealed class LoadProviderResolverTests
                 sql: "SELECT * FROM default.orders"),
             CreateContext(registry: registry));
 
-        await Assert.That(async () => await source.OpenReaderAsync(CancellationToken.None))
+        await Assert.That(async () => await Reader(source).OpenReaderAsync(CancellationToken.None))
             .ThrowsExactly<DbExecutionException>()
             .WithMessage("Database query failed for provider 'hive': SELECT * FROM default.orders");
     }
@@ -1180,9 +1197,9 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source.Kind).IsEqualTo("json");
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
         await Assert.That(reader.GetName(1)).IsEqualTo("city");
@@ -1220,7 +1237,7 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1260,7 +1277,7 @@ public sealed class LoadProviderResolverTests
                 }
                 """)));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(1);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1659,6 +1676,267 @@ public sealed class LoadProviderResolverTests
         await Assert.That(exception.Errors[0].Message).Contains("customers.name");
     }
 
+    [Test]
+    [DisplayName("Resolver Csv encoding=utf16 читает UTF-16 LE файл")]
+    public async Task Resolve_csv_encoding_utf16_reads_utf16_file()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("encoding", "utf-16")
+                ]),
+            CreateContext(new EncodedFileSource(
+                "id,city\r\n1,Москва",
+                "utf-16")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("city");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Москва");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv encoding=windows-1251 читает Windows-1251 файл")]
+    public async Task Resolve_csv_encoding_windows_1251_reads_windows_1251_file()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("encoding", "windows-1251")
+                ]),
+            CreateContext(new EncodedFileSource(
+                "id,city\r\n1,Москва",
+                "windows-1251")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("city");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Москва");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv неизвестную encoding отклоняет как provider option")]
+    public async Task Resolve_csv_rejects_unknown_encoding()
+    {
+        var resolver = new LoadProviderResolver();
+        var encodingSpan = Span(3, 30, 53);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("encoding", "cp1251", encodingSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(encodingSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("cp1251");
+        await Assert.That(exception.Errors[0].Message).Contains("windows-1251");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv style=standard отклоняет текст после закрывающей кавычки")]
+    public async Task Resolve_csv_style_standard_rejects_text_after_closing_quote()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("style", "standard")
+                ]),
+            CreateContext(new StubFileSource("value\r\n\"abc\"tail")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(async () =>
+            {
+                await reader.ReadAsync();
+            })
+            .ThrowsExactly<MalformedCsvProviderException>();
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv style=escaped использует кавычку как escape для delimiter")]
+    public async Task Resolve_csv_style_escaped_uses_quote_as_escape_for_delimiter()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("style", "escaped")
+                ]),
+            CreateContext(new StubFileSource("id,note\r\n1,hello\",world")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("hello,world");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv style=unquoted отклоняет как неизвестный style")]
+    public async Task Resolve_csv_rejects_unquoted_style()
+    {
+        var resolver = new LoadProviderResolver();
+        var styleSpan = Span(3, 30, 41);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("style", "unquoted", styleSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(styleSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("unquoted");
+        await Assert.That(exception.Errors[0].Message).Contains("escaped");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv неизвестный style отклоняет как provider option")]
+    public async Task Resolve_csv_rejects_unknown_style()
+    {
+        var resolver = new LoadProviderResolver();
+        var styleSpan = Span(3, 30, 41);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("style", "standart", styleSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(styleSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("standart");
+        await Assert.That(exception.Errors[0].Message).Contains("standard");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv skipRows пропускает строки до чтения header")]
+    public async Task Resolve_csv_skip_rows_skips_lines_before_header()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("skipRows", 2)
+                ]),
+            CreateContext(new StubFileSource("metadata 1\r\nmetadata 2\r\nid,name\r\n1,Alice")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("name");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Alice");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv skipRows=-1 отклоняет как provider option")]
+    public async Task Resolve_csv_rejects_negative_skip_rows()
+    {
+        var resolver = new LoadProviderResolver();
+        var skipRowsSpan = Span(3, 30, 43);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("skipRows", -1, skipRowsSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(skipRowsSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("skipRows");
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv применяет comment trimHeaders trimValues emptyAsNull")]
+    public async Task Resolve_csv_applies_comment_trim_and_empty_as_null_options()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("comment", "#"),
+                    Option("trimHeaders", new BooleanLiteral(true), Span()),
+                    Option("trimValues", new BooleanLiteral(true), Span()),
+                    Option("emptyAsNull", new BooleanLiteral(true), Span())
+                ]),
+            CreateContext(new StubFileSource(" id , name \r\n# ignored\r\n 1 ,   ")));
+
+        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("name");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.IsDBNull(1)).IsTrue();
+        await Assert.That(reader.GetValue(1)).IsEqualTo(DBNull.Value);
+    }
+
+    [Test]
+    [DisplayName("Resolver Csv comment из нескольких символов отклоняет как provider option")]
+    public async Task Resolve_csv_rejects_multi_character_comment()
+    {
+        var resolver = new LoadProviderResolver();
+        var commentSpan = Span(3, 30, 42);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Csv",
+                    [
+                        Option("path", "orders.csv"),
+                        Option("comment", "//", commentSpan)
+                    ]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(commentSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("comment");
+    }
+
     private static LoadStatement CreateStatement(
         string provider,
         List<LoadOption>? options = null,
@@ -1818,6 +2096,12 @@ public sealed class LoadProviderResolverTests
         return values.ToArray();
     }
 
+    private static ReaderLoadFromSource Reader(LoadFromSource source)
+    {
+        return source as ReaderLoadFromSource
+               ?? throw new InvalidOperationException($"Expected {nameof(ReaderLoadFromSource)}, got {source.GetType().Name}.");
+    }
+
     private static ScriptContext CreateContext(
         IFileSource? fileSource = null,
         IConnectionRegistry? registry = null)
@@ -1847,6 +2131,25 @@ public sealed class LoadProviderResolverTests
         public Stream OpenRead(string fileName)
         {
             return new MemoryStream(System.Text.Encoding.UTF8.GetBytes(content));
+        }
+    }
+
+    private sealed class EncodedFileSource : IFileSource
+    {
+        private readonly string content;
+        private readonly string encodingName;
+
+        public EncodedFileSource(string content, string encodingName)
+        {
+            this.content = content;
+            this.encodingName = encodingName;
+        }
+
+        public Stream OpenRead(string fileName)
+        {
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            var encoding = Encoding.GetEncoding(encodingName);
+            return new MemoryStream(encoding.GetBytes(content), writable: false);
         }
     }
 

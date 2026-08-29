@@ -22,20 +22,48 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
     private readonly string _fileName;
     private readonly CsvDataReader? _csvReader;
     private readonly bool _useGeneratedColumnNames;
+    private readonly bool _trimHeaders;
+    private readonly bool _trimValues;
+    private readonly bool _emptyAsNull;
 
-    public CsvProviderDataReader(DbDataReader inner, string fileName, bool useGeneratedColumnNames)
+    public CsvProviderDataReader(
+        DbDataReader inner,
+        string fileName,
+        bool useGeneratedColumnNames,
+        bool trimHeaders,
+        bool trimValues,
+        bool emptyAsNull)
         : base(inner)
     {
         _fileName = fileName;
         _csvReader = inner as CsvDataReader;
         _useGeneratedColumnNames = useGeneratedColumnNames;
+        _trimHeaders = trimHeaders;
+        _trimValues = trimValues;
+        _emptyAsNull = emptyAsNull;
     }
 
     public override string GetName(int ordinal)
     {
-        return _useGeneratedColumnNames
+        var name = _useGeneratedColumnNames
             ? GetExcelColumnName(ordinal)
             : Inner.GetName(ordinal);
+        return _trimHeaders && !_useGeneratedColumnNames
+            ? name.Trim()
+            : name;
+    }
+
+    public override int GetOrdinal(string name)
+    {
+        for (var ordinal = 0; ordinal < FieldCount; ordinal++)
+        {
+            if (string.Equals(GetName(ordinal), name, StringComparison.Ordinal))
+            {
+                return ordinal;
+            }
+        }
+
+        throw new IndexOutOfRangeException($"Column '{name}' was not found.");
     }
 
     public override bool Read()
@@ -52,14 +80,63 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
 
     public override bool IsDBNull(int ordinal)
     {
-        return IsMissingRowValue(ordinal) || Inner.IsDBNull(ordinal);
+        if (IsMissingRowValue(ordinal) || Inner.IsDBNull(ordinal))
+        {
+            return true;
+        }
+
+        if (!_emptyAsNull)
+        {
+            return false;
+        }
+
+        var value = Inner.GetString(ordinal);
+        return _trimValues
+            ? string.IsNullOrWhiteSpace(value)
+            : value.Length == 0;
     }
 
     public override object GetValue(int ordinal)
     {
-        return IsMissingRowValue(ordinal)
-            ? DBNull.Value
-            : Inner.GetValue(ordinal);
+        if (IsMissingRowValue(ordinal))
+        {
+            return DBNull.Value;
+        }
+
+        var value = Inner.GetValue(ordinal);
+        if (value == DBNull.Value || value is not string text)
+        {
+            return value;
+        }
+
+        return NormalizeTextValue(text);
+    }
+
+    public override int GetValues(object[] values)
+    {
+        var count = Math.Min(values.Length, FieldCount);
+        for (var ordinal = 0; ordinal < count; ordinal++)
+        {
+            values[ordinal] = GetValue(ordinal);
+        }
+
+        return count;
+    }
+
+    public override string GetString(int ordinal)
+    {
+        if (IsMissingRowValue(ordinal) || Inner.IsDBNull(ordinal))
+        {
+            throw new InvalidCastException($"Column '{GetName(ordinal)}' is null.");
+        }
+
+        var value = NormalizeTextValue(Inner.GetString(ordinal));
+        if (value == DBNull.Value)
+        {
+            throw new InvalidCastException($"Column '{GetName(ordinal)}' is null.");
+        }
+
+        return (string)value;
     }
 
     public override async Task<bool> ReadAsync(CancellationToken cancellationToken)
@@ -77,6 +154,18 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
     private bool IsMissingRowValue(int ordinal)
     {
         return _csvReader is not null && ordinal >= _csvReader.RowFieldCount;
+    }
+
+    private object NormalizeTextValue(string text)
+    {
+        if (_trimValues)
+        {
+            text = text.Trim();
+        }
+
+        return _emptyAsNull && text.Length == 0
+            ? DBNull.Value
+            : text;
     }
 
     private static string GetExcelColumnName(int ordinal)
