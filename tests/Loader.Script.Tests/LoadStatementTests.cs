@@ -15,43 +15,6 @@ namespace Loader.Script.Tests;
 public sealed class LoadStatementTests
 {
     [Test]
-    public async Task Load_temp_table_resolves_source_normalizes_physical_columns_and_writes_temp_table()
-    {
-        var providerResolver = new FakeProviderResolver();
-        var executor = new TestLoadStatementExecutor
-        {
-            ProviderResolver = providerResolver
-        };
-        var statement = new LoadStatement
-        {
-            TableName = "orders",
-            LoadSpan = Span(),
-            Fields = null,
-            FromSpan = Span(),
-            SourceCall = SourceCall("Csv", "orders.csv"),
-            Where = null,
-            GroupBy = null,
-            OrderBy = null
-        };
-
-        await using var result = await executor.LoadTempTableAsync(CreateContext(), statement);
-
-        await Assert.That(providerResolver.ResolveCalls).IsEqualTo(1);
-        await Assert.That(executor.WriteCalls).IsEqualTo(1);
-        await Assert.That(result.TableName.Table).StartsWith("tmp_");
-        await Assert.That(result.TableName.Table).DoesNotContain("orders");
-        await Assert.That(result.OriginalColumnNames).Count().IsEqualTo(2);
-        await Assert.That(result.OriginalColumnNames[0]).IsEqualTo("id");
-        await Assert.That(result.OriginalColumnNames[1]).IsEqualTo("name");
-        await Assert.That(result.Schema.Fields[0].Name).IsEqualTo("column1");
-        await Assert.That(result.Schema.Fields[1].Name).IsEqualTo("column2");
-        await Assert.That(executor.TableName!.Table).IsEqualTo(result.TableName.Table);
-        await Assert.That(executor.Rows).Count().IsEqualTo(1);
-        await Assert.That(executor.Rows[0][0]).IsEqualTo(1);
-        await Assert.That(executor.Rows[0][1]).IsEqualTo("Moscow");
-    }
-
-    [Test]
     public async Task Execute_load_writes_temp_table_materializes_final_table_and_registers_loaded_table()
     {
         var providerResolver = new FakeProviderResolver();
@@ -101,9 +64,11 @@ public sealed class LoadStatementTests
         await Assert.That(executor.DropFinalCalls).IsEqualTo(0);
         await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
         await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
-        await Assert.That(executor.QuerySql).Contains("stage.`column2` AS `city`");
-        await Assert.That(executor.QuerySql).Contains("WHERE (stage.`column1` > 0)");
-        await Assert.That(executor.QuerySql).Contains("ORDER BY stage.`column2` ASC");
+        await Assert.That(executor.QuerySql).Contains(".`column2` AS `city`");
+        await Assert.That(executor.QuerySql).Contains("WHERE (source_");
+        await Assert.That(executor.QuerySql).Contains(".`column1` > 0)");
+        await Assert.That(executor.QuerySql).Contains("ORDER BY source_");
+        await Assert.That(executor.QuerySql).Contains(".`column2` ASC");
         await Assert.That(executor.QuerySql).Contains("LIMIT 10");
         await Assert.That(executor.QuerySql).Contains("OFFSET 1");
         await Assert.That(loadedTable.Name).IsSameReferenceAs(executor.FinalTableName);
@@ -113,6 +78,32 @@ public sealed class LoadStatementTests
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("city");
         await Assert.That(context.LoadedTables).Count().IsEqualTo(1);
         await Assert.That(context.LoadedTables[0]).IsSameReferenceAs(loadedTable);
+    }
+
+    [Test]
+    [DisplayName("Execute FROM table использует prepared SQL source без temp table")]
+    public async Task Execute_load_from_table_uses_prepared_sql_source_without_temp_table()
+    {
+        var executor = new TestLoadStatementExecutor();
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("source", LoadedTableKind.Normal));
+        var script = Loader.Lang.Script.Parse(
+            """
+            result:
+            LOAD
+                value AS mapped_value
+            FROM source;
+            """).Value!;
+
+        var loadedTable = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        await Assert.That(executor.WriteCalls).IsEqualTo(0);
+        await Assert.That(executor.DropCalls).IsEqualTo(0);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
+        await Assert.That(executor.QuerySql).Contains("FROM `physical_source` AS source_");
+        await Assert.That(executor.QuerySql).Contains(".`column2` AS `mapped_value`");
+        await Assert.That(loadedTable.Alias).IsEqualTo("result");
+        await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("mapped_value");
     }
 
     [Test]
@@ -290,7 +281,8 @@ public sealed class LoadStatementTests
 
         var table = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
 
-        await Assert.That(executor.QuerySql).Contains("joinGetOrNull('physical_map', 'column2', stage.`column2`)");
+        await Assert.That(executor.QuerySql).Contains("joinGetOrNull('physical_map', 'column2', source_");
+        await Assert.That(executor.QuerySql).Contains(".`column2`)");
         await Assert.That(table.Fields).Count().IsEqualTo(1);
         await Assert.That(table.Fields[0].Name).IsEqualTo("mapped_name");
         await Assert.That(table.Fields[0].DataType).IsEqualTo(DataType.Text);
@@ -371,7 +363,7 @@ public sealed class LoadStatementTests
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
         await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
             .IsEquivalentTo([0L, 1L, 2L, 3L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-        await Assert.That(executor.QuerySql).Contains("stage.`column1` AS `value`");
+        await Assert.That(executor.QuerySql).Contains(".`column1` AS `value`");
         await Assert.That(loadedTable.Alias).IsEqualTo("numbers");
         await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("value");
@@ -861,15 +853,14 @@ public sealed class LoadStatementTests
 
         public IReadOnlyList<object?> RowValues { get; init; } = [1, "Moscow"];
 
-        public ValueTask<LoadProviderSource> ResolveAsync(
+        public ValueTask<LoadFromSource> ResolveAsync(
             LoadStatement statement,
             ScriptContext context,
             CancellationToken cancellationToken = default)
         {
             ResolveCalls++;
-            return ValueTask.FromResult(new LoadProviderSource
+            return ValueTask.FromResult<LoadFromSource>(new ReaderLoadFromSource
             {
-                Kind = SourceKind,
                 RequiresBuffer = false,
                 OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(CreateReader())
             });
@@ -890,6 +881,11 @@ public sealed class LoadStatementTests
 
     private sealed class TestLoadStatementExecutor : LoadStatementExecutor
     {
+        public TestLoadStatementExecutor()
+        {
+            TempTableMaterializer = new TestTempTableMaterializer(this);
+        }
+
         public int WriteCalls { get; private set; }
 
         public ClickHouseTableName? TableName { get; private set; }
@@ -916,25 +912,6 @@ public sealed class LoadStatementTests
 
         public List<object[]> Rows { get; } = [];
 
-        protected override async ValueTask<long> WriteTempTableAsync(
-            ScriptContext context,
-            DomainDataReader reader,
-            ClickHouseTableName tableName,
-            CancellationToken cancellationToken)
-        {
-            WriteCalls++;
-            TableName = tableName;
-
-            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-            {
-                var values = new object[reader.FieldCount];
-                reader.GetValues(values);
-                Rows.Add(values);
-            }
-
-            return Rows.Count;
-        }
-
         protected override ValueTask<long> MaterializeFinalTableAsync(
             ScriptContext context,
             LoadStatement statement,
@@ -953,16 +930,6 @@ public sealed class LoadStatementTests
             return ValueTask.FromResult(FinalRowCount);
         }
 
-        protected override ValueTask DropTempTableAsync(
-            ScriptContext context,
-            ClickHouseTableName tempTable,
-            CancellationToken cancellationToken)
-        {
-            DropCalls++;
-            DropTableName = tempTable;
-            return ValueTask.CompletedTask;
-        }
-
         protected override ValueTask DropFinalTableAsync(
             ScriptContext context,
             ClickHouseTableName finalTable,
@@ -971,6 +938,45 @@ public sealed class LoadStatementTests
             DropFinalCalls++;
             DropFinalTableName = finalTable;
             return ValueTask.CompletedTask;
+        }
+
+        private sealed class TestTempTableMaterializer : TempTableMaterializer
+        {
+            private readonly TestLoadStatementExecutor owner;
+
+            public TestTempTableMaterializer(TestLoadStatementExecutor owner)
+            {
+                this.owner = owner;
+            }
+
+            protected override async ValueTask<long> WriteTempTableAsync(
+                ScriptContext context,
+                DomainDataReader reader,
+                ClickHouseTableName tableName,
+                CancellationToken cancellationToken)
+            {
+                owner.WriteCalls++;
+                owner.TableName = tableName;
+
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var values = new object[reader.FieldCount];
+                    reader.GetValues(values);
+                    owner.Rows.Add(values);
+                }
+
+                return owner.Rows.Count;
+            }
+
+            protected override ValueTask DropTempTableAsync(
+                ScriptContext context,
+                ClickHouseTableName tempTable,
+                CancellationToken cancellationToken)
+            {
+                owner.DropCalls++;
+                owner.DropTableName = tempTable;
+                return ValueTask.CompletedTask;
+            }
         }
     }
 

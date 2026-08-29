@@ -22,19 +22,15 @@ internal sealed class DatabaseLoadProviderFactory
 
     private DatabaseLoadProviderFactory(
         ScriptConnectionType provider,
-        string kind,
         bool requiresBuffer,
         Func<IDatabaseSource, SqlTableConfig, CancellationToken, ValueTask<DbDataReader>> open)
     {
         Provider = provider;
-        Kind = kind;
         RequiresBuffer = requiresBuffer;
         this.open = open;
     }
 
     public ScriptConnectionType Provider { get; }
-
-    public string Kind { get; }
 
     public bool RequiresBuffer { get; }
 
@@ -43,13 +39,12 @@ internal sealed class DatabaseLoadProviderFactory
         return KnownFactories.TryGetValue(provider, out factory!);
     }
 
-    public LoadProviderSource CreateSource(string connectionString, string sql)
+    public ReaderLoadFromSource CreateSource(string connectionString, string sql)
     {
         var source = new ConnectionStringSource { ConnectionString = connectionString };
         var config = new SqlTableConfig { Sql = sql };
-        return new LoadProviderSource
+        return new ReaderLoadFromSource
         {
-            Kind = Kind,
             RequiresBuffer = RequiresBuffer,
             OpenReaderAsync = token => open(source, config, token)
         };
@@ -61,32 +56,26 @@ internal sealed class DatabaseLoadProviderFactory
         [
             new(
                 ScriptConnectionType.Postgres,
-                "postgres",
                 requiresBuffer: false,
                 static (source, config, token) => new PostgresProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.SqlServer,
-                "sqlserver",
                 requiresBuffer: true,
                 static (source, config, token) => new SqlServerProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.Oracle,
-                "oracle",
                 requiresBuffer: true,
                 static (source, config, token) => new OracleProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.Hive,
-                "hive",
                 requiresBuffer: true,
                 static (source, config, token) => new HiveProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.Odbc,
-                "odbc",
                 requiresBuffer: true,
                 static (source, config, token) => new OdbcProvider().OpenReaderAsync(source, config, token)),
             new(
                 ScriptConnectionType.ClickHouse,
-                "clickhouse",
                 requiresBuffer: false,
                 static (source, config, token) => new ClickHouseProvider().OpenReaderAsync(source, config, token))
         ];

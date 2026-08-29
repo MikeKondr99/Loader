@@ -14,7 +14,7 @@ internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Json";
 
-    public override async ValueTask<LoadProviderSource> ResolveAsync(
+    public override async ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -36,9 +36,8 @@ internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
             .AnalyzeSchemaAsync(context.FileStorage, path, arrayPath, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return new LoadProviderSource
+        return new ReaderLoadFromSource
         {
-            Kind = "json",
             RequiresBuffer = false,
             OpenReaderAsync = token => provider.OpenReaderAsync(
                 context.FileStorage,

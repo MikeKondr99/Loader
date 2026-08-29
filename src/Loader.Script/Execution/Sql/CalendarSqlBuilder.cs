@@ -1,60 +1,63 @@
 using System.Globalization;
 using System.Text;
+using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
 
 namespace Loader.Script.Execution;
 
 /// <summary>
 /// Строит ClickHouse SQL для provider-а <c>Calendar</c>.
-/// Calendar не читает внешний файл: он генерирует диапазон дат и набор производных календарных полей внутри DWH.
+/// Calendar не читает внешний reader: он генерируется сразу как SQL поверх явного диапазона или диапазона из таблицы DWH.
 /// </summary>
 internal static class CalendarSqlBuilder
 {
     /// <summary>
-    /// Нижняя граница безопасного диапазона. Значение выбрано так, чтобы все calendar expressions
-    /// корректно работали с ClickHouse Date/Date32 и ISO-week вычислениями.
+    /// Нижняя граница поддерживаемого диапазона. Значение выбрано так, чтобы все calendar expressions
+    /// оставались безопасны в ClickHouse Date/Date32 и ISO-week вычислениях.
     /// </summary>
     public static readonly DateOnly MinSupportedDate = new(1970, 1, 5);
 
     /// <summary>
-    /// Верхняя граница безопасного диапазона для Calendar.
+    /// Верхняя граница поддерживаемого диапазона для Calendar.
     /// </summary>
     public static readonly DateOnly MaxSupportedDate = new(2148, 12, 31);
 
     /// <summary>
-    /// Доменные имена колонок, которые Calendar всегда возвращает в фиксированном порядке.
+    /// Доменная схема полей, которые Calendar отдает следующему LOAD.
     /// </summary>
-    public static readonly string[] FieldNames =
+    public static readonly IReadOnlyList<LoadedTableField> Fields =
     [
-        "Date",
-        "Year",
-        "QuarterNumber",
-        "Quarter",
-        "YearQuarterNumber",
-        "YearQuarter",
-        "MonthNumber",
-        "MonthName",
-        "MonthShortName",
-        "YearMonthNumber",
-        "YearMonth",
-        "MonthYear",
-        "WeekNumber",
-        "YearWeek",
-        "StartOfWeek",
-        "LastDayOfWeek",
-        "DayOfWeek",
-        "DayOfWeekName",
-        "DayOfMonth",
-        "DayOfYear",
-        "StartOfYear",
-        "EndOfYear",
-        "StartOfQuarter",
-        "EndOfQuarter",
-        "StartOfMonth",
-        "EndOfMonth",
-        "DayMonth",
-        "WeekPeriod"
+        Field("Date", DataType.DateTime),
+        Field("Year", DataType.Integer),
+        Field("QuarterNumber", DataType.Integer),
+        Field("Quarter", DataType.Text),
+        Field("YearQuarterNumber", DataType.Integer),
+        Field("YearQuarter", DataType.Text),
+        Field("MonthNumber", DataType.Integer),
+        Field("MonthName", DataType.Text),
+        Field("MonthShortName", DataType.Text),
+        Field("YearMonthNumber", DataType.Integer),
+        Field("YearMonth", DataType.Text),
+        Field("MonthYear", DataType.Text),
+        Field("WeekNumber", DataType.Integer),
+        Field("YearWeek", DataType.Text),
+        Field("StartOfWeek", DataType.DateTime),
+        Field("LastDayOfWeek", DataType.DateTime),
+        Field("DayOfWeek", DataType.Integer),
+        Field("DayOfWeekName", DataType.Text),
+        Field("DayOfMonth", DataType.Integer),
+        Field("DayOfYear", DataType.Integer),
+        Field("StartOfYear", DataType.DateTime),
+        Field("EndOfYear", DataType.DateTime),
+        Field("StartOfQuarter", DataType.DateTime),
+        Field("EndOfQuarter", DataType.DateTime),
+        Field("StartOfMonth", DataType.DateTime),
+        Field("EndOfMonth", DataType.DateTime),
+        Field("DayMonth", DataType.Text),
+        Field("WeekPeriod", DataType.Text)
     ];
+
+    public static readonly IReadOnlyList<string> FieldNames = Fields.Select(static field => field.Name).ToArray();
 
     /// <summary>
     /// Строит calendar SQL для явного диапазона <c>Calendar(min='...', max='...')</c>.
@@ -71,8 +74,8 @@ internal static class CalendarSqlBuilder
     }
 
     /// <summary>
-    /// Строит calendar SQL, где диапазон берется из min/max значения поля уже загруженной таблицы.
-    /// Проверка диапазона выполняется внутри ClickHouse, чтобы не вычитывать исходную таблицу в C#.
+    /// Строит calendar SQL, где границы диапазона берутся из min/max значений поля уже загруженной таблицы.
+    /// Проверка допустимого диапазона остается внутри ClickHouse, чтобы не вытаскивать границы обратно в C#.
     /// </summary>
     public static string BuildLoadedTableRangeSql(
         ClickHouseTableName tableName,
@@ -197,6 +200,16 @@ internal static class CalendarSqlBuilder
                 .Append(indent)
                 .AppendLine(line);
         }
+    }
+
+    private static LoadedTableField Field(string name, DataType dataType)
+    {
+        return new LoadedTableField
+        {
+            Name = name,
+            DataType = dataType,
+            CanBeNull = false
+        };
     }
 
     private static string DateSql(DateOnly value)

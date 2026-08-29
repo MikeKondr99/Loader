@@ -11,7 +11,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
 {
     private static readonly IReadOnlyDictionary<string, ILoadSourceResolver> Resolvers = CreateResolvers();
 
-    public async ValueTask<LoadProviderSource> ResolveAsync(
+    public async ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         CancellationToken cancellationToken = default)
@@ -46,7 +46,7 @@ public sealed class LoadProviderResolver : ILoadProviderResolver
             });
         }
 
-        LoadProviderSource? source = null;
+        LoadFromSource? source = null;
         if (resolver is not null && !hasInlineDataForNonInlineProvider)
         {
             try

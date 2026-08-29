@@ -5,7 +5,7 @@ namespace Loader.Script.Execution;
 
 /// <summary>
 /// Resolver одного конкретного provider-а: проверяет options, привязывается к внешнему source
-/// или уже загруженным script-таблицам и возвращает <see cref="LoadProviderSource"/>.
+/// или уже загруженным script-таблицам и возвращает <see cref="LoadFromSource"/>.
 /// </summary>
 internal interface ILoadSourceResolver
 {
@@ -18,7 +18,7 @@ internal interface ILoadSourceResolver
     /// Валидирует provider-specific options и готовит источник строк для LOAD.
     /// Ошибки resolve добавляются в общий список, чтобы пользователь получил все проблемы statement сразу.
     /// </summary>
-    ValueTask<LoadProviderSource> ResolveAsync(
+    ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,

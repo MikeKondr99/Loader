@@ -1,9 +1,5 @@
-using System.Data.Common;
 using System.Globalization;
 using Loader.Core.Models;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
@@ -22,7 +18,7 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Calendar";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -69,16 +65,18 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
 
         if (sql is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
-
-        var source = new ConnectionStringSource { ConnectionString = context.TargetConnectionString };
-        var config = new SqlTableConfig { Sql = sql };
-        return ValueTask.FromResult(new LoadProviderSource
+        return ValueTask.FromResult<LoadFromSource>(new SqlLoadFromSource
         {
-            Kind = "calendar",
-            RequiresBuffer = false,
-            OpenReaderAsync = async token => await OpenCalendarReaderAsync(source, config, token).ConfigureAwait(false)
+            Sql = $"({sql})",
+            Fields = CalendarSqlBuilder.Fields.Select(field => new LoadFromSqlField
+            {
+                Name = field.Name,
+                PhysicalName = field.Name,
+                DataType = field.DataType,
+                CanBeNull = field.CanBeNull
+            }).ToArray()
         });
     }
 
@@ -235,15 +233,5 @@ internal sealed class CalendarLoadSourceResolver : LoadSourceResolverBase
             Message = "Provider 'Calendar' не поддерживает SQL после FROM.",
             Span = statement.SqlPart.Span
         });
-    }
-
-    private static async ValueTask<DbDataReader> OpenCalendarReaderAsync(
-        ConnectionStringSource source,
-        SqlTableConfig config,
-        CancellationToken cancellationToken)
-    {
-        return await new ClickHouseProvider()
-            .OpenReaderAsync(source, config, cancellationToken)
-            .ConfigureAwait(false);
     }
 }

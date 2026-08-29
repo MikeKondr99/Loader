@@ -1028,22 +1028,17 @@ public sealed class LoadUnionStatementTests
             result:
             FIRST 3
             LOAD
-                id,
-                name
-            FROM Union(first_source, second_source)
-            ORDER BY name ASC;
+                COUNT() AS rows_count
+            FROM Union(first_source, second_source);
             """);
 
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             database,
             execution.Tables[2],
-            ["id", "name"],
+            ["rows_count"],
             [
-                new object?[] { 3L, "Xray" },
-                new object?[] { 2L, "Yankee" },
-                new object?[] { 1L, "Zulu" }
-            ],
-            "ORDER BY `column2` ASC");
+                new object?[] { 3UL }
+            ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 

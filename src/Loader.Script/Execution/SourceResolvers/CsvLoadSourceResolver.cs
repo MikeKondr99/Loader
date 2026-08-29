@@ -6,7 +6,7 @@ using Sylvan.Data.Csv;
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Csv</c>. Создает источник чтения CSV-файла из <see cref="ScriptContext.FileStorage"/>.
+/// Resolver provider-а <c>Csv</c>. Создает reader-source для чтения CSV-файла из <see cref="ScriptContext.FileStorage"/>.
 /// Параметры:
 /// path: Text - путь к файлу внутри file storage.
 /// delimiter: Text - один символ разделителя, по умолчанию <c>,</c>.
@@ -16,7 +16,7 @@ internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Csv";
 
-    public override ValueTask<LoadProviderSource> ResolveAsync(
+    public override ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
@@ -49,11 +49,10 @@ internal sealed class CsvLoadSourceResolver : LoadSourceResolverBase
         var emptyAsNull = options.Boolean("emptyAsNull", false);
         if (path is null || errors.Count > 0)
         {
-            return ValueTask.FromResult<LoadProviderSource>(null!);
+            return Error();
         }
 
-        return ValueTask.FromResult(File(
-            "csv",
+        return ValueTask.FromResult<LoadFromSource>(File(
             context.FileStorage,
             path,
             (source, fileName, token) => new CsvProvider().OpenReaderAsync(
