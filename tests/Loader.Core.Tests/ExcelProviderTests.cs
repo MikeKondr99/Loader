@@ -1496,6 +1496,47 @@ public sealed class ExcelProviderTests
         }
     }
 
+    [Test]
+    [DisplayName("Excel range с отсутствующим header не использует первую строку данных как имена")]
+    public async Task Range_with_missing_header_row_does_not_use_first_data_row_as_header()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-header-after-end.xlsx";
+            await WriteSparseHeaderAfterRangeWorkbookAsync(tempDirectory, fileName);
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "Sales",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 5,
+                        StartColumn = 2,
+                        EndRow = 6,
+                        EndColumn = 3
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["B", "C"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("Alice", "10")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "Loader.Core.Tests", Guid.NewGuid().ToString("N"));
@@ -1587,6 +1628,69 @@ public sealed class ExcelProviderTests
                 <row r="8"><c r="B8" t="inlineStr"><is><t>2026-08-09</t></is></c><c r="C8" t="inlineStr"><is><t>East</t></is></c><c r="D8" t="inlineStr"><is><t>Oleg</t></is></c><c r="E8" t="inlineStr"><is><t>Mouse</t></is></c><c r="F8"><v>20</v></c><c r="G8"><v>29.9</v></c><c r="H8"><v>598</v></c></row>
                 <row r="9"><c r="B9" t="inlineStr"><is><t>2026-08-13</t></is></c><c r="C9" t="inlineStr"><is><t>North</t></is></c><c r="D9" t="inlineStr"><is><t>Anna</t></is></c><c r="E9" t="inlineStr"><is><t>Dock</t></is></c><c r="F9"><v>5</v></c><c r="G9"><v>159</v></c><c r="H9"><v>795</v></c></row>
                 <row r="10"><c r="B10" t="inlineStr"><is><t>2026-08-18</t></is></c><c r="C10" t="inlineStr"><is><t>West</t></is></c><c r="D10" t="inlineStr"><is><t>Ilya</t></is></c><c r="E10" t="inlineStr"><is><t>Laptop</t></is></c><c r="F10"><v>3</v></c><c r="G10"><v>949</v></c><c r="H10"><v>2847</v></c></row>
+              </sheetData>
+            </worksheet>
+            """);
+    }
+
+    private static async Task WriteSparseHeaderAfterRangeWorkbookAsync(
+        string directory,
+        string fileName)
+    {
+        var path = Path.Combine(directory, fileName);
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+
+        await WriteEntryAsync(
+            archive,
+            "[Content_Types].xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+              <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+              <Default Extension="xml" ContentType="application/xml"/>
+              <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+              <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+            </Types>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "_rels/.rels",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+            </Relationships>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/workbook.xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets>
+                <sheet name="Sales" sheetId="1" r:id="rId1"/>
+              </sheets>
+            </workbook>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/_rels/workbook.xml.rels",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+            </Relationships>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/worksheets/sheet1.xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <dimension ref="B6:C10"/>
+              <sheetData>
+                <row r="6"><c r="B6" t="inlineStr"><is><t>Alice</t></is></c><c r="C6"><v>10</v></c></row>
+                <row r="10"><c r="B10" t="inlineStr"><is><t>OutsideName</t></is></c><c r="C10" t="inlineStr"><is><t>OutsideAmount</t></is></c></row>
               </sheetData>
             </worksheet>
             """);

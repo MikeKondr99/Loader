@@ -77,11 +77,22 @@ public sealed class ExcelProvider : IProvider<IFileSource, ExcelTableConfig>
         }
 
         // 5. Возвращаем reader вызывающему коду, не читая строки заранее.
-        return config.Range is null
-            ? reader
-            : await ExcelRangeDataReader
+        if (config.Range is null)
+        {
+            return reader;
+        }
+
+        try
+        {
+            return await ExcelRangeDataReader
                 .CreateAsync(reader, config.Range, config.HasHeader, cancellationToken)
                 .ConfigureAwait(false);
+        }
+        catch
+        {
+            await reader.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     private static FormulaErrorHandling MapFormulaErrorHandling(ExcelFormulaErrorMode value)

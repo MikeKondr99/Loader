@@ -88,6 +88,28 @@ public sealed class ExcelRangeDataReaderTests
         await Assert.That(ExcelCellRange.TryParse("A1:ZZZZZZZZZZ2", out _)).IsFalse();
     }
 
+    [Test]
+    [DisplayName("Excel range с отсутствующей строкой header генерирует имена колонок")]
+    public async Task Missing_header_row_uses_generated_column_names()
+    {
+        await using var inner = new ThrowingSkippedRowsReader(startRow: 5);
+        await using var rangeReader = await ExcelRangeDataReader.CreateAsync(
+            inner,
+            new ExcelCellRange
+            {
+                StartRow = 7,
+                StartColumn = 2,
+                EndRow = 8,
+                EndColumn = 3
+            },
+            hasHeader: true,
+            CancellationToken.None);
+
+        await Assert.That(rangeReader.GetName(0)).IsEqualTo("B");
+        await Assert.That(rangeReader.GetName(1)).IsEqualTo("C");
+        await Assert.That(await rangeReader.ReadAsync()).IsFalse();
+    }
+
     private sealed class ThrowingSkippedRowsReader : DbDataReader
     {
         private readonly int _startRow;

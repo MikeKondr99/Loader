@@ -16,18 +16,21 @@ internal sealed class ExcelRangeDataReader : DbDataReaderDecorator
     private readonly ExcelCellRange _range;
     private readonly string[] _names;
     private int _currentRow;
+    private bool _hasPrefetchedRow;
     private bool _hasRow;
 
     private ExcelRangeDataReader(
         DbDataReader inner,
         ExcelCellRange range,
         string[] names,
-        int currentRow)
+        int currentRow,
+        bool hasPrefetchedRow = false)
         : base(inner)
     {
         _range = range;
         _names = names;
         _currentRow = currentRow;
+        _hasPrefetchedRow = hasPrefetchedRow;
     }
 
     public override int FieldCount => _names.Length;
@@ -52,9 +55,19 @@ internal sealed class ExcelRangeDataReader : DbDataReaderDecorator
             }
 
             currentRow = CurrentRowNumber(inner, currentRow);
-            if (currentRow >= range.StartRow)
+            if (currentRow == range.StartRow)
             {
                 break;
+            }
+
+            if (currentRow > range.StartRow)
+            {
+                return new ExcelRangeDataReader(
+                    inner,
+                    range,
+                    CreateGeneratedNames(range),
+                    currentRow,
+                    hasPrefetchedRow: range.EndRow is null || currentRow <= range.EndRow.Value);
             }
         }
 
@@ -100,6 +113,19 @@ internal sealed class ExcelRangeDataReader : DbDataReaderDecorator
     {
         while (true)
         {
+            if (_hasPrefetchedRow)
+            {
+                _hasPrefetchedRow = false;
+                if (_range.EndRow is not null && _currentRow > _range.EndRow.Value)
+                {
+                    _hasRow = false;
+                    return false;
+                }
+
+                _hasRow = true;
+                return true;
+            }
+
             if (_range.EndRow is not null && _currentRow >= _range.EndRow.Value)
             {
                 _hasRow = false;
@@ -133,6 +159,19 @@ internal sealed class ExcelRangeDataReader : DbDataReaderDecorator
     {
         while (true)
         {
+            if (_hasPrefetchedRow)
+            {
+                _hasPrefetchedRow = false;
+                if (_range.EndRow is not null && _currentRow > _range.EndRow.Value)
+                {
+                    _hasRow = false;
+                    return false;
+                }
+
+                _hasRow = true;
+                return true;
+            }
+
             if (_range.EndRow is not null && _currentRow >= _range.EndRow.Value)
             {
                 _hasRow = false;
