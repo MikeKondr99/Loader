@@ -13,6 +13,11 @@ public sealed record ExcelTableConfig : ITableConfig
 
     public bool HasHeader { get; init; } = true;
 
+    /// <summary>
+    /// Необязательный A1-диапазон, который ограничивает чтение листа прямоугольником ячеек.
+    /// </summary>
+    public ExcelCellRange? Range { get; init; }
+
     public bool IgnoreEmptyTrailingRows { get; init; } = true;
 
     public bool ReadHiddenWorksheets { get; init; }

@@ -23,11 +23,12 @@ internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
         CancellationToken cancellationToken)
     {
         options = options.MapPositionals(Name, ["path"]);
-        RejectUnknownOptions(Name, options, errors, ["path", "sheet", "header"]);
+        RejectUnknownOptions(Name, options, errors, ["path", "sheet", "header", "range"]);
         RejectSqlForFileProvider("excel", statement, errors);
         var path = RequiredPath("excel", statement, options, errors);
         var sheet = options.String("sheet");
         var hasHeader = options.Boolean("header", true);
+        var range = ResolveRange(options, errors);
         if (path is null || errors.Count > 0)
         {
             return ValueTask.FromResult<LoadProviderSource>(null!);
@@ -43,8 +44,33 @@ internal sealed class ExcelLoadSourceResolver : LoadSourceResolverBase
                 {
                     FileName = fileName,
                     WorksheetName = sheet,
-                    HasHeader = hasHeader
+                    HasHeader = hasHeader,
+                    Range = range
                 },
                 token)));
+    }
+
+    private static ExcelCellRange? ResolveRange(
+        LoadOptionReader options,
+        List<LangError> errors)
+    {
+        var option = options.GetOption("range");
+        var text = options.String("range");
+        if (option is null || text is null)
+        {
+            return null;
+        }
+
+        if (ExcelCellRange.TryParse(text, out var range))
+        {
+            return range;
+        }
+
+        errors.Add(new LangError
+        {
+            Message = $"Опция 'range' должна быть Excel-диапазоном вида A1:B20, B100:F или B:F, получено '{text}'.",
+            Span = option.Span
+        });
+        return null;
     }
 }

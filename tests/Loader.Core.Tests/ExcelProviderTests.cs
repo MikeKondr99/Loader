@@ -1,4 +1,5 @@
 using System.Data;
+using System.IO.Compression;
 using Loader.Core.Providers.Excel;
 using Loader.Core.Sources;
 using Loader.Core.Tests.Infrastructure;
@@ -1027,6 +1028,474 @@ public sealed class ExcelProviderTests
             ]);
     }
 
+    [Test]
+    [DisplayName("Excel читает .xlsm workbook")]
+    public async Task Reads_xlsm_workbook()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "macro-enabled-workbook.xlsm";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("macro_enabled", CreateTable(
+                    columns: [("id", typeof(int)), ("city", typeof(string))],
+                    rows: [
+                        [1, "Moscow"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "macro_enabled",
+                    HasHeader = true
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["id", "city"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Moscow")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range с header берет имена колонок из первой строки диапазона")]
+    public async Task Range_with_header_reads_header_inside_range()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-with-header.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("range_header", CreateTable(
+                    columns: [("ignored_a", typeof(string)), ("ignored_b", typeof(string)), ("ignored_c", typeof(string)), ("ignored_d", typeof(string))],
+                    rows: [
+                        ["skip", "id", "city", "skip"],
+                        ["skip", "1", "Moscow", "skip"],
+                        ["skip", "2", "London", "skip"],
+                        ["skip", "3", "Berlin", "skip"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "range_header",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 2,
+                        StartColumn = 2,
+                        EndRow = 4,
+                        EndColumn = 3
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["id", "city"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Moscow"),
+                    ("2", "London")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range без header генерирует физические имена колонок B C")]
+    public async Task Range_without_header_generates_physical_column_names()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-without-header.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("range_no_header", CreateTable(
+                    columns: [("ignored_a", typeof(string)), ("ignored_b", typeof(string)), ("ignored_c", typeof(string)), ("ignored_d", typeof(string))],
+                    rows: [
+                        ["skip", "1", "Moscow", "skip"],
+                        ["skip", "2", "London", "skip"],
+                        ["skip", "3", "Berlin", "skip"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "range_no_header",
+                    HasHeader = false,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 2,
+                        StartColumn = 2,
+                        EndRow = 3,
+                        EndColumn = 3
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["B", "C"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Moscow"),
+                    ("2", "London")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range не читает строки после нижней границы")]
+    public async Task Range_stops_at_end_row()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-end-row.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("range_end", CreateTable(
+                    columns: [("id", typeof(string)), ("city", typeof(string))],
+                    rows: [
+                        ["1", "Moscow"],
+                        ["2", "London"],
+                        ["3", "Berlin"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "range_end",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 1,
+                        StartColumn = 1,
+                        EndRow = 3,
+                        EndColumn = 2
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["id", "city"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Moscow"),
+                    ("2", "London")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range возвращает DBNull для пустой ячейки внутри диапазона")]
+    public async Task Range_returns_db_null_for_empty_cell_inside_range()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-empty-cell.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("range_empty", CreateTable(
+                    columns: [("id", typeof(string)), ("city", typeof(string))],
+                    rows: [
+                        ["1", DBNull.Value],
+                        ["2", "London"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "range_empty",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 1,
+                        StartColumn = 1,
+                        EndRow = 3,
+                        EndColumn = 2
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["id", "city"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", DBNull.Value),
+                    ("2", "London")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range parser принимает A1:B20 и отклоняет named range")]
+    public async Task Range_parser_accepts_a1_notation_and_rejects_named_range()
+    {
+        await Assert.That(ExcelCellRange.TryParse("B2:D10", out var range)).IsTrue();
+        await Assert.That(range!.StartRow).IsEqualTo(2);
+        await Assert.That(range.StartColumn).IsEqualTo(2);
+        await Assert.That(range.EndRow).IsEqualTo(10);
+        await Assert.That(range.EndColumn).IsEqualTo(4);
+
+        await Assert.That(ExcelCellRange.TryParse("B100:F", out var openEndRange)).IsTrue();
+        await Assert.That(openEndRange!.StartRow).IsEqualTo(100);
+        await Assert.That(openEndRange.StartColumn).IsEqualTo(2);
+        await Assert.That(openEndRange.EndRow).IsNull();
+        await Assert.That(openEndRange.EndColumn).IsEqualTo(6);
+
+        await Assert.That(ExcelCellRange.TryParse("B:F", out var columnRange)).IsTrue();
+        await Assert.That(columnRange!.StartRow).IsEqualTo(1);
+        await Assert.That(columnRange.StartColumn).IsEqualTo(2);
+        await Assert.That(columnRange.EndRow).IsNull();
+        await Assert.That(columnRange.EndColumn).IsEqualTo(6);
+
+        await Assert.That(ExcelCellRange.TryParse("SalesRange", out _)).IsFalse();
+        await Assert.That(ExcelCellRange.TryParse("Sheet1!A1:B2", out _)).IsFalse();
+        await Assert.That(ExcelCellRange.TryParse("B2:A1", out _)).IsFalse();
+        await Assert.That(ExcelCellRange.TryParse("B100:F50", out _)).IsFalse();
+    }
+
+    [Test]
+    [DisplayName("Excel range читает физический B4:H10, если первые строки листа пустые")]
+    public async Task Range_uses_physical_excel_rows_when_first_rows_are_empty()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "sparse-range.xlsx";
+            await WriteSparseWorkbookAsync(tempDirectory, fileName);
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "Sales",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 4,
+                        StartColumn = 2,
+                        EndRow = 10,
+                        EndColumn = 8
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["Date", "Region", "Manager", "Product", "Quantity", "Price", "Revenue"],
+                types: [DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text],
+                rows: [
+                    ("2026-08-01", "North", "Anna", "Laptop", "4", "899", "3596"),
+                    ("2026-08-03", "West", "Ilya", "Monitor", "7", "279.5", "1956.5"),
+                    ("2026-08-06", "South", "Maria", "Keyboard", "12", "64.9", "778.8"),
+                    ("2026-08-09", "East", "Oleg", "Mouse", "20", "29.9", "598"),
+                    ("2026-08-13", "North", "Anna", "Dock", "5", "159", "795"),
+                    ("2026-08-18", "West", "Ilya", "Laptop", "3", "949", "2847")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range без конечной строки читает B4:H до конца данных листа")]
+    public async Task Range_without_end_row_reads_until_sheet_ends()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "sparse-range-open-ended.xlsx";
+            await WriteSparseWorkbookAsync(tempDirectory, fileName);
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "Sales",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 4,
+                        StartColumn = 2,
+                        EndColumn = 8
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["Date", "Region", "Manager", "Product", "Quantity", "Price", "Revenue"],
+                types: [DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text, DataType.Text],
+                rows: [
+                    ("2026-08-01", "North", "Anna", "Laptop", "4", "899", "3596"),
+                    ("2026-08-03", "West", "Ilya", "Monitor", "7", "279.5", "1956.5"),
+                    ("2026-08-06", "South", "Maria", "Keyboard", "12", "64.9", "778.8"),
+                    ("2026-08-09", "East", "Oleg", "Mouse", "20", "29.9", "598"),
+                    ("2026-08-13", "North", "Anna", "Dock", "5", "159", "795"),
+                    ("2026-08-18", "West", "Ilya", "Laptop", "3", "949", "2847")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range с пустым header cell генерирует fallback имя колонки")]
+    public async Task Range_empty_header_cell_uses_generated_column_name()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-empty-header.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("empty_header", CreateTable(
+                    columns: [("ignored_a", typeof(string)), ("ignored_b", typeof(string)), ("ignored_c", typeof(string))],
+                    rows: [
+                        ["skip", DBNull.Value, "name"],
+                        ["skip", "1", "Alice"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "empty_header",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 2,
+                        StartColumn = 2,
+                        EndRow = 3,
+                        EndColumn = 3
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["B", "name"],
+                types: [DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Alice")
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
+    [Test]
+    [DisplayName("Excel range шире строки возвращает DBNull для отсутствующих ячеек справа")]
+    public async Task Range_returns_db_null_for_missing_cells_on_the_right()
+    {
+        var tempDirectory = CreateTempDirectory();
+        try
+        {
+            var fileName = "range-missing-right-cells.xlsx";
+            await WriteWorkbookAsync(
+                tempDirectory,
+                fileName,
+                ("missing_right", CreateTable(
+                    columns: [("id", typeof(string)), ("name", typeof(string))],
+                    rows: [
+                        ["1", "Alice"]
+                    ])));
+
+            var source = new FileSystemSource(tempDirectory);
+
+            var rawReader = await Provider.OpenReaderAsync(
+                source,
+                new ExcelTableConfig
+                {
+                    FileName = fileName,
+                    WorksheetName = "missing_right",
+                    HasHeader = true,
+                    Range = new ExcelCellRange
+                    {
+                        StartRow = 1,
+                        StartColumn = 1,
+                        EndRow = 2,
+                        EndColumn = 4
+                    }
+                });
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader).HaveData(
+                columns: ["id", "name", "C", "D"],
+                types: [DataType.Text, DataType.Text, DataType.Text, DataType.Text],
+                rows: [
+                    ("1", "Alice", DBNull.Value, DBNull.Value)
+                ]);
+        }
+        finally
+        {
+            Directory.Delete(tempDirectory, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), "Loader.Core.Tests", Guid.NewGuid().ToString("N"));
@@ -1053,6 +1522,85 @@ public sealed class ExcelProviderTests
             using var reader = sheet.Table.CreateDataReader();
             await writer.WriteAsync(reader, sheet.SheetName);
         }
+    }
+
+    private static async Task WriteSparseWorkbookAsync(
+        string directory,
+        string fileName)
+    {
+        var path = Path.Combine(directory, fileName);
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+
+        await WriteEntryAsync(
+            archive,
+            "[Content_Types].xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+              <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+              <Default Extension="xml" ContentType="application/xml"/>
+              <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+              <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+            </Types>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "_rels/.rels",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+            </Relationships>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/workbook.xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+              <sheets>
+                <sheet name="Sales" sheetId="1" r:id="rId1"/>
+              </sheets>
+            </workbook>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/_rels/workbook.xml.rels",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+            </Relationships>
+            """);
+        await WriteEntryAsync(
+            archive,
+            "xl/worksheets/sheet1.xml",
+            """
+            <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+              <dimension ref="B4:H10"/>
+              <sheetData>
+                <row r="4"><c r="B4" t="inlineStr"><is><t>Date</t></is></c><c r="C4" t="inlineStr"><is><t>Region</t></is></c><c r="D4" t="inlineStr"><is><t>Manager</t></is></c><c r="E4" t="inlineStr"><is><t>Product</t></is></c><c r="F4" t="inlineStr"><is><t>Quantity</t></is></c><c r="G4" t="inlineStr"><is><t>Price</t></is></c><c r="H4" t="inlineStr"><is><t>Revenue</t></is></c></row>
+                <row r="5"><c r="B5" t="inlineStr"><is><t>2026-08-01</t></is></c><c r="C5" t="inlineStr"><is><t>North</t></is></c><c r="D5" t="inlineStr"><is><t>Anna</t></is></c><c r="E5" t="inlineStr"><is><t>Laptop</t></is></c><c r="F5"><v>4</v></c><c r="G5"><v>899</v></c><c r="H5"><v>3596</v></c></row>
+                <row r="6"><c r="B6" t="inlineStr"><is><t>2026-08-03</t></is></c><c r="C6" t="inlineStr"><is><t>West</t></is></c><c r="D6" t="inlineStr"><is><t>Ilya</t></is></c><c r="E6" t="inlineStr"><is><t>Monitor</t></is></c><c r="F6"><v>7</v></c><c r="G6"><v>279.5</v></c><c r="H6"><v>1956.5</v></c></row>
+                <row r="7"><c r="B7" t="inlineStr"><is><t>2026-08-06</t></is></c><c r="C7" t="inlineStr"><is><t>South</t></is></c><c r="D7" t="inlineStr"><is><t>Maria</t></is></c><c r="E7" t="inlineStr"><is><t>Keyboard</t></is></c><c r="F7"><v>12</v></c><c r="G7"><v>64.9</v></c><c r="H7"><v>778.8</v></c></row>
+                <row r="8"><c r="B8" t="inlineStr"><is><t>2026-08-09</t></is></c><c r="C8" t="inlineStr"><is><t>East</t></is></c><c r="D8" t="inlineStr"><is><t>Oleg</t></is></c><c r="E8" t="inlineStr"><is><t>Mouse</t></is></c><c r="F8"><v>20</v></c><c r="G8"><v>29.9</v></c><c r="H8"><v>598</v></c></row>
+                <row r="9"><c r="B9" t="inlineStr"><is><t>2026-08-13</t></is></c><c r="C9" t="inlineStr"><is><t>North</t></is></c><c r="D9" t="inlineStr"><is><t>Anna</t></is></c><c r="E9" t="inlineStr"><is><t>Dock</t></is></c><c r="F9"><v>5</v></c><c r="G9"><v>159</v></c><c r="H9"><v>795</v></c></row>
+                <row r="10"><c r="B10" t="inlineStr"><is><t>2026-08-18</t></is></c><c r="C10" t="inlineStr"><is><t>West</t></is></c><c r="D10" t="inlineStr"><is><t>Ilya</t></is></c><c r="E10" t="inlineStr"><is><t>Laptop</t></is></c><c r="F10"><v>3</v></c><c r="G10"><v>949</v></c><c r="H10"><v>2847</v></c></row>
+              </sheetData>
+            </worksheet>
+            """);
+    }
+
+    private static async Task WriteEntryAsync(
+        ZipArchive archive,
+        string name,
+        string content)
+    {
+        var entry = archive.CreateEntry(name);
+        await using var stream = entry.Open();
+        await using var writer = new StreamWriter(stream);
+        await writer.WriteAsync(content);
     }
 
     private static DataTable CreateTable(

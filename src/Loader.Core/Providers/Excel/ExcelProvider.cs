@@ -42,7 +42,7 @@ public sealed class ExcelProvider : IProvider<IFileSource, ExcelTableConfig>
         // 2. Переносим настройки таблицы в настройки Sylvan Excel reader.
         var readerOptions = new ExcelDataReaderOptions
         {
-            Schema = config.HasHeader ? ExcelSchema.Default : ExcelSchema.NoHeaders,
+            Schema = config.Range is null && config.HasHeader ? ExcelSchema.Default : ExcelSchema.NoHeaders,
             IgnoreEmptyTrailingRows = config.IgnoreEmptyTrailingRows,
             ReadHiddenWorksheets = config.ReadHiddenWorksheets,
             ReadHiddenRows = config.ReadHiddenRows,
@@ -77,7 +77,11 @@ public sealed class ExcelProvider : IProvider<IFileSource, ExcelTableConfig>
         }
 
         // 5. Возвращаем reader вызывающему коду, не читая строки заранее.
-        return reader;
+        return config.Range is null
+            ? reader
+            : await ExcelRangeDataReader
+                .CreateAsync(reader, config.Range, config.HasHeader, cancellationToken)
+                .ConfigureAwait(false);
     }
 
     private static FormulaErrorHandling MapFormulaErrorHandling(ExcelFormulaErrorMode value)

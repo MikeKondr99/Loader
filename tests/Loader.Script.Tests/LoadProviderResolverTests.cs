@@ -79,6 +79,24 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Excel отклоняет range не в A1-нотации")]
+    public async Task Resolve_excel_rejects_invalid_range()
+    {
+        var resolver = new LoadProviderResolver();
+        var rangeSpan = Span(3, 38, 50);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement("Excel", [Option("path", "orders.xlsx"), Option("range", "SalesRange", rangeSpan)]),
+                CreateContext()))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(rangeSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("range");
+        await Assert.That(exception.Errors[0].Message).Contains("A1:B20");
+    }
+
+    [Test]
     [DisplayName("Resolver Numbers создает поток чисел от 0 до max включительно")]
     public async Task Resolve_numbers_reads_default_range()
     {
