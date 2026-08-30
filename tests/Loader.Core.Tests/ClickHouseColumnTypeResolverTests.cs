@@ -1,3 +1,4 @@
+using System.Numerics;
 using Loader.Core.Decorators;
 using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
@@ -93,6 +94,21 @@ public sealed class ClickHouseColumnTypeResolverTests
 
         await Assert.That(meta.Min).IsEqualTo(1.5m);
         await Assert.That(meta.Max).IsEqualTo(3.5m);
+    }
+
+    [Test]
+    [DisplayName("DataColumnMeta numeric bounds игнорирует значения вне decimal range")]
+    public async Task Data_column_meta_ignores_numeric_bounds_outside_decimal_range()
+    {
+        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
+
+        meta.CollectValue(double.MaxValue, rowCount: 1);
+        meta.CollectValue(BigInteger.Pow(new BigInteger(10), 100), rowCount: 2);
+        meta.CollectValue(1m, rowCount: 3);
+
+        await Assert.That(meta.Min).IsEqualTo(1m);
+        await Assert.That(meta.Max).IsEqualTo(1m);
+        await Assert.That(meta.Density).IsEqualTo(1m);
     }
 
     [Test]
