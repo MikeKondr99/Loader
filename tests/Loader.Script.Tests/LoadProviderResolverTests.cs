@@ -1692,7 +1692,7 @@ public sealed class LoadProviderResolverTests
                 "id,city\r\n1,Москва",
                 "utf-16")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1718,7 +1718,7 @@ public sealed class LoadProviderResolverTests
                 "id,city\r\n1,Москва",
                 "windows-1251")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1765,7 +1765,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext(new StubFileSource("value\r\n\"abc\"tail")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(async () =>
             {
@@ -1788,7 +1788,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext(new StubFileSource("id,note\r\n1,hello\",world")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(await reader.ReadAsync()).IsTrue();
         await Assert.That(reader.GetValue(0)).IsEqualTo("1");
@@ -1855,7 +1855,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext(new StubFileSource("metadata 1\r\nmetadata 2\r\nid,name\r\n1,Alice")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
@@ -1904,7 +1904,7 @@ public sealed class LoadProviderResolverTests
                 ]),
             CreateContext(new StubFileSource(" id , name \r\n# ignored\r\n 1 ,   ")));
 
-        await using var reader = await source.OpenReaderAsync(CancellationToken.None);
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
         await Assert.That(reader.FieldCount).IsEqualTo(2);
         await Assert.That(reader.GetName(0)).IsEqualTo("id");
