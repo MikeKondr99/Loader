@@ -203,6 +203,30 @@ public sealed class PlaygroundTools(PlaygroundClient client)
     }
 
     [McpServerTool]
+    [Description("Upload or replace a playground file. Use contentEncoding='utf-8' for text files or 'base64' for binary files.")]
+    public Task<string> UploadFile(
+        [Description("Target file name inside playground loaded_files, without path traversal.")]
+        string fileName,
+        [Description("File content. Interpreted as UTF-8 text by default, or base64 when contentEncoding='base64'.")]
+        string content,
+        [Description("Content encoding: utf-8 or base64.")]
+        string contentEncoding = "utf-8",
+        CancellationToken cancellationToken = default)
+    {
+        return client.UploadFileAsync(fileName, content, contentEncoding, cancellationToken);
+    }
+
+    [McpServerTool]
+    [Description("Delete a playground file from loaded_files.")]
+    public Task<string> DeleteFile(
+        [Description("File name from get_context files, without path traversal.")]
+        string fileName,
+        CancellationToken cancellationToken = default)
+    {
+        return client.DeleteFileAsync(fileName, cancellationToken);
+    }
+
+    [McpServerTool]
     [Description("Run a Loader script in playground test mode, return fields and preview rows, then clean created tables.")]
     public Task<string> TestRun(
         [Description("Full Loader script to execute.")]
@@ -254,6 +278,33 @@ public sealed class PlaygroundClient(HttpClient http)
         return GetStringOrErrorAsync(path, cancellationToken);
     }
 
+    public async Task<string> UploadFileAsync(
+        string fileName,
+        string content,
+        string contentEncoding,
+        CancellationToken cancellationToken)
+    {
+        var bytes = DecodeFileContent(content, contentEncoding);
+        using var form = new MultipartFormDataContent();
+        using var fileContent = new ByteArrayContent(bytes);
+        form.Add(fileContent, "file", fileName);
+
+        using var response = await http.PostAsync("/api/files", form, cancellationToken)
+            .ConfigureAwait(false);
+        return await ReadResponseAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<string> DeleteFileAsync(
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        using var response = await http.DeleteAsync(
+                $"/api/files/{Uri.EscapeDataString(fileName)}",
+                cancellationToken)
+            .ConfigureAwait(false);
+        return await ReadResponseAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<string> TestRunAsync(
         string script,
         int previewRows,
@@ -271,6 +322,22 @@ public sealed class PlaygroundClient(HttpClient http)
             .ConfigureAwait(false);
 
         return await ReadResponseAsync(response, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static byte[] DecodeFileContent(string content, string contentEncoding)
+    {
+        if (string.Equals(contentEncoding, "base64", StringComparison.OrdinalIgnoreCase))
+        {
+            return Convert.FromBase64String(content);
+        }
+
+        if (string.Equals(contentEncoding, "utf-8", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(contentEncoding, "utf8", StringComparison.OrdinalIgnoreCase))
+        {
+            return Encoding.UTF8.GetBytes(content);
+        }
+
+        throw new ArgumentException("contentEncoding must be 'utf-8' or 'base64'.", nameof(contentEncoding));
     }
 
     private async Task<string> GetStringOrErrorAsync(string path, CancellationToken cancellationToken)
