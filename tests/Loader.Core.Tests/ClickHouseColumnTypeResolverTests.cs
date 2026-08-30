@@ -1,6 +1,7 @@
 using Loader.Core.Decorators;
 using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
+using ClickHouse.Client.Numerics;
 
 namespace Loader.Core.Tests;
 
@@ -63,6 +64,35 @@ public sealed class ClickHouseColumnTypeResolverTests
         var actual = Resolve(field, meta);
 
         await Assert.That(actual).IsEqualTo("Decimal(5, 2)");
+    }
+
+    [Test]
+    [DisplayName("DataColumnMeta numeric bounds игнорирует non-finite float double")]
+    public async Task Data_column_meta_ignores_non_finite_float_double_bounds()
+    {
+        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
+
+        meta.CollectValue(double.NaN, rowCount: 1);
+        meta.CollectValue(double.PositiveInfinity, rowCount: 2);
+        meta.CollectValue(float.NegativeInfinity, rowCount: 3);
+
+        await Assert.That(meta.Min).IsNull();
+        await Assert.That(meta.Max).IsNull();
+        await Assert.That(meta.Density).IsEqualTo(1m);
+    }
+
+    [Test]
+    [DisplayName("DataColumnMeta numeric bounds собирает finite numeric значения")]
+    public async Task Data_column_meta_collects_finite_numeric_bounds()
+    {
+        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
+
+        meta.CollectValue(1.5d, rowCount: 1);
+        meta.CollectValue(2.5f, rowCount: 2);
+        meta.CollectValue(3.5m, rowCount: 3);
+
+        await Assert.That(meta.Min).IsEqualTo(1.5m);
+        await Assert.That(meta.Max).IsEqualTo(3.5m);
     }
 
     [Test]
@@ -151,6 +181,8 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (typeof(decimal), 10, 0, "Decimal(10, 0)");
         yield return (typeof(decimal), 0, 0, "Decimal(38, 10)");
         yield return (typeof(decimal), null, null, "Decimal(38, 10)");
+        yield return (typeof(ClickHouseDecimal), 20, 4, "Decimal(20, 4)");
+        yield return (typeof(ClickHouseDecimal), null, null, "Decimal(38, 10)");
         yield return (typeof(object), null, null, "Float64");
     }
 

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using ClickHouse.Client.Numerics;
 
 namespace Loader.Core.Decorators;
 
@@ -96,7 +97,11 @@ public sealed class DataColumnMeta
             return;
         }
 
-        var numeric = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+        if (!TryConvertNumericBound(value, out var numeric))
+        {
+            return;
+        }
+
         Min = Min is null || numeric < Min.Value ? numeric : Min;
         Max = Max is null || numeric > Max.Value ? numeric : Max;
     }
@@ -117,5 +122,44 @@ public sealed class DataColumnMeta
 
         DecimalScale = DecimalScale is null || scale > DecimalScale.Value ? scale : DecimalScale;
         DecimalPrecision = DecimalPrecision is null || precision > DecimalPrecision.Value ? precision : DecimalPrecision;
+    }
+
+    private static bool TryConvertNumericBound(object value, out decimal numeric)
+    {
+        // TODO: replace decimal-only bounds with typed numeric bounds when final table optimization uses richer meta.
+        try
+        {
+            switch (value)
+            {
+                case decimal decimalValue:
+                    numeric = decimalValue;
+                    return true;
+                case ClickHouseDecimal clickHouseDecimal:
+                    numeric = clickHouseDecimal.ToDecimal(CultureInfo.InvariantCulture);
+                    return true;
+                case double doubleValue when double.IsFinite(doubleValue):
+                    numeric = Convert.ToDecimal(doubleValue, CultureInfo.InvariantCulture);
+                    return true;
+                case float floatValue when float.IsFinite(floatValue):
+                    numeric = Convert.ToDecimal(floatValue, CultureInfo.InvariantCulture);
+                    return true;
+                case BigInteger bigInteger
+                    when bigInteger >= new BigInteger(decimal.MinValue) &&
+                         bigInteger <= new BigInteger(decimal.MaxValue):
+                    numeric = (decimal)bigInteger;
+                    return true;
+                case IConvertible convertible:
+                    numeric = convertible.ToDecimal(CultureInfo.InvariantCulture);
+                    return true;
+                default:
+                    numeric = default;
+                    return false;
+            }
+        }
+        catch (OverflowException)
+        {
+            numeric = default;
+            return false;
+        }
     }
 }
