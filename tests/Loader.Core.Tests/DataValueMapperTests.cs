@@ -111,6 +111,7 @@ public sealed class DataValueMapperTests
         yield return ('x', "x");
         yield return (Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         yield return (new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero), "2026-01-02T03:04:05.0000000+00:00");
+        yield return (Array.Empty<byte>(), @"\x");
         yield return (new byte[] { 0, 255, 65 }, @"\x00FF41");
         yield return (new BitArray([true, false, true]), "101");
         yield return (IPAddress.Parse("192.168.1.1"), "192.168.1.1");
@@ -118,6 +119,7 @@ public sealed class DataValueMapperTests
         yield return (PhysicalAddress.Parse("08002B010203"), "08:00:2b:01:02:03");
         yield return (new[] { 1, 2, 3 }, "[1,2,3]");
         yield return (new[,] { { 1, 2 }, { 3, 4 } }, "[[1,2],[3,4]]");
+        yield return (new[,,] { { { 1, 2 }, { 3, 4 } }, { { 5, 6 }, { 7, 8 } } }, "[[[1,2],[3,4]],[[5,6],[7,8]]]");
         yield return (new[] { "a", "b,c", "d\"e", null }, "[\"a\",\"b,c\",\"d\\\"e\",null]");
         yield return (new object?[] { new[] { 1, 2 }, Tuple.Create("x", 3), new byte[] { 222, 173, 190, 239 } }, "[[1,2],[\"x\",3],\"\\\\xDEADBEEF\"]");
         yield return (Tuple.Create((byte)1, "a"), "[1,\"a\"]");
@@ -225,6 +227,7 @@ public sealed class DataValueMapperTests
 
     public static IEnumerable<(Type SourceType, string ProviderTypeName, object Input, object Expected)> ReaderTypeCases()
     {
+        yield return (typeof(byte[]), "Array(UInt8)", Array.Empty<byte>(), "[]");
         yield return (typeof(byte[]), "Array(UInt8)", new byte[] { 1, 2, 3 }, "[1,2,3]");
         yield return (typeof(DateTimeOffset), "time with time zone", new DateTimeOffset(1, 1, 2, 3, 4, 5, TimeSpan.FromHours(3)), "03:04:05+03:00");
     }

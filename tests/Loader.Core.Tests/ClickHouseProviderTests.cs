@@ -227,6 +227,20 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
+    [DisplayName("ClickHouse String с невалидным UTF-8 читается без silent null")]
+    public async Task Non_utf8_string_reads_without_silent_null()
+    {
+        await using var rawReader = await OpenReaderAsync("select unhex('41D096FF42C328E282AC43') as value");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.DataSchema.Fields[0].DataType).IsEqualTo(DataType.Text);
+        var value = (string)reader.GetValue(0);
+
+        await Assert.That(value).IsEqualTo("AЖ\uFFFDB\uFFFD(€C");
+    }
+
+    [Test]
     [DisplayName("ClickHouse SELECT 1 без alias выдает имя колонки от ClickHouse")]
     public async Task Select_without_alias_uses_clickhouse_generated_column_name()
     {
