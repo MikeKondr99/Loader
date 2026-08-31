@@ -1,4 +1,5 @@
 using System.Data;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
 using Loader.Core.Sources;
@@ -73,9 +74,9 @@ public sealed class ClickHouseWriterTests
             columns: ["id", "amount", "city", "active"],
             types: [DataType.Integer, DataType.Number, DataType.Text, DataType.Boolean],
             rows: [
-                ((byte)1, 10.50m, "Moscow", true),
+                ((byte)1, (ClickHouseDecimal)10.50m, "Moscow", true),
                 ((byte)2, DBNull.Value, "London", false),
-                ((byte)3, 20.25m, "Moscow", true)
+                ((byte)3, (ClickHouseDecimal)20.25m, "Moscow", true)
             ]);
     }
 

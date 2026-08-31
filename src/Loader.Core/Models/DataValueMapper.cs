@@ -33,8 +33,9 @@ public static class DataValueMapper
         [typeof(double)] = Same(DataType.Number, typeof(double)),
         [typeof(decimal)] = Same(DataType.Number, typeof(decimal)),
 
-        // ClickHouse Decimal(18, 2) 12.34 -> 12.34m
-        [typeof(ClickHouseDecimal)] = ConvertTo(DataType.Number, typeof(decimal), static value => ((ClickHouseDecimal)value).ToDecimal(CultureInfo.InvariantCulture)),
+        // Keep provider decimal as-is: ClickHouse writer can receive it, while premature conversion to System.Decimal
+        // loses range for Decimal128/Decimal256.
+        [typeof(ClickHouseDecimal)] = Same(DataType.Number, typeof(ClickHouseDecimal)),
 
         // ClickHouse Int128/Int256 values are known, but disabled until integer widening policy is defined.
         [typeof(BigInteger)] = Unsupported(DataType.Integer),
