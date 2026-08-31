@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Numerics;
@@ -53,6 +54,17 @@ public sealed class DataValueMapperTests
     }
 
     [Test]
+    [MethodDataSource(nameof(ReaderTypeCases))]
+    [DisplayName("DataValueMapper provider type name уточняет неоднозначный CLR-тип")]
+    public async Task Reader_type_name_refines_ambiguous_clr_type(Type sourceType, string providerTypeName, object input, object expected)
+    {
+        var mapping = DataValueMapper.MapReaderType(sourceType, providerTypeName);
+        var actual = DataValueMapper.ConvertValue(mapping, input);
+
+        await Assert.That(actual).IsEqualTo(expected);
+    }
+
+    [Test]
     [DisplayName("DataValueMapper неизвестный CLR-тип кидает UnknownClrTypeException")]
     public async Task Unknown_clr_type_throws()
     {
@@ -93,15 +105,23 @@ public sealed class DataValueMapperTests
         yield return (new DateTime(2026, 1, 2, 3, 4, 5), new DateTime(2026, 1, 2, 3, 4, 5));
         yield return (new DateOnly(2026, 1, 2), new DateOnly(2026, 1, 2));
         yield return (new TimeOnly(3, 4, 5), new TimeOnly(3, 4, 5));
-        yield return (new TimeSpan(3, 4, 5), new TimeOnly(3, 4, 5));
+        yield return (new TimeSpan(3, 4, 5), "03:04:05");
+        yield return (new TimeSpan(25, 4, 5), "1.01:04:05");
+        yield return (new TimeSpan(-3, -4, -5), "-03:04:05");
         yield return ('x', "x");
         yield return (Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         yield return (new DateTimeOffset(2026, 1, 2, 3, 4, 5, TimeSpan.Zero), "2026-01-02T03:04:05.0000000+00:00");
+        yield return (new byte[] { 0, 255, 65 }, @"\x00FF41");
         yield return (new BitArray([true, false, true]), "101");
         yield return (IPAddress.Parse("192.168.1.1"), "192.168.1.1");
         yield return (IPNetwork.Parse("192.168.0.0/24"), "192.168.0.0/24");
         yield return (PhysicalAddress.Parse("08002B010203"), "08:00:2b:01:02:03");
-        yield return (new[] { 1, 2, 3 }, "{1,2,3}");
+        yield return (new[] { 1, 2, 3 }, "[1,2,3]");
+        yield return (new[] { "a", "b,c", "d\"e", null }, "[\"a\",\"b,c\",\"d\\\"e\",null]");
+        yield return (new object?[] { new[] { 1, 2 }, Tuple.Create("x", 3), new byte[] { 222, 173, 190, 239 } }, "[[1,2],[\"x\",3],\"\\\\xDEADBEEF\"]");
+        yield return (Tuple.Create((byte)1, "a"), "[1,\"a\"]");
+        yield return (new Dictionary<string, byte> { ["a"] = 5 }, "{\"a\":5}");
+        yield return (BigInteger.Parse("170141183460469231731687303715884105727", CultureInfo.InvariantCulture), BigInteger.Parse("170141183460469231731687303715884105727", CultureInfo.InvariantCulture));
         yield return (new NpgsqlInet(IPAddress.Parse("192.168.1.1")), "192.168.1.1");
         yield return (new NpgsqlPoint(1, 2), "(1,2)");
         yield return (new NpgsqlLine(1, 2, 3), "{1,2,3}");
@@ -135,16 +155,16 @@ public sealed class DataValueMapperTests
         yield return (typeof(double), typeof(double));
         yield return (typeof(decimal), typeof(decimal));
         yield return (typeof(ClickHouseDecimal), typeof(ClickHouseDecimal));
-        yield return (typeof(BigInteger), typeof(DBNull));
+        yield return (typeof(BigInteger), typeof(BigInteger));
         yield return (typeof(DateTime), typeof(DateTime));
         yield return (typeof(DateOnly), typeof(DateOnly));
         yield return (typeof(TimeOnly), typeof(TimeOnly));
-        yield return (typeof(TimeSpan), typeof(TimeOnly));
+        yield return (typeof(TimeSpan), typeof(string));
         yield return (typeof(DBNull), typeof(DBNull));
         yield return (typeof(char), typeof(string));
         yield return (typeof(Guid), typeof(string));
         yield return (typeof(DateTimeOffset), typeof(string));
-        yield return (typeof(byte[]), typeof(DBNull));
+        yield return (typeof(byte[]), typeof(string));
         yield return (typeof(Array), typeof(string));
         yield return (typeof(BitArray), typeof(string));
         yield return (typeof(IPAddress), typeof(string));
@@ -152,8 +172,8 @@ public sealed class DataValueMapperTests
         yield return (typeof(PhysicalAddress), typeof(string));
         yield return (typeof(int[]), typeof(string));
         yield return (typeof(NpgsqlRange<int>), typeof(string));
-        yield return (typeof(Tuple<byte, string>), typeof(DBNull));
-        yield return (typeof(Dictionary<string, byte>), typeof(DBNull));
+        yield return (typeof(Tuple<byte, string>), typeof(string));
+        yield return (typeof(Dictionary<string, byte>), typeof(string));
         yield return (typeof(NpgsqlInet), typeof(string));
         yield return (typeof(NpgsqlPoint), typeof(string));
         yield return (typeof(NpgsqlLine), typeof(string));
@@ -202,12 +222,14 @@ public sealed class DataValueMapperTests
         yield return typeof(TimeOnly);
     }
 
+    public static IEnumerable<(Type SourceType, string ProviderTypeName, object Input, object Expected)> ReaderTypeCases()
+    {
+        yield return (typeof(byte[]), "Array(UInt8)", new byte[] { 1, 2, 3 }, "[1,2,3]");
+        yield return (typeof(DateTimeOffset), "time with time zone", new DateTimeOffset(1, 1, 2, 3, 4, 5, TimeSpan.FromHours(3)), "03:04:05+03:00");
+    }
+
     public static IEnumerable<(Type SourceType, DataType ExpectedType)> ExplicitUnsupportedTypes()
     {
-        yield return (typeof(byte[]), DataType.Text);
         yield return (typeof(DBNull), DataType.Text);
-        yield return (typeof(BigInteger), DataType.Integer);
-        yield return (typeof(Tuple<byte, string>), DataType.Text);
-        yield return (typeof(Dictionary<string, byte>), DataType.Text);
     }
 }

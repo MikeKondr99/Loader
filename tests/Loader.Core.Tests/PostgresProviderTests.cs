@@ -296,6 +296,33 @@ public sealed class PostgresProviderTests
             ]);
     }
 
+    [Test]
+    [DisplayName("Postgres enum читается как Text")]
+    public async Task Enum_reads_as_text()
+    {
+        var typeName = $"loader_enum_{Guid.NewGuid():N}";
+        var quotedTypeName = QuoteIdentifier(typeName);
+
+        await database.ExecuteAsync($"create type {quotedTypeName} as enum ('happy', 'sad')");
+        try
+        {
+            await using var rawReader = await OpenReaderAsync($"select 'happy'::{quotedTypeName} as value");
+            await using var reader = rawReader.Normalize();
+
+            await Assert.That(reader.GetDataTypeName(0)).IsEqualTo($"public.{typeName}");
+            await Assert.That(reader).HaveData(
+                columns: ["value"],
+                types: [DataType.Text],
+                rows: [
+                    ValueTuple.Create("happy")
+                ]);
+        }
+        finally
+        {
+            await database.ExecuteAsync($"drop type if exists {quotedTypeName}");
+        }
+    }
+
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("'example'::text", DataType.Text, "example");
@@ -307,7 +334,7 @@ public sealed class PostgresProviderTests
         yield return ("'{}'::json", DataType.Text, "{}");
         yield return ("'{}'::jsonb", DataType.Text, "{}");
         yield return ("'<root />'::xml", DataType.Text, "<root />");
-        yield return ("E'\\\\xDEADBEEF'::bytea", DataType.Text, DBNull.Value);
+        yield return ("E'\\\\xDEADBEEF'::bytea", DataType.Text, @"\xDEADBEEF");
         yield return ("B'1'::bit(1)", DataType.Boolean, true);
         yield return ("B'1010'::bit(4)", DataType.Text, "1010");
         yield return ("B'101'::bit varying(8)", DataType.Text, "101");
@@ -317,7 +344,7 @@ public sealed class PostgresProviderTests
         yield return ("4::oid", DataType.Integer, 4u);
         yield return ("'5'::xid", DataType.Integer, 5u);
         yield return ("'6'::cid", DataType.Integer, 6u);
-        yield return ("'1 2 3'::oidvector", DataType.Text, "{1,2,3}");
+        yield return ("'1 2 3'::oidvector", DataType.Text, "[1,2,3]");
         yield return ("1.5::real", DataType.Number, 1.5f);
         yield return ("2.25::double precision", DataType.Number, 2.25d);
         yield return ("12.34::money", DataType.Number, 12.34m);
@@ -330,8 +357,10 @@ public sealed class PostgresProviderTests
         yield return ("timestamp with time zone '2026-01-02 03:04:05+00'", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc));
         yield return ("date '2026-01-02'", DataType.Date, new DateOnly(2026, 1, 2));
         yield return ("time '03:04:05'", DataType.Time, new TimeOnly(3, 4, 5));
-        yield return ("time with time zone '03:04:05+00'", DataType.Text, "0001-01-02T03:04:05.0000000+00:00");
-        yield return ("interval '03:04:05'", DataType.Time, new TimeOnly(3, 4, 5));
+        yield return ("time with time zone '03:04:05+00'", DataType.Text, "03:04:05+00:00");
+        yield return ("interval '03:04:05'", DataType.Text, "03:04:05");
+        yield return ("interval '25:04:05'", DataType.Text, "1.01:04:05");
+        yield return ("interval '-03:04:05'", DataType.Text, "-03:04:05");
         yield return ("true::boolean", DataType.Boolean, true);
         yield return ("'192.168.1.1'::inet", DataType.Text, "192.168.1.1");
         yield return ("'192.168.0.0/24'::cidr", DataType.Text, "192.168.0.0/24");
@@ -351,8 +380,8 @@ public sealed class PostgresProviderTests
         yield return ("numrange(1.5, 3.5)", DataType.Text, "[1.5,3.5)");
         yield return ("tsrange(timestamp '2026-01-02', timestamp '2026-01-03')", DataType.Text, "[2026-01-02 00:00:00,2026-01-03 00:00:00)");
         yield return ("daterange(date '2026-01-02', date '2026-01-03')", DataType.Text, "[2026-01-02,2026-01-03)");
-        yield return ("array[1, 2, 3]::integer[]", DataType.Text, "{1,2,3}");
-        yield return ("array['a', 'b']::text[]", DataType.Text, "{a,b}");
+        yield return ("array[1, 2, 3]::integer[]", DataType.Text, "[1,2,3]");
+        yield return ("array['a', 'b,c', 'd\"e', null]::text[]", DataType.Text, "[\"a\",\"b,c\",\"d\\\"e\",null]");
     }
 
     private ValueTask<DbDataReader> OpenReaderAsync(string sql)
@@ -366,5 +395,10 @@ public sealed class PostgresProviderTests
             {
                 Sql = sql
             });
+    }
+
+    private static string QuoteIdentifier(string identifier)
+    {
+        return "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
 }
