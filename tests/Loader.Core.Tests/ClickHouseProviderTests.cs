@@ -1,4 +1,5 @@
 ﻿using System.Data.Common;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Providers;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -286,7 +287,7 @@ public sealed class ClickHouseProviderTests
             columns: ["amount"],
             types: [DataType.Number],
             rows: [
-                ValueTuple.Create(12.34m)
+                ValueTuple.Create((ClickHouseDecimal)12.34m)
             ]);
 
         await Assert.That(meta.Success).IsTrue();
@@ -307,13 +308,13 @@ public sealed class ClickHouseProviderTests
         var field = reader.DataSchema.Fields[0];
 
         await Assert.That(field.DataType).IsEqualTo(DataType.Number);
-        await Assert.That(field.ClrType).IsEqualTo(typeof(decimal));
+        await Assert.That(field.ClrType).IsEqualTo(typeof(ClickHouseDecimal));
         await AssertValidDecimalShape(field.NumericPrecision, field.NumericScale);
         await Assert.That(reader).HaveData(
             columns: ["total_amount"],
             types: [DataType.Number],
             rows: [
-                ValueTuple.Create(32.35m)
+                ValueTuple.Create((ClickHouseDecimal)32.35m)
             ]);
     }
 
@@ -332,10 +333,10 @@ public sealed class ClickHouseProviderTests
         yield return ("toUInt64(4)", DataType.Integer, 4UL);
         yield return ("toFloat32(1.5)", DataType.Number, 1.5f);
         yield return ("toFloat64(2.25)", DataType.Number, 2.25d);
-        yield return ("toDecimal32(12.34, 2)", DataType.Number, 12.34m);
-        yield return ("toDecimal64(12345.6789, 4)", DataType.Number, 12345.6789m);
-        yield return ("toDecimal128(12345.6789, 4)", DataType.Number, 12345.6789m);
-        yield return ("toDecimal256(12345.6789, 4)", DataType.Number, 12345.6789m);
+        yield return ("toDecimal32(12.34, 2)", DataType.Number, (ClickHouseDecimal)12.34m);
+        yield return ("toDecimal64(12345.6789, 4)", DataType.Number, (ClickHouseDecimal)12345.6789m);
+        yield return ("toDecimal128(12345.6789, 4)", DataType.Number, (ClickHouseDecimal)12345.6789m);
+        yield return ("toDecimal256(12345.6789, 4)", DataType.Number, (ClickHouseDecimal)12345.6789m);
         yield return ("toDateTime('2026-01-02 03:04:05')", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5));
         yield return ("toDateTime64('2026-01-02 03:04:05.123', 3)", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5, 123));
         yield return ("toDate('2026-01-02')", DataType.DateTime, new DateTime(2026, 1, 2));

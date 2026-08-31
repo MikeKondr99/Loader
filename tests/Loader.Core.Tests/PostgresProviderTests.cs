@@ -237,6 +237,39 @@ public sealed class PostgresProviderTests
     }
 
     [Test]
+    [DisplayName("Postgres CollectMeta игнорирует double NaN Infinity при сборе numeric bounds")]
+    public async Task Collect_meta_ignores_double_nan_and_infinity_numeric_bounds()
+    {
+        var meta = new DataMetaContainer();
+        await using var rawReader = await OpenReaderAsync(
+            """
+            select *
+            from (
+                values
+                    ('NaN'::double precision),
+                    ('Infinity'::double precision),
+                    ('-Infinity'::double precision),
+                    (2.25::double precision)
+            ) as rows(value)
+            """);
+        await using var reader = rawReader
+            .Normalize()
+            .CollectMeta(meta);
+
+        var rowCount = 0;
+        while (await reader.ReadAsync())
+        {
+            rowCount++;
+        }
+
+        await Assert.That(rowCount).IsEqualTo(4);
+        await Assert.That(meta.Success).IsTrue();
+        await Assert.That(meta.Columns[0].Min).IsEqualTo(2.25m);
+        await Assert.That(meta.Columns[0].Max).IsEqualTo(2.25m);
+        await Assert.That(meta.Columns[0].Density).IsEqualTo(1m);
+    }
+
+    [Test]
     [DisplayName("Postgres SUM numeric без typmod не превращается в Decimal(0,0) shape")]
     public async Task Sum_numeric_without_typmod_exposes_unknown_decimal_shape()
     {

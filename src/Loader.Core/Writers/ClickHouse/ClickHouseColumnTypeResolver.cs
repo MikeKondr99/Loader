@@ -1,5 +1,6 @@
 using Loader.Core.Decorators;
 using Loader.Core.Models;
+using ClickHouse.Client.Numerics;
 
 namespace Loader.Core.Writers.ClickHouse;
 
@@ -134,7 +135,7 @@ internal sealed class ClickHouseColumnTypeResolver
             return $"Decimal({precision.Value}, {scale.Value})";
         }
 
-        return field.ClrType == typeof(decimal)
+        return field.ClrType == typeof(decimal) || field.ClrType == typeof(ClickHouseDecimal)
             ? "Decimal(38, 10)"
             : "Float64";
     }
