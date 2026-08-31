@@ -22,7 +22,7 @@ public sealed class ClickHouseReflectionFunctionTests : ClickHouseExpressionTest
     [Arguments("Type(Date(2023, 1, 1))", "date!")]
     [Arguments("Type(Date(null, 1, 1))", "date")]
     [Arguments("Type(true)", "bool!")]
-    [Arguments("Type(Bool(null))", "bool")]
+    [Arguments("Type(If(false, true, null))", "bool")]
     [Arguments("Type(Time('03:04:05'))", "time")]
     [Arguments("Type(Time(null))", "time")]
     [Arguments("Type(null)", "null")]
@@ -34,7 +34,7 @@ public sealed class ClickHouseReflectionFunctionTests : ClickHouseExpressionTest
     [Test]
     [Arguments("RawType(42)", "UInt8")]
     [Arguments("RawType(Int('42'))", "Nullable(Int64)")]
-    [Arguments("RawType(Bool('abc'))", "Bool")]
+    [Arguments("RawType(true)", "Bool")]
     public Task Raw_type_function(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);

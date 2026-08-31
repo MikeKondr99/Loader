@@ -30,5 +30,5 @@
 | `Type(Time('03:04:05'))` | `'time'` |
 | `Type(Time(null))` | `'time'` |
 | `Type(true)` | `'bool!'` |
-| `Type(Bool(null))` | `'bool'` |
+| `Type(If(false, true, null))` | `'bool'` |
 | `Type(null)` | `'null'` |
