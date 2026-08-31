@@ -323,6 +323,17 @@ public sealed class PostgresProviderTests
         }
     }
 
+    [Test]
+    [DisplayName("Postgres reader Close освобождает owned resources")]
+    public async Task Close_releases_owned_resources()
+    {
+        var rawReader = await OpenReaderAsync("select 1 as value");
+
+        rawReader.Close();
+
+        await Assert.That(rawReader.IsClosed).IsTrue();
+    }
+
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("'example'::text", DataType.Text, "example");

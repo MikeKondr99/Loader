@@ -39,7 +39,7 @@ public sealed class PostgresProvider : IProvider<IDatabaseSource, SqlTableConfig
                 .ConfigureAwait(false);
             return new PostgresDataReader(reader, command, connection, dataSource);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex)
         {
             if (command is not null)
             {
@@ -52,6 +52,11 @@ public sealed class PostgresProvider : IProvider<IDatabaseSource, SqlTableConfig
             }
 
             await dataSource.DisposeAsync().ConfigureAwait(false);
+            if (ex is OperationCanceledException)
+            {
+                throw;
+            }
+
             throw new DbExecutionException(Kind, config.Sql, ex);
         }
     }
@@ -64,6 +69,7 @@ public sealed class PostgresProvider : IProvider<IDatabaseSource, SqlTableConfig
         private readonly NpgsqlCommand command;
         private readonly NpgsqlConnection connection;
         private readonly NpgsqlDataSource dataSource;
+        private bool disposed;
 
         public PostgresDataReader(
             DbDataReader inner,
@@ -81,10 +87,7 @@ public sealed class PostgresProvider : IProvider<IDatabaseSource, SqlTableConfig
         {
             if (disposing)
             {
-                base.Dispose(disposing);
-                command.Dispose();
-                connection.Dispose();
-                dataSource.Dispose();
+                DisposeOwned();
                 return;
             }
 
@@ -93,10 +96,35 @@ public sealed class PostgresProvider : IProvider<IDatabaseSource, SqlTableConfig
 
         public override async ValueTask DisposeAsync()
         {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
             await base.DisposeAsync().ConfigureAwait(false);
             await command.DisposeAsync().ConfigureAwait(false);
             await connection.DisposeAsync().ConfigureAwait(false);
             await dataSource.DisposeAsync().ConfigureAwait(false);
+        }
+
+        public override void Close()
+        {
+            DisposeOwned();
+        }
+
+        private void DisposeOwned()
+        {
+            if (disposed)
+            {
+                return;
+            }
+
+            disposed = true;
+            base.Dispose(disposing: true);
+            command.Dispose();
+            connection.Dispose();
+            dataSource.Dispose();
         }
     }
 }
