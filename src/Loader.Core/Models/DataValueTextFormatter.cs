@@ -22,7 +22,7 @@ internal static class DataValueTextFormatter
 
     public static string Array(Array array)
     {
-        return Json(values => WriteArray(values, array.Cast<object?>()));
+        return Json(writer => WriteArray(writer, array));
     }
 
     public static string ByteArray(byte[] array)
@@ -141,7 +141,7 @@ internal static class DataValueTextFormatter
                 writer.WriteStringValue(BinaryHex(bytes));
                 break;
             case Array array:
-                WriteArray(writer, array.Cast<object?>());
+                WriteArray(writer, array);
                 break;
             case ITuple tuple:
                 WriteArray(writer, Enumerable.Range(0, tuple.Length).Select(index => tuple[index]));
@@ -180,5 +180,41 @@ internal static class DataValueTextFormatter
         }
 
         writer.WriteEndObject();
+    }
+
+    private static void WriteArray(Utf8JsonWriter writer, Array array)
+    {
+        if (array.Rank == 1)
+        {
+            WriteArray(writer, array.Cast<object?>());
+            return;
+        }
+
+        WriteMultidimensionalArray(writer, array, dimension: 0, indices: new int[array.Rank]);
+    }
+
+    private static void WriteMultidimensionalArray(
+        Utf8JsonWriter writer,
+        Array array,
+        int dimension,
+        int[] indices)
+    {
+        writer.WriteStartArray();
+        var lowerBound = array.GetLowerBound(dimension);
+        var upperBound = array.GetUpperBound(dimension);
+        for (var index = lowerBound; index <= upperBound; index++)
+        {
+            indices[dimension] = index;
+            if (dimension == array.Rank - 1)
+            {
+                WriteValue(writer, array.GetValue(indices));
+            }
+            else
+            {
+                WriteMultidimensionalArray(writer, array, dimension + 1, indices);
+            }
+        }
+
+        writer.WriteEndArray();
     }
 }

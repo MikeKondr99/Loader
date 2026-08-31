@@ -117,6 +117,7 @@ public sealed class DataValueMapperTests
         yield return (IPNetwork.Parse("192.168.0.0/24"), "192.168.0.0/24");
         yield return (PhysicalAddress.Parse("08002B010203"), "08:00:2b:01:02:03");
         yield return (new[] { 1, 2, 3 }, "[1,2,3]");
+        yield return (new[,] { { 1, 2 }, { 3, 4 } }, "[[1,2],[3,4]]");
         yield return (new[] { "a", "b,c", "d\"e", null }, "[\"a\",\"b,c\",\"d\\\"e\",null]");
         yield return (new object?[] { new[] { 1, 2 }, Tuple.Create("x", 3), new byte[] { 222, 173, 190, 239 } }, "[[1,2],[\"x\",3],\"\\\\xDEADBEEF\"]");
         yield return (Tuple.Create((byte)1, "a"), "[1,\"a\"]");

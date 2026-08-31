@@ -392,6 +392,7 @@ public sealed class PostgresProviderTests
         yield return ("tsrange(timestamp '2026-01-02', timestamp '2026-01-03')", DataType.Text, "[2026-01-02 00:00:00,2026-01-03 00:00:00)");
         yield return ("daterange(date '2026-01-02', date '2026-01-03')", DataType.Text, "[2026-01-02,2026-01-03)");
         yield return ("array[1, 2, 3]::integer[]", DataType.Text, "[1,2,3]");
+        yield return ("array[[1, 2], [3, 4]]::integer[][]", DataType.Text, "[[1,2],[3,4]]");
         yield return ("array['a', 'b,c', 'd\"e', null]::text[]", DataType.Text, "[\"a\",\"b,c\",\"d\\\"e\",null]");
     }
 
