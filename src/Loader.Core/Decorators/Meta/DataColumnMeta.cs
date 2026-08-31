@@ -37,6 +37,7 @@ public sealed class DataColumnMeta
 
     public decimal Density { get; private set; }
 
+    // TODO: collect typed min/max for Date, DateTime and Time when CollectMeta is redesigned.
     public decimal? Min { get; private set; }
 
     public decimal? Max { get; private set; }
@@ -131,6 +132,30 @@ public sealed class DataColumnMeta
         {
             switch (value)
             {
+                case byte byteValue:
+                    numeric = byteValue;
+                    return true;
+                case sbyte sbyteValue:
+                    numeric = sbyteValue;
+                    return true;
+                case short shortValue:
+                    numeric = shortValue;
+                    return true;
+                case ushort ushortValue:
+                    numeric = ushortValue;
+                    return true;
+                case int intValue:
+                    numeric = intValue;
+                    return true;
+                case uint uintValue:
+                    numeric = uintValue;
+                    return true;
+                case long longValue:
+                    numeric = longValue;
+                    return true;
+                case ulong ulongValue:
+                    numeric = ulongValue;
+                    return true;
                 case decimal decimalValue:
                     numeric = decimalValue;
                     return true;
@@ -148,15 +173,12 @@ public sealed class DataColumnMeta
                          bigInteger <= new BigInteger(decimal.MaxValue):
                     numeric = (decimal)bigInteger;
                     return true;
-                case IConvertible convertible:
-                    numeric = convertible.ToDecimal(CultureInfo.InvariantCulture);
-                    return true;
                 default:
                     numeric = default;
                     return false;
             }
         }
-        catch (OverflowException)
+        catch (Exception exception) when (exception is OverflowException or FormatException or InvalidCastException or ArgumentException)
         {
             numeric = default;
             return false;

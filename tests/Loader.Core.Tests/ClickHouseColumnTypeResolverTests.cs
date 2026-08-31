@@ -112,6 +112,21 @@ public sealed class ClickHouseColumnTypeResolverTests
     }
 
     [Test]
+    [DisplayName("DataColumnMeta numeric bounds игнорирует ненumeric значения")]
+    public async Task Data_column_meta_ignores_non_numeric_values_for_numeric_bounds()
+    {
+        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
+
+        meta.CollectValue("123", rowCount: 1);
+        meta.CollectValue(DateTime.UnixEpoch, rowCount: 2);
+        meta.CollectValue(2m, rowCount: 3);
+
+        await Assert.That(meta.Min).IsEqualTo(2m);
+        await Assert.That(meta.Max).IsEqualTo(2m);
+        await Assert.That(meta.Density).IsEqualTo(1m);
+    }
+
+    [Test]
     [DisplayName("ClickHouse type resolver Number игнорирует invalid meta decimal shape")]
     public async Task Number_invalid_meta_decimal_shape_falls_back_to_schema_decimal_shape()
     {
