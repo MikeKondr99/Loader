@@ -463,6 +463,20 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
             .WithMessage("Функция 'FRACTILE' требует, чтобы аргумент 2 был константой");
     }
 
+    [Test]
+    [Arguments("FRACTILE(x, 1.1)")]
+    [Arguments("FRACTILE(x, 2)")]
+    [DisplayName("FRACTILE отклоняет p вне диапазона от 0 до 1 на resolve")]
+    public async Task Fractile_rejects_p_outside_supported_range(string expression)
+    {
+        var inline = CreateSingleColumnInline(DataType.Number, ["1.0", "2.0", "3.0"]);
+        var query = CreateSingleColumnQuery(inline, expression);
+
+        await Assert.That(async () => await GetScalarAsync(query))
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("Функция 'FRACTILE' требует, чтобы аргумент 2 был в диапазоне 0..1");
+    }
+
     private static QuerySource CreateSingleColumnInline(DataType dataType, IReadOnlyList<string> values)
     {
         return InlineQueryArrange.SingleColumnSource("x", dataType, values);

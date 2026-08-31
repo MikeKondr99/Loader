@@ -142,7 +142,7 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("fieldNo", DataType.Integer)
             .Returns(DataType.Text)
             .CustomNullPropagation(_ => true)
-            .Template($"if(isNull({0}) OR isNull({1}) OR {0} = '', CAST(NULL AS Nullable(String)), arrayElement(CAST(splitByString(ifNull({1}, ''), ifNull({0}, '')) AS Array(Nullable(String))), {2}))");
+            .Template($"if(isNull({0}) OR isNull({1}) OR isNull({2}) OR {0} = '' OR {2} = 0, CAST(NULL AS Nullable(String)), arrayElement(CAST(splitByString(ifNull({1}, ''), ifNull({0}, '')) AS Array(Nullable(String))), {2}))");
 
         Method("Index")
             .Doc("Возвращает позицию первого вхождения подстроки")

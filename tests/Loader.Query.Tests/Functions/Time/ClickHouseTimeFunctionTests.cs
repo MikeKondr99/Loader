@@ -15,6 +15,7 @@ public sealed class ClickHouseTimeFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Time('03:04:05')", "@1970-01-01 03:04:05")]
+    [Arguments("Time(Date('2026-08-30 12:34:56'))", "@1970-01-01 12:34:56")]
     [Arguments("'23:59:59'.Time()", "@1970-01-01 23:59:59")]
     [Arguments("Time('bad')", null)]
     [Arguments("Time('03:04')", null)]
@@ -90,6 +91,7 @@ public sealed class ClickHouseTimeFunctionTests : ClickHouseExpressionTestBase
     [Test]
     [Arguments("Type(Time('03:04:05'))", "time")]
     [Arguments("RawType(Time('03:04:05'))", "Nullable(DateTime('UTC'))")]
+    [Arguments("RawType(Time(Date('2026-08-30 12:34:56')))", "Nullable(DateTime('UTC'))")]
     [Arguments("RawType(Time('bad'))", "Nullable(DateTime('UTC'))")]
     [DisplayName("Time имеет логический тип time и физический ClickHouse DateTime")]
     public Task Time_types(string expression, object? expected)

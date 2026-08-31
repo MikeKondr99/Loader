@@ -47,6 +47,16 @@ public sealed class TimeFunctions : FunctionDescriptor
             .Returns(DataType.Time)
             .Template($"{0}");
 
+        Method("Time")
+            .Doc("Извлекает time-only часть из datetime.")
+            .Arg("input", DataType.DateTime)
+            .Returns(DataType.Time)
+            // CH 24.8: datetime - toStartOfDay(datetime) возвращает Int32 секунд,
+            // а toTimeWithFixedDate еще недоступен. Текущий физический контракт Time - DateTime('UTC') с датой 1970-01-01.
+            // TODO: когда минимальная версия CH будет >= 25.6 и физический Time станет частью контракта,
+            // заменить DateTime('UTC')-заглушку на CAST({0}, 'Time').
+            .Template($"toDateTime(formatDateTime({0}, '1970-01-01 %H:%i:%S'), 'UTC')");
+
         Method("Text")
             .Doc("Преобразует время в текст в формате HH:mm:ss.")
             .Arg("input", DataType.Time)

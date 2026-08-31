@@ -1,4 +1,7 @@
+using Loader.Lang;
+using Loader.Lang.Expressions;
 using Loader.Query.Models;
+using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Query.Functions;
 
@@ -100,7 +103,22 @@ public sealed class AggregationFunctions : FunctionDescriptor
                 .ConstArg("p", DataType.Number)
                 .ReturnsAggregated(DataType.Number)
                 .CustomNullPropagation(_ => true)
-                .Template($"quantileExactInclusive({1})({0})");
+                .Template((args, context) =>
+                {
+                    var p = GetConstantNumber(args[1].Expression);
+                    if (p is < 0 or > 1)
+                    {
+                        context.AddError(new LangError
+                        {
+                            Span = args[1].Expression.Span,
+                            Message = "Функция 'FRACTILE' требует, чтобы аргумент 2 был в диапазоне 0..1"
+                        });
+
+                        return QueryTemplate.Text("NULL");
+                    }
+
+                    return QueryTemplate.Create($"quantileExactInclusive({1})({0})");
+                });
         }
 
         Function("CONCAT")
@@ -157,5 +175,16 @@ public sealed class AggregationFunctions : FunctionDescriptor
         yield return DataType.DateTime;
         yield return DataType.Date;
         yield return DataType.Time;
+    }
+
+    private static double? GetConstantNumber(Expr expression)
+    {
+        return expression switch
+        {
+            IntegerLiteral integer => integer.Value,
+            NumberLiteral number => number.Value,
+            FuncExpr { Kind: FuncExprKind.Unary, Name: "-", Arguments: [var value] } => -GetConstantNumber(value),
+            _ => null
+        };
     }
 }

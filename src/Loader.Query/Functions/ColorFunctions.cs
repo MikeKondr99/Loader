@@ -12,6 +12,6 @@ public sealed class ColorFunctions : FunctionDescriptor
             .Arg("g", DataType.Integer)
             .Arg("b", DataType.Integer)
             .Returns(DataType.Integer)
-            .Template($"bitOr(toUInt64(0xFF000000), bitOr(bitShiftLeft(bitAnd(toUInt64({0}), 255), 16), bitOr(bitShiftLeft(bitAnd(toUInt64({1}), 255), 8), bitAnd(toUInt64({2}), 255))))");
+            .Template($"bitOr(toUInt64(0xFF000000), bitOr(bitShiftLeft(toUInt64(clamp({0}, 0, 255)), 16), bitOr(bitShiftLeft(toUInt64(clamp({1}, 0, 255)), 8), toUInt64(clamp({2}, 0, 255)))))");
     }
 }

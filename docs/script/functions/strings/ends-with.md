@@ -21,6 +21,7 @@
 | `'hello'.EndsWith('')` | `true` |
 | `''.EndsWith('a')` | `false` |
 | `''.EndsWith('')` | `true` |
+| `EndsWith(null, '')` | `null` |
 | `EndsWith('привет', 'вет')` | `true` |
 | `'😀👍👋'.EndsWith('👋')` | `true` |
 | `'Apple'.EndsWith('e')` | `true` |

@@ -38,6 +38,7 @@
 | `SubField('привет|мир|😀', '|', -1)` | `'😀'` |
 | `SubField('abc', '', 1)` | `'a'` |
 | `SubField('abc', '', 3)` | `'c'` |
+| `SubField('abc', '', 0)` | `null` |
 | `SubField('abc', '', 4)` | `null` |
 | `SubField(null, ';', 1)` | `null` |
 | `SubField('abc', null, 1)` | `null` |
