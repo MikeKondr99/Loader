@@ -49,6 +49,10 @@ public sealed class ClickHouseConditionalFunctionTests : ClickHouseExpressionTes
     [Arguments("If(false, Time('03:04:05'), Time('06:07:08'))", "@1970-01-01 06:07:08")]
     [Arguments("If(null, Time('03:04:05'), Time('06:07:08'))", "@1970-01-01 06:07:08")]
     [Arguments("If(true, null, Time('06:07:08')).Type()", "time")]
+    [Arguments("If(true, true, false)", true)]
+    [Arguments("If(false, true, false)", false)]
+    [Arguments("If(null, true, false)", false)]
+    [Arguments("If(true, null, false).Type()", "bool")]
     public Task If_function(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -72,6 +76,10 @@ public sealed class ClickHouseConditionalFunctionTests : ClickHouseExpressionTes
     [Arguments("Time('03:04:05').Alt(Time('06:07:08'))", "@1970-01-01 03:04:05")]
     [Arguments("Time(null).Alt(Time('06:07:08'))", "@1970-01-01 06:07:08")]
     [Arguments("Time(null).Alt(Time(null))", null)]
+    [Arguments("true.Alt(false)", true)]
+    [Arguments("If(false, true, null).Alt(true)", true)]
+    [Arguments("If(false, true, null).Alt(If(false, true, null))", null)]
+    [Arguments("If(false, true, null).Alt(true).Type()", "bool!")]
     public Task Alt_function(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -117,12 +125,15 @@ public sealed class ClickHouseConditionalFunctionTests : ClickHouseExpressionTes
     [Arguments("Case(false, Date('2026-01-02'))", null)]
     [Arguments("Case(true, Time('03:04:05'))", "@1970-01-01 03:04:05")]
     [Arguments("Case(false, Time('03:04:05'))", null)]
+    [Arguments("Case(true, true)", true)]
+    [Arguments("Case(false, true)", null)]
     [Arguments("Type(Case(true, 'text'))", "text")]
     [Arguments("Type(Case(false, 'text'))", "text")]
     [Arguments("Type(Case(true, 42))", "int")]
     [Arguments("Type(Case(false, 42))", "int")]
     [Arguments("Type(Case(true, Date('2026-01-02')))", "date")]
     [Arguments("Type(Case(true, Time('03:04:05')))", "time")]
+    [Arguments("Type(Case(true, true))", "bool")]
     public Task Case_condition_tests(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -145,12 +156,16 @@ public sealed class ClickHouseConditionalFunctionTests : ClickHouseExpressionTes
     [Arguments("Case(Time('03:04:05'), true, Time('06:07:08'))", "@1970-01-01 03:04:05")]
     [Arguments("Case(Time(null), true, Time('06:07:08'))", "@1970-01-01 06:07:08")]
     [Arguments("Case(Time(null), false, Time('06:07:08'))", null)]
+    [Arguments("Case(true, true, false)", true)]
+    [Arguments("Case(If(false, true, null), true, false)", false)]
+    [Arguments("Case(If(false, true, null), false, true)", null)]
     [Arguments("Type(Case('input', true, 'other'))", "text")]
     [Arguments("Type(Case(null, true, 'other'))", "text")]
     [Arguments("Type(Case(null, false, 'other'))", "text")]
     [Arguments("Type(Case(42, true, 100))", "int")]
     [Arguments("Type(Case(Date(null), true, Date('2026-01-03')))", "date")]
     [Arguments("Type(Case(Time(null), true, Time('06:07:08')))", "time")]
+    [Arguments("Type(Case(If(false, true, null), true, false))", "bool")]
     public Task Case_input_tests(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);

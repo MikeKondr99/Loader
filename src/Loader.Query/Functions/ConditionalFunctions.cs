@@ -12,7 +12,8 @@ public sealed class ConditionalFunctions : FunctionDescriptor
                      DataType.Text,
                      DataType.Integer,
                      DataType.DateTime,
-                     DataType.Time
+                     DataType.Time,
+                     DataType.Boolean
                  })
         {
             Function("If")

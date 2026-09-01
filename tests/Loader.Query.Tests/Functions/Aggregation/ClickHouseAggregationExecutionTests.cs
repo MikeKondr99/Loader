@@ -141,6 +141,22 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("MIN/MAX: работают для bool")]
+    public async Task Min_max_boolean()
+    {
+        bool?[] values = [true, null, false, true];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
+        var minQuery = CreateSingleColumnQuery(inline, "MIN(x)");
+        var maxQuery = CreateSingleColumnQuery(inline, "MAX(x)");
+
+        var min = await GetScalarAsync(minQuery);
+        var max = await GetScalarAsync(maxQuery);
+
+        await Assert.That((bool)min!).IsFalse();
+        await Assert.That((bool)max!).IsTrue();
+    }
+
+    [Test]
     [DisplayName("COUNT(): считает все строки")]
     public async Task Count_all_rows()
     {
@@ -167,6 +183,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("COUNT(поле): работает для bool")]
+    public async Task Count_boolean_column()
+    {
+        bool?[] values = [true, null, false, null, true];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "COUNT(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 3);
+    }
+
+    [Test]
     [DisplayName("COUNT_DISTINCT: считает уникальные non-null значения")]
     public async Task Count_distinct_integer()
     {
@@ -185,6 +214,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     {
         string?[] values = ["a", null, "b", "a"];
         var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "COUNT_DISTINCT(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
+    [DisplayName("COUNT_DISTINCT: работает для bool")]
+    public async Task Count_distinct_boolean()
+    {
+        bool?[] values = [true, null, false, true];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
         var query = CreateSingleColumnQuery(inline, "COUNT_DISTINCT(x)");
 
         var result = await GetScalarAsync(query);
@@ -294,6 +336,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("ONLY: работает для bool")]
+    public async Task Only_boolean()
+    {
+        bool?[] values = [true, true];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "ONLY(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That((bool)result!).IsTrue();
+    }
+
+    [Test]
     [DisplayName("CONCAT(value): склеивает non-null text")]
     public async Task Concat_basic()
     {
@@ -378,6 +433,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         var result = await GetScalarAsync(query);
 
         await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    [DisplayName("MODE(bool): возвращает самое частое не NULL значение")]
+    public async Task Mode_boolean()
+    {
+        bool?[] values = [true, false, true, null];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "MODE(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That((bool)result!).IsTrue();
     }
 
     [Test]
@@ -501,6 +569,11 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     private static string[] ToExpressions(string?[] values)
     {
         return values.Select(static value => value is null ? "null" : $"'{value}'").ToArray();
+    }
+
+    private static string[] ToExpressions(bool?[] values)
+    {
+        return values.Select(static value => value.HasValue ? value.Value.ToString().ToLowerInvariant() : "null").ToArray();
     }
 
     private static async Task AssertNumberAsync(object? actual, double expected)

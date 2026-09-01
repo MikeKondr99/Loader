@@ -79,6 +79,9 @@ public sealed class ClickHouseComparisonFunctionTests : ClickHouseExpressionTest
     [Arguments("'abc' = 'ABC'", false)]
     [Arguments("Date('2026-01-01') = Date('2026-01-01')", true)]
     [Arguments("Date('2026-01-01') = Date('2026-01-02')", false)]
+    [Arguments("true = true", true)]
+    [Arguments("true = false", false)]
+    [Arguments("If(false, true, null) = true", null)]
     [Arguments("5 = Int(null)", null)]
     [Arguments("Text(null) = Text(null)", null)]
     public Task Equal_to(string expression, object? expected)
@@ -96,6 +99,9 @@ public sealed class ClickHouseComparisonFunctionTests : ClickHouseExpressionTest
     [Arguments("'abc' != 'abc'", false)]
     [Arguments("Date('2026-01-01') != Date('2026-01-02')", true)]
     [Arguments("Date('2026-01-01') != Date('2026-01-01')", false)]
+    [Arguments("true != false", true)]
+    [Arguments("true != true", false)]
+    [Arguments("If(false, true, null) != true", null)]
     [Arguments("5 != Int(null)", null)]
     [Arguments("Text(null) != Text(null)", null)]
     public Task Not_equal_to(string expression, object? expected)

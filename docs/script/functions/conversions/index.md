@@ -7,7 +7,6 @@ Conversion functions явно преобразуют значение в нуж�
 - [Text](/docs/script/functions/conversions/text.md) - преобразование значения в `text`.
 - [Int](/docs/script/functions/conversions/int.md) - преобразование значения в `int`.
 - [Num](/docs/script/functions/conversions/num.md) - преобразование значения в `num`.
-- [Bool](/docs/script/functions/conversions/bool.md) - преобразование значения в `bool`.
 - [Date](/docs/script/functions/conversions/date.md) - преобразование значения в `date`.
 - [Time](/docs/script/functions/conversions/time.md) - преобразование значения в `time`.
 

@@ -77,22 +77,26 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     }
 
     [Test]
-    [Arguments("Bool(25)", true)]
-    [Arguments("Bool(0)", false)]
-    [Arguments("Bool(-5)", false)]
-    [Arguments("Bool(23)", true)]
-    [Arguments("Bool(0.0)", false)]
-    [Arguments("Bool(-5.0)", false)]
-    [Arguments("Bool(23.0)", true)]
-    [Arguments("Bool('25')", true)]
-    [Arguments("Bool('bad')", true)]
-    [Arguments("Bool('')", false)]
-    [Arguments("Bool(false)", false)]
-    [Arguments("Bool(true)", true)]
-    [Arguments("If(Bool(null), 'then', 'else')", "else")]
-    public Task Bool(string expression, object? expected)
+    [Arguments("Bool(true)")]
+    [Arguments("Bool(null)")]
+    [Arguments("Bool(25)")]
+    [Arguments("Bool(0.0)")]
+    [Arguments("Bool('true')")]
+    [Arguments("Bool('')")]
+    [DisplayName("Bool не зарегистрирован как функция преобразования")]
+    public async Task Bool_is_not_registered_as_conversion_function(string expression)
     {
-        return AssertExpressionAsync(expression, expected);
+        var query = new Query.Models.Query
+        {
+            Source = InlineQueryArrange.SingleColumnSource("x", DataType.Integer, ["1"]),
+            Select = [Select("value", expression)]
+        };
+
+        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).First())
+            .Contains("Bool");
     }
 
     [Test]
@@ -111,8 +115,8 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     [Test]
     [Arguments("RawType(Int('1'))", "Nullable(Int64)")]
     [Arguments("RawType(Num('1'))", "Nullable(Decimal(18, 10))")]
-    [Arguments("RawType(Bool('a'))", "Bool")]
-    [DisplayName("ClickHouse conversion casts выбирают ожидаемый runtime тип")]
+    [Arguments("RawType(true)", "Bool")]
+    [DisplayName("ClickHouse-преобразования выбирают ожидаемый фактический тип")]
     public Task Conversion_casts_use_expected_clickhouse_runtime_type(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -120,7 +124,7 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
 
     [Test]
     [MethodDataSource(nameof(NullableConversionTypeCases))]
-    [DisplayName("ClickHouse conversion casts выбирают Nullable тип для nullable выражений")]
+    [DisplayName("ClickHouse-преобразования выбирают Nullable тип для nullable выражений")]
     public async Task Conversion_casts_use_expected_clickhouse_type_for_nullable_expression(
         DataType sourceType,
         string sourceValue,
@@ -148,7 +152,7 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
 
     [Test]
     [MethodDataSource(nameof(NullableConversionCases))]
-    [DisplayName("ClickHouse conversion function сохраняет NULL из nullable source field")]
+    [DisplayName("ClickHouse-преобразование сохраняет NULL из nullable поля источника")]
     public async Task Nullable_field_conversion_preserves_null(
         DataType sourceType,
         string sourceValue,
@@ -222,7 +226,6 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     {
         yield return (DataType.Text, "'25'", "Int(x)");
         yield return (DataType.Text, "'25'", "Num(x)");
-        yield return (DataType.Text, "'abc'", "Bool(x)");
         yield return (DataType.Text, "'2026-01-02'", "Date(x)");
         yield return (DataType.Integer, "25", "Text(x)");
         yield return (DataType.Number, "25.5", "Text(x)");
@@ -237,7 +240,6 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
     {
         yield return (DataType.Text, "'25'", "Int(x)", "Nullable(Int64)");
         yield return (DataType.Text, "'25'", "Num(x)", "Nullable(Decimal(18, 10))");
-        yield return (DataType.Text, "'abc'", "Bool(x)", "Nullable(Bool)");
         yield return (DataType.Number, "25.5", "Int(x)", "Nullable(Int64)");
         yield return (DataType.Integer, "25", "Num(x)", "Nullable(Decimal(18, 10))");
         yield return (DataType.Boolean, "true", "Int(x)", "Nullable(Int64)");
