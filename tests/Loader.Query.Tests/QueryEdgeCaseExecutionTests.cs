@@ -17,7 +17,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query сохраняет three-valued logic для nullable boolean SELECT expressions")]
+    [DisplayName("Query сохраняет трехзначную логику для nullable bool SELECT выражений")]
     public async Task Nullable_boolean_select_expressions_preserve_null()
     {
         // Arrange
@@ -46,7 +46,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query resolves OR keyword as binary operator")]
+    [DisplayName("Query резолвит ключевое слово OR как бинарный оператор")]
     public async Task Or_keyword_is_resolved_as_binary_operator()
     {
         // Arrange
@@ -66,7 +66,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query resolves AND keyword as binary operator")]
+    [DisplayName("Query резолвит ключевое слово AND как бинарный оператор")]
     public async Task And_keyword_is_resolved_as_binary_operator()
     {
         // Arrange
@@ -86,27 +86,27 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query сейчас не резолвит equality для boolean")]
-    public async Task Boolean_equality_is_not_supported_yet()
+    [DisplayName("Query резолвит равенство для bool")]
+    public async Task Boolean_equality_is_supported()
     {
         // Arrange
         var query = new Query.Models.Query
         {
             Source = NullableBoolSource(),
-            Select = ["flag = false".As("is_false")]
+            Select = ["flag = false".As("is_false")],
+            OrderBy = ["id".Asc()]
         };
 
         // Act
-        var act = async () => await GetRowsAsync(query);
+        var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act)
-            .ThrowsExactly<InvalidOperationException>()
-            .WithMessage("Функция '=' с указанными аргументами не найдена");
+        await Assert.That(rows.Values("is_false"))
+            .IsEquivalentTo((object?[])[false, true, null], CollectionOrdering.Matching);
     }
 
     [Test]
-    [DisplayName("Query WHERE по nullable boolean оставляет только TRUE")]
+    [DisplayName("Query WHERE по nullable bool оставляет только TRUE")]
     public async Task Where_nullable_boolean_keeps_only_true()
     {
         // Arrange
@@ -127,7 +127,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query WHERE Not(nullable boolean) оставляет только FALSE")]
+    [DisplayName("Query WHERE Not(nullable bool) оставляет только FALSE")]
     public async Task Where_not_nullable_boolean_keeps_only_false()
     {
         // Arrange
@@ -148,7 +148,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query WHERE не boolean expression отклоняет на resolve")]
+    [DisplayName("Query WHERE отклоняет не bool выражение на resolve")]
     public async Task Where_non_boolean_expression_is_rejected_by_resolver()
     {
         // Arrange
@@ -349,8 +349,8 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query сейчас не резолвит COUNT(boolean)")]
-    public async Task Count_boolean_is_not_supported_yet()
+    [DisplayName("Query резолвит COUNT(bool)")]
+    public async Task Count_boolean_is_supported()
     {
         // Arrange
         var query = new Query.Models.Query
@@ -360,16 +360,14 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         };
 
         // Act
-        var act = async () => await GetRowsAsync(query);
+        var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act)
-            .ThrowsExactly<InvalidOperationException>()
-            .WithMessage("Функция 'COUNT' с указанными аргументами не найдена");
+        await Assert.That(rows[0].Int("flags")).IsEqualTo(2);
     }
 
     [Test]
-    [DisplayName("Query COUNT() считает строки с nullable boolean source")]
+    [DisplayName("Query COUNT() считает строки с nullable bool источником")]
     public async Task Count_all_rows_with_nullable_boolean_source()
     {
         // Arrange
@@ -387,7 +385,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query позволяет SELECT alias заменить имя source field")]
+    [DisplayName("Query позволяет SELECT alias заменить имя поля источника")]
     public async Task Select_alias_can_replace_source_field_name()
     {
         // Arrange
@@ -451,7 +449,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query группирует по expression")]
+    [DisplayName("Query группирует по выражению")]
     public async Task Group_by_expression()
     {
         // Arrange
@@ -733,7 +731,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query nullable numeric expression сохраняет NULL")]
+    [DisplayName("Query nullable числовое выражение сохраняет NULL")]
     public async Task Nullable_numeric_expression_preserves_null()
     {
         // Arrange
@@ -757,7 +755,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query Alt numeric expression не создает ClickHouse Variant")]
+    [DisplayName("Query Alt с числовым выражением не создает ClickHouse Variant")]
     public async Task Numeric_alt_expression_does_not_create_clickhouse_variant()
     {
         // Arrange
@@ -795,7 +793,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query Alt numeric expression приводит source decimal и literal к одному Decimal scale")]
+    [DisplayName("Query Alt с числовым выражением приводит decimal источника и литерал к одному scale")]
     public async Task Numeric_alt_expression_unifies_source_decimal_and_literal_scale()
     {
         // Arrange
@@ -858,7 +856,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query SELECT * с duplicate source aliases сейчас отклоняется reader/schema слоем")]
+    [DisplayName("Query SELECT * с дубликатами alias источника сейчас отклоняется слоем reader/schema")]
     public async Task Select_all_with_duplicate_source_aliases_is_rejected()
     {
         // Arrange
@@ -925,7 +923,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query применяет date expressions в WHERE и ORDER BY")]
+    [DisplayName("Query применяет date выражения в WHERE и ORDER BY")]
     public async Task Date_expression_works_in_where_and_order_by()
     {
         // Arrange
@@ -963,7 +961,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query поддерживает source field aliases со спецсимволами через escaped templates")]
+    [DisplayName("Query поддерживает alias полей источника со спецсимволами через экранированные шаблоны")]
     public async Task Escaped_source_field_aliases_work()
     {
         // Arrange
@@ -1038,7 +1036,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query source field aliases case-sensitive")]
+    [DisplayName("Query учитывает регистр alias полей источника")]
     public async Task Source_field_aliases_are_case_sensitive()
     {
         // Arrange
@@ -1069,7 +1067,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query output fields получают типы и nullable из resolved expressions")]
+    [DisplayName("Query выходные поля получают типы и nullable из resolved выражений")]
     public async Task Output_fields_have_resolved_types()
     {
         // Arrange

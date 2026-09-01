@@ -16,4 +16,4 @@
 | --- | --- |
 | `RawType(42)` | `'UInt8'` |
 | `RawType(Int('42'))` | `'Nullable(Int64)'` |
-| `RawType(Bool('abc'))` | `'Bool'` |
+| `RawType(true)` | `'Bool'` |

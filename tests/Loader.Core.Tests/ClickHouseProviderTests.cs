@@ -1,4 +1,6 @@
 ﻿using System.Data.Common;
+using System.Globalization;
+using System.Numerics;
 using ClickHouse.Client.Numerics;
 using Loader.Core.Providers;
 using Loader.Core.Providers.ClickHouse;
@@ -32,22 +34,6 @@ public sealed class ClickHouseProviderTests
             types: [expectedType],
             rows: [
                 ValueTuple.Create(expected)
-            ]);
-    }
-
-    [Test]
-    [MethodDataSource(nameof(UnsupportedSqlValueCases))]
-    [DisplayName("ClickHouse явно неподдержанный тип выдает DBNull без чтения значения")]
-    public async Task Unsupported_sql_expression_maps_to_dbnull(string sqlExpression, DataType expectedType)
-    {
-        await using var rawReader = await OpenReaderAsync($"select {sqlExpression} as value");
-        await using var reader = rawReader.Normalize();
-
-        await Assert.That(reader).HaveData(
-            columns: ["value"],
-            types: [expectedType],
-            rows: [
-                ValueTuple.Create(DBNull.Value)
             ]);
     }
 
@@ -241,6 +227,20 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
+    [DisplayName("ClickHouse String с невалидным UTF-8 читается без silent null")]
+    public async Task Non_utf8_string_reads_without_silent_null()
+    {
+        await using var rawReader = await OpenReaderAsync("select unhex('41D096FF42C328E282AC43') as value");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.DataSchema.Fields[0].DataType).IsEqualTo(DataType.Text);
+        var value = (string)reader.GetValue(0);
+
+        await Assert.That(value).IsEqualTo("AЖ\uFFFDB\uFFFD(€C");
+    }
+
+    [Test]
     [DisplayName("ClickHouse SELECT 1 без alias выдает имя колонки от ClickHouse")]
     public async Task Select_without_alias_uses_clickhouse_generated_column_name()
     {
@@ -347,18 +347,14 @@ public sealed class ClickHouseProviderTests
         yield return ("CAST('abc', 'LowCardinality(String)')", DataType.Text, "abc");
         yield return ("toIPv4('192.168.1.1')", DataType.Text, "192.168.1.1");
         yield return ("toIPv6('2001:db8::1')", DataType.Text, "2001:db8::1");
-        yield return ("['a', 'b']", DataType.Text, "{a,b}");
-    }
-
-    public static IEnumerable<(string SqlExpression, DataType ExpectedType)> UnsupportedSqlValueCases()
-    {
-        yield return ("toInt128(-5)", DataType.Integer);
-        yield return ("toUInt128(5)", DataType.Integer);
-        yield return ("toInt256(-6)", DataType.Integer);
-        yield return ("toUInt256(6)", DataType.Integer);
-        yield return ("[1, 2]", DataType.Text);
-        yield return ("tuple(1, 'a')", DataType.Text);
-        yield return ("map('a', 1, 'b', 2)", DataType.Text);
+        yield return ("toInt128(-5)", DataType.Integer, BigInteger.Parse("-5", CultureInfo.InvariantCulture));
+        yield return ("toUInt128(5)", DataType.Integer, BigInteger.Parse("5", CultureInfo.InvariantCulture));
+        yield return ("toInt256(-6)", DataType.Integer, BigInteger.Parse("-6", CultureInfo.InvariantCulture));
+        yield return ("toUInt256(6)", DataType.Integer, BigInteger.Parse("6", CultureInfo.InvariantCulture));
+        yield return ("[1, 2]", DataType.Text, "[1,2]");
+        yield return ("['a', 'b,c', 'd\"e']", DataType.Text, "[\"a\",\"b,c\",\"d\\\"e\"]");
+        yield return ("tuple(1, 'a')", DataType.Text, "[1,\"a\"]");
+        yield return ("map('a', 1, 'b', 2)", DataType.Text, "{\"a\":1,\"b\":2}");
     }
 
     private ValueTask<DbDataReader> OpenReaderAsync(string sql)

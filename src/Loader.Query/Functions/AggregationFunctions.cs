@@ -14,7 +14,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
             .ReturnsAggregatedNotNull(DataType.Integer)
             .Template($"COUNT(*)");
 
-        foreach (var type in AllWithoutBool())
+        foreach (var type in AllIncludingBool())
         {
             Function("COUNT")
                 .Doc("Подсчитывает количество отличных от NULL значений")
@@ -44,7 +44,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
                 .Template($"if(COUNT({0}) = 0, NULL, arrayElement(topK(1)({0}), 1))");
         }
 
-        foreach (var type in new[] { DataType.Integer, DataType.Number, DataType.DateTime, DataType.Time, DataType.Text })
+        foreach (var type in new[] { DataType.Integer, DataType.Number, DataType.DateTime, DataType.Time, DataType.Text, DataType.Boolean })
         {
             Function("COUNT_DISTINCT")
                 .Doc("Подсчитывает количество уникальных отличных от NULL значений")
@@ -186,5 +186,16 @@ public sealed class AggregationFunctions : FunctionDescriptor
             FuncExpr { Kind: FuncExprKind.Unary, Name: "-", Arguments: [var value] } => -GetConstantNumber(value),
             _ => null
         };
+    }
+    
+    private static IEnumerable<DataType> AllIncludingBool()
+    {
+        yield return DataType.Text;
+        yield return DataType.Integer;
+        yield return DataType.Number;
+        yield return DataType.DateTime;
+        yield return DataType.Date;
+        yield return DataType.Time;
+        yield return DataType.Boolean;
     }
 }

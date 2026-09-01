@@ -14,7 +14,6 @@ public sealed class ConversionFunctions : FunctionDescriptor
                      DataType.Number,
                      DataType.Integer,
                      DataType.Text,
-                     DataType.Boolean,
                      DataType.DateTime
                  })
         {
@@ -82,33 +81,6 @@ public sealed class ConversionFunctions : FunctionDescriptor
 
         NullableConversion(DataType.Null, DataType.Number)
             .Template($"CAST({0} AS Nullable(Decimal64(10)))");
-
-        RequiredConversion(DataType.Text, DataType.Boolean)
-            .Doc("Возвращает true если текст не пустой")
-            .Template($"CAST((LENGTH({0}) > 0) AS Bool)");
-            
-        NullableConversion(DataType.Text, DataType.Boolean)
-            .Doc("Возвращает true если текст не пустой")
-            .Template($"CAST((LENGTH({0}) > 0) AS Nullable(Bool))");
-
-        RequiredConversion(DataType.Number, DataType.Boolean)
-            .Doc("Возвращает true если дробное число больше нуля")
-            .Template($"CAST(({0} > 0.0) AS Bool)");
-            
-        NullableConversion(DataType.Number, DataType.Boolean)
-            .Doc("Возвращает true если дробное число больше нуля")
-            .Template($"CAST(({0} > 0.0) AS Nullable(Bool))");
-
-        RequiredConversion(DataType.Integer, DataType.Boolean)
-            .Doc("Возвращает true если целое число больше нуля")
-            .Template($"CAST(({0} > 0) AS Bool)");
-            
-        NullableConversion(DataType.Integer, DataType.Boolean)
-            .Doc("Возвращает true если целое число больше нуля")
-            .Template($"CAST(({0} > 0) AS Nullable(Bool))");
-
-        NullableConversion(DataType.Null, DataType.Boolean)
-            .Template($"CAST({0} AS Nullable(Bool))");
 
         Method("Text")
             .Doc("Преобразует целое число в текстовое представление")
@@ -194,7 +166,6 @@ public sealed class ConversionFunctions : FunctionDescriptor
             DataType.Integer => "Int",
             DataType.Text => "Text",
             DataType.DateTime => "Date",
-            DataType.Boolean => "Bool",
             _ => throw new ArgumentOutOfRangeException(nameof(output), output, null)
         };
 

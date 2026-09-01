@@ -11,7 +11,8 @@ public sealed class ComparisonFunctions : FunctionDescriptor
                      DataType.Integer,
                      DataType.Number,
                      DataType.Text,
-                     DataType.DateTime
+                     DataType.DateTime,
+                     DataType.Boolean
                  })
         {
             Binary("=", type, type)
