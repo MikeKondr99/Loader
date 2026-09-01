@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 using ClickHouse.Client.Numerics;
 using NpgsqlTypes;
 using Oracle.ManagedDataAccess.Types;
@@ -37,14 +38,14 @@ public static class DataValueMapper
         // loses range for Decimal128/Decimal256.
         [typeof(ClickHouseDecimal)] = Same(DataType.Number, typeof(ClickHouseDecimal)),
 
-        // ClickHouse Int128/Int256 values are known, but disabled until integer widening policy is defined.
-        [typeof(BigInteger)] = Unsupported(DataType.Integer),
+        // ClickHouse Int128/Int256 values are readable, but writer widening policy is handled separately.
+        [typeof(BigInteger)] = Same(DataType.Integer, typeof(BigInteger)),
 
         [typeof(DateTime)] = Same(DataType.DateTime, typeof(DateTime)),
         [typeof(DateOnly)] = Same(DataType.Date, typeof(DateOnly)),
         [typeof(TimeOnly)] = Same(DataType.Time, typeof(TimeOnly)),
 
-        [typeof(TimeSpan)] = ConvertTo(DataType.Time, typeof(TimeOnly), static value => TimeOnly.FromTimeSpan((TimeSpan)value)),
+        [typeof(TimeSpan)] = ConvertTo(DataType.Text, typeof(string), static value => ((TimeSpan)value).ToString("c", CultureInfo.InvariantCulture)),
 
         // ClickHouse Nullable(Nothing) has no readable runtime value.
         [typeof(DBNull)] = Unsupported(DataType.Text),
@@ -58,11 +59,11 @@ public static class DataValueMapper
         // 2026-01-02T03:04:05.0000000+00:00
         [typeof(DateTimeOffset)] = ConvertTo(DataType.Text, typeof(string), static value => ((DateTimeOffset)value).ToString("O", CultureInfo.InvariantCulture)),
 
-        // bytea-like value is known, but intentionally not read until binary policy is defined.
-        [typeof(byte[])] = Unsupported(DataType.Text),
+        // bytea-like value -> \x00ff41
+        [typeof(byte[])] = ConvertTo(DataType.Text, typeof(string), static value => DataValueTextFormatter.BinaryHex((byte[])value)),
 
-        // fallback System.Array value -> "{1,2,3}"
-        [typeof(Array)] = ConvertTo(DataType.Text, typeof(string), static value => ConvertArray((Array)value)),
+        // fallback System.Array value -> [1,2,3]
+        [typeof(Array)] = ConvertTo(DataType.Text, typeof(string), static value => DataValueTextFormatter.Array((Array)value)),
 
         // BitArray true,false,true -> "101"
         [typeof(BitArray)] = ConvertTo(DataType.Text, typeof(string), static value => ConvertBitArray((BitArray)value)),
@@ -164,7 +165,27 @@ public static class DataValueMapper
     public static DataValueMapping MapType(Type clrType)
     {
         var type = Nullable.GetUnderlyingType(clrType) ?? clrType;
+        return MapTypeCore(type);
+    }
 
+    public static DataValueMapping MapReaderType(Type clrType, string providerTypeName)
+    {
+        var type = Nullable.GetUnderlyingType(clrType) ?? clrType;
+        if (type == typeof(byte[]) && IsProviderArray(providerTypeName))
+        {
+            return ConvertTo(DataType.Text, typeof(string), static value => DataValueTextFormatter.ByteArray((byte[])value));
+        }
+
+        if (type == typeof(DateTimeOffset) && IsProviderTimeWithTimeZone(providerTypeName))
+        {
+            return ConvertTo(DataType.Text, typeof(string), ConvertTimeWithTimeZone);
+        }
+
+        return MapTypeCore(type);
+    }
+
+    private static DataValueMapping MapTypeCore(Type type)
+    {
         if (Exact.TryGetValue(type, out var mapping))
         {
             return mapping;
@@ -175,17 +196,17 @@ public static class DataValueMapper
             // NpgsqlCidr 192.168.0.0/24 -> "192.168.0.0/24"
             _ when IsNpgsqlCidr(type) => ConvertTo(DataType.Text, typeof(string), static value => value.ToString()!),
 
-            // int[] {1,2,3} -> "{1,2,3}"
-            _ when IsArrayType(type) => ConvertTo(DataType.Text, typeof(string), static value => ConvertArray((Array)value)),
+            // int[] {1,2,3} -> [1,2,3]
+            _ when IsArrayType(type) => ConvertTo(DataType.Text, typeof(string), static value => DataValueTextFormatter.Array((Array)value)),
 
             // int4range(1,3) -> "[1,3)"
             _ when IsRangeType(type) => ConvertTo(DataType.Text, typeof(string), ConvertRangeValue),
 
-            // ClickHouse Tuple(1,'a') is known, but disabled until complex value policy is defined.
-            _ when IsTupleType(type) => Unsupported(DataType.Text),
+            // ClickHouse Tuple(1,'a') -> [1,"a"]
+            _ when IsTupleType(type) => ConvertTo(DataType.Text, typeof(string), static value => DataValueTextFormatter.Tuple((ITuple)value)),
 
-            // ClickHouse Map('a',1) is known, but disabled until complex value policy is defined.
-            _ when IsDictionaryType(type) => Unsupported(DataType.Text),
+            // ClickHouse Map('a',1) -> {"a":1}
+            _ when IsDictionaryType(type) => ConvertTo(DataType.Text, typeof(string), DataValueTextFormatter.Dictionary),
 
             _ => throw new UnknownClrTypeException(type)
         };
@@ -254,6 +275,16 @@ public static class DataValueMapper
         return type.IsArray && type != typeof(byte[]);
     }
 
+    private static bool IsProviderArray(string providerTypeName)
+    {
+        return providerTypeName.StartsWith("Array(", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsProviderTimeWithTimeZone(string providerTypeName)
+    {
+        return providerTypeName.Equals("time with time zone", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsRangeType(Type type)
     {
         return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(NpgsqlRange<>);
@@ -261,12 +292,12 @@ public static class DataValueMapper
 
     private static bool IsTupleType(Type type)
     {
-        return type.IsGenericType && type.FullName?.StartsWith("System.Tuple`", StringComparison.Ordinal) == true;
+        return typeof(ITuple).IsAssignableFrom(type);
     }
 
     private static bool IsDictionaryType(Type type)
     {
-        return type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>);
+        return typeof(IDictionary).IsAssignableFrom(type);
     }
 
     private static bool IsNpgsqlCidr(Type type)
@@ -326,24 +357,9 @@ public static class DataValueMapper
             address.GetAddressBytes().Select(static value => value.ToString("x2", CultureInfo.InvariantCulture)));
     }
 
-    private static string ConvertArray(Array array)
+    private static string ConvertTimeWithTimeZone(object value)
     {
-        var values = array.Cast<object?>().Select(ConvertArrayElement);
-        return "{" + string.Join(",", values) + "}";
-    }
-
-    private static string ConvertArrayElement(object? value)
-    {
-        return value switch
-        {
-            null => "NULL",
-            DBNull => "NULL",
-            DateTime dateTime => dateTime.ToString("O", CultureInfo.InvariantCulture),
-            DateOnly date => date.ToString("O", CultureInfo.InvariantCulture),
-            TimeOnly time => time.ToString("O", CultureInfo.InvariantCulture),
-            TimeSpan timeSpan => timeSpan.ToString("c", CultureInfo.InvariantCulture),
-            _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty
-        };
+        return ((DateTimeOffset)value).ToString("HH:mm:ss.FFFFFFFzzz", CultureInfo.InvariantCulture);
     }
 
     private static object ConvertOracleValue(object value)

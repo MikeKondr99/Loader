@@ -54,7 +54,7 @@ public sealed record DataSchema
             .Select(i =>
             {
                 columnSchemaByOrdinal.TryGetValue(i, out var column);
-                var mapping = DataValueMapper.MapType(reader.GetFieldType(i));
+                var mapping = DataValueMapper.MapReaderType(reader.GetFieldType(i), reader.GetDataTypeName(i));
                 var numericShape = NumericShape.Normalize(column?.NumericPrecision, column?.NumericScale);
                 return new DataField
                 {
