@@ -80,8 +80,8 @@ public sealed class LoadStatementSqlServerTests
     }
 
     [Test]
-    [DisplayName("LOAD из результата SqlServer LOAD сохраняет Time типы")]
-    public async Task SqlServer_load_from_previous_load_preserves_time_types()
+    [DisplayName("LOAD из результата SqlServer LOAD сохраняет time как Text")]
+    public async Task SqlServer_load_from_previous_load_preserves_time_as_text()
     {
         // Arrange
         // Act
@@ -106,14 +106,14 @@ public sealed class LoadStatementSqlServerTests
         // Assert
         var result = execution.Tables;
         await Assert.That(result).Count().IsEqualTo(2);
-        await Assert.That(result[0].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
-        await Assert.That(result[1].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[0].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Text);
+        await Assert.That(result[1].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Text);
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             clickHouse,
             result[1],
             ["id", "time_value"],
             [
-                new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5) }
+                new object?[] { 1, "03:04:05" }
             ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }

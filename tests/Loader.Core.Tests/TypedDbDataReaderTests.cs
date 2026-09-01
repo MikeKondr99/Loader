@@ -85,9 +85,9 @@ public sealed class DomainDataReaderTests
 
         await Assert.That(reader).HaveData(
             columns: ["text", "integer", "number", "boolean", "datetime", "time"],
-            types: [DataType.Text, DataType.Integer, DataType.Number, DataType.Boolean, DataType.DateTime, DataType.Time],
+            types: [DataType.Text, DataType.Integer, DataType.Number, DataType.Boolean, DataType.DateTime, DataType.Text],
             rows: [
-                ("Moscow", 42, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), new TimeOnly(6, 7, 8))
+                ("Moscow", 42, 10.50m, true, new DateTime(2026, 1, 2, 3, 4, 5), "06:07:08")
             ]);
     }
 
@@ -113,7 +113,7 @@ public sealed class DomainDataReaderTests
         await Assert.That(reader.GetDecimal(2)).IsEqualTo(10.50m);
         await Assert.That(reader.GetBoolean(3)).IsTrue();
         await Assert.That(reader.GetDateTime(4)).IsEqualTo(new DateTime(2026, 1, 2, 3, 4, 5));
-        await Assert.That(reader.GetFieldValue<TimeOnly>(5)).IsEqualTo(new TimeOnly(6, 7, 8));
+        await Assert.That(reader.GetString(5)).IsEqualTo("06:07:08");
     }
 
     [Test]
@@ -203,8 +203,8 @@ public sealed class DomainDataReaderTests
 
         await Assert.That(column.ColumnName).IsEqualTo("created");
         await Assert.That(column.ColumnOrdinal).IsEqualTo(0);
-        await Assert.That(column.DataType).IsEqualTo(typeof(TimeOnly));
-        await Assert.That(reader.DataSchema.Fields[0].ClrType).IsEqualTo(typeof(TimeOnly));
+        await Assert.That(column.DataType).IsEqualTo(typeof(string));
+        await Assert.That(reader.DataSchema.Fields[0].ClrType).IsEqualTo(typeof(string));
     }
 
     [Test]
@@ -222,7 +222,7 @@ public sealed class DomainDataReaderTests
 
         await Assert.That((string)schemaTable.Rows[0][SchemaTableColumn.ColumnName]).IsEqualTo("created");
         await Assert.That((int)schemaTable.Rows[0][SchemaTableColumn.ColumnOrdinal]).IsEqualTo(0);
-        await Assert.That((Type)schemaTable.Rows[0][SchemaTableColumn.DataType]).IsEqualTo(typeof(TimeOnly));
+        await Assert.That((Type)schemaTable.Rows[0][SchemaTableColumn.DataType]).IsEqualTo(typeof(string));
     }
 
     [Test]
@@ -426,21 +426,20 @@ public sealed class DomainDataReaderTests
     }
 
     [Test]
-    [DisplayName("DomainDataReader явно неподдержанный CLR-тип не читает из inner reader и возвращает DBNull")]
-    public async Task Explicit_unsupported_clr_type_is_not_read_and_returns_dbnull()
+    [DisplayName("DomainDataReader бинарный CLR-тип читает как hex text")]
+    public async Task Binary_clr_type_reads_as_hex_text()
     {
         using var table = new DataTable();
         table.Columns.Add("payload", typeof(byte[]));
         table.Rows.Add(new byte[] { 0xde, 0xad });
 
-        using var rawReader = new ThrowOnValueReader(table.CreateDataReader());
+        using var rawReader = table.CreateDataReader();
         using var reader = rawReader.Normalize();
 
         await Assert.That(reader.Read()).IsTrue();
-        await Assert.That(reader.GetValue(0)).IsEqualTo(DBNull.Value);
-        await Assert.That(reader.IsDBNull(0)).IsTrue();
-        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(DBNull));
-        await Assert.That(rawReader.ValueReadAttempts).IsEqualTo(0);
+        await Assert.That(reader.GetValue(0)).IsEqualTo(@"\xDEAD");
+        await Assert.That(reader.IsDBNull(0)).IsFalse();
+        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(string));
     }
 
     [Test]

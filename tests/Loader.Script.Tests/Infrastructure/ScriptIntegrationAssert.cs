@@ -1,6 +1,7 @@
 using System.Data.Common;
 using System.Globalization;
 using ClickHouse.Client.ADO;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -284,7 +285,7 @@ internal static class ScriptIntegrationAssert
             var row = new object?[reader.FieldCount];
             for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
             {
-                row[ordinal] = reader.IsDBNull(ordinal) ? null : reader.GetValue(ordinal);
+                row[ordinal] = reader.IsDBNull(ordinal) ? null : NormalizeAssertValue(reader.GetValue(ordinal));
             }
 
             rows.Add(row);
@@ -296,6 +297,13 @@ internal static class ScriptIntegrationAssert
     private static string EscapeSqlString(string value)
     {
         return value.Replace("'", "''", StringComparison.Ordinal);
+    }
+
+    private static object NormalizeAssertValue(object value)
+    {
+        return value is ClickHouseDecimal decimalValue
+            ? decimalValue.ToDecimal(CultureInfo.InvariantCulture)
+            : value;
     }
 
     private static string[] AbstractColumnNames(int count)

@@ -127,14 +127,14 @@ public sealed class WhereDomainDataReaderTests
                     && row.Boolean("boolean") is null
                     && row.DateTime("datetime") is null
                     && row.Date("date") is null
-                    && row.Time("time") is null;
+                    && row.Text("time") is null;
 
                 return allValuesAreNull;
             });
 
         await Assert.That(reader).HaveData(
             columns: ["text", "number", "integer", "boolean", "datetime", "date", "time"],
-            types: [DataType.Text, DataType.Number, DataType.Integer, DataType.Boolean, DataType.DateTime, DataType.Date, DataType.Time],
+            types: [DataType.Text, DataType.Number, DataType.Integer, DataType.Boolean, DataType.DateTime, DataType.Date, DataType.Text],
             rows: [
                 (DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value, DBNull.Value)
             ]);

@@ -301,7 +301,7 @@ public sealed class OracleProviderTests
         yield return ("cast('abc' as nchar(3))", DataType.Text, "abc");
         yield return ("to_clob('example')", DataType.Text, "example");
         yield return ("xmltype('<root />')", DataType.Text, "<root />");
-        yield return ("hextoraw('DEADBEEF')", DataType.Text, DBNull.Value);
+        yield return ("hextoraw('DEADBEEF')", DataType.Text, @"\xDEADBEEF");
 
         yield return ("cast(1 as number(5, 0))", DataType.Integer, 1);
         yield return ("cast(2 as integer)", DataType.Number, 2m);
@@ -320,7 +320,7 @@ public sealed class OracleProviderTests
         yield return ("to_timestamp('2026-01-02 03:04:05', 'YYYY-MM-DD HH24:MI:SS')", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5));
 
         yield return ("case when 1 = 1 then 'true' else 'false' end", DataType.Text, "true");
-        yield return ("interval '03:04:05' hour to second", DataType.Time, new TimeOnly(3, 4, 5));
+        yield return ("interval '03:04:05' hour to second", DataType.Text, "03:04:05");
         yield return ("timestamp '2026-01-02 03:04:05' at time zone 'UTC'", DataType.Text, "2026-01-02T00:04:05.0000000+00:00");
     }
 

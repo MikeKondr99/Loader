@@ -219,9 +219,9 @@ public sealed class SqlServerProviderTests
     }
 
     [Test]
-    [MethodDataSource(nameof(UnsupportedSqlValueCases))]
-    [DisplayName("SqlServer явно неподдержанный тип выдает DBNull без чтения значения")]
-    public async Task Unsupported_sql_expression_maps_to_dbnull(string sqlExpression, DataType expectedType)
+    [MethodDataSource(nameof(BinarySqlValueCases))]
+    [DisplayName("SqlServer binary-like типы читаются как hex text")]
+    public async Task Binary_sql_expression_maps_to_hex_text(string sqlExpression, object expected)
     {
         await using var rawReader = await OpenReaderAsync($"select {sqlExpression} as value");
         await using var reader = rawReader.Normalize();
@@ -230,7 +230,7 @@ public sealed class SqlServerProviderTests
             columns: ["value"],
             types: [DataType.Text],
             rows: [
-                ValueTuple.Create(DBNull.Value)
+                ValueTuple.Create(expected)
             ]);
     }
 
@@ -334,17 +334,17 @@ public sealed class SqlServerProviderTests
         yield return ("cast('2026-01-02T03:04:05' as datetime2)", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 5));
         yield return ("cast('2026-01-02T03:04:00' as smalldatetime)", DataType.DateTime, new DateTime(2026, 1, 2, 3, 4, 0));
         yield return ("cast('2026-01-02' as date)", DataType.DateTime, new DateTime(2026, 1, 2));
-        yield return ("cast('03:04:05' as time)", DataType.Time, new TimeOnly(3, 4, 5));
+        yield return ("cast('03:04:05' as time)", DataType.Text, "03:04:05");
         yield return ("cast('2026-01-02T03:04:05+00:00' as datetimeoffset)", DataType.Text, "2026-01-02T03:04:05.0000000+00:00");
         yield return ("cast(1 as bit)", DataType.Boolean, true);
     }
 
-    public static IEnumerable<(string SqlExpression, DataType ExpectedType)> UnsupportedSqlValueCases()
+    public static IEnumerable<(string SqlExpression, object Expected)> BinarySqlValueCases()
     {
-        yield return ("cast(0xDEADBEEF as binary(4))", DataType.Text);
-        yield return ("cast(0xDEADBEEF as varbinary(max))", DataType.Text);
-        yield return ("cast(0xDEADBEEF as image)", DataType.Text);
-        yield return ("cast(0x0000000000000001 as rowversion)", DataType.Text);
+        yield return ("cast(0xDEADBEEF as binary(4))", @"\xDEADBEEF");
+        yield return ("cast(0xDEADBEEF as varbinary(max))", @"\xDEADBEEF");
+        yield return ("cast(0xDEADBEEF as image)", @"\xDEADBEEF");
+        yield return ("cast(0x0000000000000001 as rowversion)", @"\x0000000000000001");
     }
 
     private ValueTask<DbDataReader> OpenReaderAsync(string sql)

@@ -146,14 +146,14 @@ public sealed class BufferDataReaderTests
 
     [Test]
     [TestWithDependency(DatabaseDependency.Oracle)]
-    [DisplayName("OracleProvider works only with buffer")]
-    public async Task Oracle_provider_works_only_with_buffer(OracleTestDatabase oracle)
+    [DisplayName("OracleProvider works with and without buffer")]
+    public async Task Oracle_provider_works_with_and_without_buffer(OracleTestDatabase oracle)
     {
         var provider = new OracleProvider();
         var source = new ConnectionStringSource { ConnectionString = oracle.ConnectionString };
         var config = new SqlTableConfig { Sql = "select 1 as \"id\", 'Moscow' as \"name\" from dual" };
 
-        await AssertProviderNeedsBuffer(
+        await AssertProviderWorksWithAndWithoutBuffer(
             () => provider.OpenReaderAsync(source, config),
             1m,
             "Moscow");

@@ -174,8 +174,8 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
-    [DisplayName("LOAD из результата Postgres LOAD сохраняет Time типы")]
-    public async Task Postgres_load_from_previous_load_preserves_time_types()
+    [DisplayName("LOAD из результата Postgres LOAD сохраняет time как Time, а interval как Text")]
+    public async Task Postgres_load_from_previous_load_preserves_time_and_interval_types()
     {
         // Arrange
         // Act
@@ -203,15 +203,15 @@ public sealed class LoadStatementPostgresTests
         var result = execution.Tables;
         await Assert.That(result).Count().IsEqualTo(2);
         await Assert.That(result[0].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
-        await Assert.That(result[0].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[0].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Text);
         await Assert.That(result[1].Fields[1].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
-        await Assert.That(result[1].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Time);
+        await Assert.That(result[1].Fields[2].DataType).IsEqualTo(Loader.Core.Models.DataType.Text);
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             clickHouse,
             result[1],
             ["id", "time_value", "interval_value"],
             [
-                new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5), new DateTime(1970, 1, 1, 4, 5, 6) }
+                new object?[] { 1, new DateTime(1970, 1, 1, 3, 4, 5), "04:05:06" }
             ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
     }

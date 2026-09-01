@@ -268,9 +268,9 @@ public sealed class OdbcMariaDbProviderTests
     }
 
     [Test]
-    [MethodDataSource(nameof(UnsupportedSqlValueCases))]
-    [DisplayName("MariaDB через ODBC явно неподдержанный тип выдает DBNull без чтения значения")]
-    public async Task Unsupported_sql_expression_maps_to_dbnull(string sqlExpression)
+    [MethodDataSource(nameof(BinarySqlValueCases))]
+    [DisplayName("MariaDB через ODBC binary-like типы читаются как hex text")]
+    public async Task Binary_sql_expression_maps_to_hex_text(string sqlExpression)
     {
         await using var rawReader = await OpenSharedReaderAsync($"select {sqlExpression} as value");
         await using var reader = rawReader.Normalize();
@@ -279,7 +279,7 @@ public sealed class OdbcMariaDbProviderTests
             columns: ["value"],
             types: [DataType.Text],
             rows: [
-                ValueTuple.Create(DBNull.Value)
+                ValueTuple.Create(@"\xDEADBEEF")
             ]);
     }
 
@@ -365,7 +365,7 @@ public sealed class OdbcMariaDbProviderTests
                     DataType.Text
                 ],
                 rows: [
-                    ("text", "medium text", "long text", 2026, true, DBNull.Value, DBNull.Value, DBNull.Value)
+                    ("text", "medium text", "long text", 2026, true, @"\xDEADBEEF", @"\xDEADBEEF", @"\xDEADBEEF")
                 ]);
         }
         finally
@@ -396,7 +396,7 @@ public sealed class OdbcMariaDbProviderTests
         yield return ("cast('{\"city\":\"Moscow\"}' as char(32))", DataType.Text, "{\"city\":\"Moscow\"}");
     }
 
-    public static IEnumerable<string> UnsupportedSqlValueCases()
+    public static IEnumerable<string> BinarySqlValueCases()
     {
         yield return "cast(0xDEADBEEF as binary(4))";
     }
