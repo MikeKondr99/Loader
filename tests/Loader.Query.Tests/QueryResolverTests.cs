@@ -119,6 +119,45 @@ public sealed class QueryResolverTests
     }
 
     [Test]
+    [DisplayName("QueryResolver запрещает агрегатные выражения в WHERE")]
+    public async Task Aggregate_in_where_is_rejected()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CreateCityAmountSource(),
+            Select = ["city".As("city")],
+            Where = Expr.Parse("SUM(amount) > 0").Value,
+            GroupBy = [Expr.Parse("city").Value]
+        };
+        var functions = ClickHouseFunctions.CreateResolver();
+
+        var result = new QueryResolver().Resolve(query, functions);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .Contains("WHERE не может содержать агрегатные выражения.");
+    }
+
+    [Test]
+    [DisplayName("QueryResolver валидирует агрегатный ORDER BY вместе с SELECT")]
+    public async Task Aggregate_in_order_by_requires_grouped_select_expressions()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CreateCityAmountSource(),
+            Select = ["city".As("city")],
+            OrderBy = ["SUM(amount)".Desc()]
+        };
+        var functions = ClickHouseFunctions.CreateResolver();
+
+        var result = new QueryResolver().Resolve(query, functions);
+
+        await Assert.That(result.IsSuccess).IsFalse();
+        await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
+            .Contains("SELECT expression 'city' должен быть агрегирован или вынесен в GROUP BY.");
+    }
+
+    [Test]
     [DisplayName("QueryResolver возвращает несколько ошибок resolve отдельно")]
     public async Task Resolve_returns_multiple_errors()
     {
@@ -157,6 +196,38 @@ public sealed class QueryResolverTests
                 {
                     Alias = "amount",
                     Template = QueryTemplate.Text("stage.column1"),
+                    Type = new FieldType
+                    {
+                        DataType = DataType.Number,
+                        CanBeNull = false
+                    }
+                }
+            ]
+        };
+    }
+
+    private static QuerySource CreateCityAmountSource()
+    {
+        return new QuerySource
+        {
+            Sql = "stage",
+            Alias = "stage",
+            Fields =
+            [
+                new Field
+                {
+                    Alias = "city",
+                    Template = QueryTemplate.Text("stage.column1"),
+                    Type = new FieldType
+                    {
+                        DataType = DataType.Text,
+                        CanBeNull = false
+                    }
+                },
+                new Field
+                {
+                    Alias = "amount",
+                    Template = QueryTemplate.Text("stage.column2"),
                     Type = new FieldType
                     {
                         DataType = DataType.Number,

@@ -320,8 +320,8 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query сейчас не валидирует агрегат в WHERE и ClickHouse отклоняет SQL")]
-    public async Task Aggregate_in_where_is_rejected_by_clickhouse()
+    [DisplayName("Query агрегат в WHERE отклоняет на resolve")]
+    public async Task Aggregate_in_where_is_rejected_by_resolver()
     {
         // Arrange
         var source = InlineQueryArrange.Source(
@@ -345,7 +345,39 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var act = async () => await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act).ThrowsExactly<DbExecutionException>();
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("WHERE не может содержать агрегатные выражения.");
+    }
+
+    [Test]
+    [DisplayName("Query агрегат в ORDER BY без GROUP BY валидирует SELECT на resolve")]
+    public async Task Aggregate_in_order_by_without_group_by_validates_select_by_resolver()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [
+                new InlineField("city", DataType.Text),
+                new InlineField("amount", DataType.Number)
+            ],
+            [
+                ["'Moscow'", "10.0"],
+                ["'Paris'", "100.0"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = ["city".As("city")],
+            OrderBy = ["SUM(amount)".Desc()]
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("SELECT expression 'city' должен быть агрегирован или вынесен в GROUP BY.");
     }
 
     [Test]
@@ -480,6 +512,40 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
             .IsEquivalentTo(["MOSCOW", "PARIS"], CollectionOrdering.Matching);
         await Assert.That(rows.Ints("count"))
             .IsEquivalentTo([2, 1], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query считает function call и method call одинаковыми для GROUP BY ORDER BY")]
+    public async Task Group_by_function_call_matches_order_by_method_call()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [new InlineField("name", DataType.Text)],
+            [
+                ["'bob'"],
+                ["'Alice'"],
+                ["'BOB'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "Lower(name)".As("name"),
+                "COUNT()".As("count")
+            ],
+            GroupBy = [Expr("Lower(name)")],
+            OrderBy = ["name.Lower()".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("name"))
+            .IsEquivalentTo(["alice", "bob"], CollectionOrdering.Matching);
+        await Assert.That(rows.Ints("count"))
+            .IsEquivalentTo([1, 2], CollectionOrdering.Matching);
     }
 
     [Test]

@@ -739,6 +739,83 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("ScriptExecutor оборачивает агрегат в WHERE как QueryResolution ошибку")]
+    public async Task Execute_load_wraps_aggregate_where_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                ColumnNames = ["id", "amount"],
+                RowValues = [1, 10m]
+            }
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD
+                id
+            FROM Csv(path='orders.csv')
+            WHERE SUM(amount) > 0
+            GROUP BY id;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.Where!.Span);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("WHERE не может содержать агрегатные выражения");
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("ScriptExecutor оборачивает некорректный агрегат в ORDER BY как QueryResolution ошибку")]
+    public async Task Execute_load_wraps_invalid_aggregate_order_by_as_query_resolution_script_exception()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                ColumnNames = ["id", "amount"],
+                RowValues = [1, 10m]
+            }
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders: LOAD
+                id
+            FROM Csv(path='orders.csv')
+            ORDER BY SUM(amount) DESC;
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.Fields![0].Span);
+        await Assert.That(exception.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("SELECT expression 'id' должен быть агрегирован или вынесен в GROUP BY");
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("ScriptExecutor оборачивает LOAD * GROUP BY как QueryResolution ошибку")]
     public async Task Execute_load_wraps_select_all_group_by_as_query_resolution_script_exception()
     {

@@ -30,10 +30,13 @@ public sealed class QueryResolver
         var where = query.Where is null ? null : expressionResolver.Resolve(query.Where, context);
         var groupBy = ResolveExpressions(query.GroupBy, context);
         var orderBy = ResolveOrderBy(query, context);
+        var aggregationState = AggregationValidationState.Create(select, groupBy, orderBy);
 
         ValidateLimit(query, context);
         ValidateWhere(where, context);
-        ValidateAggregations(query, select, groupBy, context);
+        ValidateSelect(query, select, aggregationState, context);
+        ValidateGroupBy(groupBy, context);
+        ValidateOrderBy(orderBy, aggregationState, context);
         context.Errors.AddRange(context.ExpressionContext.Errors);
 
         if (context.Errors.Count > 0)
@@ -126,55 +129,83 @@ public sealed class QueryResolver
 
     private static void ValidateWhere(ResolvedExpression? where, ResolutionContext context)
     {
-        if (where is null || where.Type.DataType == DataType.Boolean)
+        if (where is null)
         {
             return;
         }
 
-        context.Errors.Add(new LangError
-        {
-            Span = where.Expression.Span,
-            Message = "WHERE expression должен возвращать Boolean."
-        });
-    }
-
-    private static void ValidateAggregations(
-        QueryModel query,
-        IReadOnlyList<ResolvedSelectItem> select,
-        IReadOnlyList<ResolvedExpression> groupBy,
-        ResolutionContext context)
-    {
-        if (groupBy.Count == 0)
-        {
-            ValidateSelectWithoutGroupBy(select, context);
-            return;
-        }
-
-        ValidateGroupByExpressions(groupBy, context);
-        ValidateSelectWithGroupBy(query, select, groupBy, context);
-    }
-
-    private static void ValidateSelectWithoutGroupBy(
-        IReadOnlyList<ResolvedSelectItem> select,
-        ResolutionContext context)
-    {
-        var hasAggregate = select.Any(static item => item.Expression.Type.Aggregated);
-        if (!hasAggregate)
-        {
-            return;
-        }
-
-        foreach (var item in select.Where(static item => RequiresGrouping(item.Expression)))
+        if (where.Type.Aggregated)
         {
             context.Errors.Add(new LangError
             {
-                Span = item.Expression.Expression.Span,
-                Message = $"SELECT expression '{item.Alias}' должен быть агрегирован или вынесен в GROUP BY."
+                Span = where.Expression.Span,
+                Message = "WHERE не может содержать агрегатные выражения."
+            });
+        }
+
+        if (where.Type.DataType != DataType.Boolean)
+        {
+            context.Errors.Add(new LangError
+            {
+                Span = where.Expression.Span,
+                Message = "WHERE expression должен возвращать Boolean."
             });
         }
     }
 
-    private static void ValidateGroupByExpressions(
+    private static void ValidateSelect(
+        QueryModel query,
+        IReadOnlyList<ResolvedSelectItem> select,
+        AggregationValidationState aggregationState,
+        ResolutionContext context)
+    {
+        if (!aggregationState.HasGroupBy)
+        {
+            // Если в запросе есть агрегат без GROUP BY, все SELECT-выражения должны быть агрегатами или константами.
+            if (!aggregationState.HasAggregate)
+            {
+                return;
+            }
+
+            foreach (var item in select.Where(static item => RequiresGrouping(item.Expression)))
+            {
+                context.Errors.Add(new LangError
+                {
+                    Span = item.Expression.Expression.Span,
+                    Message = $"SELECT expression '{item.Alias}' должен быть агрегирован или вынесен в GROUP BY."
+                });
+            }
+
+            return;
+        }
+
+        if (query.Select.Count == 0)
+        {
+            context.Errors.Add(new LangError
+            {
+                Span = query.GroupBy[0].Span,
+                Message = "SELECT * нельзя использовать вместе с GROUP BY. Перечислите группируемые и агрегированные поля явно."
+            });
+            return;
+        }
+
+        foreach (var item in select)
+        {
+            // При GROUP BY обычное SELECT-выражение должно совпадать с одной из групп.
+            if (!RequiresGrouping(item.Expression) || aggregationState.ContainsGroupByExpression(item.Expression))
+            {
+                continue;
+            }
+
+            context.Errors.Add(new LangError
+            {
+                Span = item.Expression.Expression.Span,
+                Message = $"SELECT expression '{item.Alias}' должен быть агрегирован или совпадать с выражением из GROUP BY."
+            });
+        }
+    }
+
+    private static void ValidateGroupBy(
         IReadOnlyList<ResolvedExpression> groupBy,
         ResolutionContext context)
     {
@@ -188,29 +219,35 @@ public sealed class QueryResolver
         }
     }
 
-    private static void ValidateSelectWithGroupBy(
-        QueryModel query,
-        IReadOnlyList<ResolvedSelectItem> select,
-        IReadOnlyList<ResolvedExpression> groupBy,
+    private static void ValidateOrderBy(
+        IReadOnlyList<ResolvedOrderItem> orderBy,
+        AggregationValidationState aggregationState,
         ResolutionContext context)
     {
-        if (query.Select.Count == 0)
+        if (!aggregationState.HasGroupBy)
         {
-            context.Errors.Add(new LangError
+            // Агрегат в ORDER BY переводит запрос в aggregation context, значит обычный ORDER BY без GROUP BY недопустим.
+            if (!aggregationState.HasAggregate)
             {
-                Span = query.GroupBy[0].Span,
-                Message = "SELECT * нельзя использовать вместе с GROUP BY. Перечислите группируемые и агрегированные поля явно."
-            });
+                return;
+            }
+
+            foreach (var item in orderBy.Where(static item => RequiresGrouping(item.Expression)))
+            {
+                context.Errors.Add(new LangError
+                {
+                    Span = item.Expression.Expression.Span,
+                    Message = "ORDER BY expression должен быть агрегирован или вынесен в GROUP BY."
+                });
+            }
+
             return;
         }
 
-        var groupByHashes = groupBy
-            .Select(static expression => expression.Expression.Hash)
-            .ToHashSet();
-
-        foreach (var item in select)
+        foreach (var item in orderBy)
         {
-            if (!RequiresGrouping(item.Expression) || groupByHashes.Contains(item.Expression.Expression.Hash))
+            // При GROUP BY сортировать можно по агрегату, константе или выражению, совпадающему с одной из групп.
+            if (!RequiresGrouping(item.Expression) || aggregationState.ContainsGroupByExpression(item.Expression))
             {
                 continue;
             }
@@ -218,7 +255,7 @@ public sealed class QueryResolver
             context.Errors.Add(new LangError
             {
                 Span = item.Expression.Expression.Span,
-                Message = $"SELECT expression '{item.Alias}' должен быть агрегирован или совпадать с выражением из GROUP BY."
+                Message = "ORDER BY expression должен быть агрегирован или совпадать с выражением из GROUP BY."
             });
         }
     }
@@ -240,5 +277,41 @@ public sealed class QueryResolver
             Span = query.LimitSpan ?? new LangSpan(1, 1, 1, 1),
             Message = "LIMIT 0 запрещен. Укажите положительный LIMIT или уберите LIMIT."
         });
+    }
+
+    private sealed class AggregationValidationState
+    {
+        private readonly HashSet<int> groupByHashes;
+
+        private AggregationValidationState(
+            bool hasAggregate,
+            bool hasGroupBy,
+            HashSet<int> groupByHashes)
+        {
+            HasAggregate = hasAggregate;
+            HasGroupBy = hasGroupBy;
+            this.groupByHashes = groupByHashes;
+        }
+
+        public bool HasAggregate { get; }
+
+        public bool HasGroupBy { get; }
+
+        public static AggregationValidationState Create(
+            IReadOnlyList<ResolvedSelectItem> select,
+            IReadOnlyList<ResolvedExpression> groupBy,
+            IReadOnlyList<ResolvedOrderItem> orderBy)
+        {
+            return new AggregationValidationState(
+                select.Any(static item => item.Expression.Type.Aggregated) ||
+                orderBy.Any(static item => item.Expression.Type.Aggregated),
+                groupBy.Count > 0,
+                groupBy.Select(static expression => expression.Expression.Hash).ToHashSet());
+        }
+
+        public bool ContainsGroupByExpression(ResolvedExpression expression)
+        {
+            return groupByHashes.Contains(expression.Expression.Hash);
+        }
     }
 }
