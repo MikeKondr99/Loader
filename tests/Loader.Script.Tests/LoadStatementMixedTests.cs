@@ -150,6 +150,32 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script Mod и Rem с нулевым делителем возвращают null")]
+    public async Task Execute_script_mod_rem_zero_divisor_returns_null()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            numbers:
+            LOAD
+                Mod(value, 0) AS mod_zero,
+                Rem(value, 0) AS rem_zero
+            FROM Inline(value;
+                5);
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["mod_zero", "rem_zero"],
+            [
+                new object?[] { null, null }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script вычисляет аппроксимацию pi через ряд Лейбница")]
     public async Task Execute_script_calculates_pi_with_leibniz_series()
     {

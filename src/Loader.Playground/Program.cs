@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Data.Common;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -16,6 +17,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.WriteIndented = true;
+    options.SerializerOptions.NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals;
 });
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -460,7 +462,8 @@ internal static class PlaygroundJson
 {
     public static readonly JsonSerializerOptions Compact = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = false
+        WriteIndented = false,
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
     };
 }
 

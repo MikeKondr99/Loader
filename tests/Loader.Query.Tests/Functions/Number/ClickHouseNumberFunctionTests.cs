@@ -63,7 +63,9 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Mod(-4, 3)", -1)]
     [Arguments("Mod(4, -3)", 1)]
     [Arguments("Mod(-4, -3)", -1)]
+    [Arguments("Mod(5, 0)", null)]
     [Arguments("If(Mod(10, 3) > 1.4, 1, 0)", 0)]
+    [Arguments("If(Mod(5, 0) > 0, 1, 0)", 0)]
     public Task Mod(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -75,7 +77,9 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Rem(-9, 5)", 4)]
     [Arguments("Rem(0, 5)", 0)]
     [Arguments("Rem(10, -3)", 1)]
+    [Arguments("Rem(5, 0)", null)]
     [Arguments("If(Rem(-10, 3) > 1.4, 1, 0)", 0)]
+    [Arguments("If(Rem(5, 0) > 0, 1, 0)", 0)]
     public Task Rem(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);

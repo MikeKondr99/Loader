@@ -11,14 +11,14 @@ public sealed class NumberFunctions : FunctionDescriptor
             .Arg("input", DataType.Integer)
             .ReqArg("modulus", DataType.Integer)
             .Returns(DataType.Integer)
-            .Template($"MOD({0}, {1})");
+            .Template($"MOD({0}, nullIf({1}, 0))");
 
         Method("Rem")
             .Doc("Возвращает остаток от деления со знаком делителя")
             .Arg("input", DataType.Integer)
             .Arg("modulus", DataType.Integer)
             .Returns(DataType.Integer)
-            .Template($"ABS(MOD({0}, {1}))");
+            .Template($"ABS(MOD({0}, nullIf({1}, 0)))");
 
         foreach (var type in new[]
                  {
