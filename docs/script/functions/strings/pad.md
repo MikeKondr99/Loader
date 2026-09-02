@@ -2,11 +2,9 @@
 
 `PadLeft` и `PadRight` дополняют строку до заданной длины.
 
-Если исходная строка длиннее или равна целевой длине, текущая реализация обрезает результат до `count`.
+Если исходная строка длиннее или равна целевой длине, результатом будет исходная строка без обрезки.
 
 Если `count` отрицательный или `null`, текущий результат - пустая строка.
-
-TODO: решить, должно ли значение обрезаться, если `count` меньше длины строки.
 
 TODO: решить, должен ли `PadLeft(value, null)` / `PadRight(value, null)` возвращать `null`, а не пустую строку.
 
@@ -22,7 +20,7 @@ TODO: решить, должен ли `PadLeft(value, null)` / `PadRight(value, 
 | --- | --- |
 | `PadLeft('abc', 5)` | `'  abc'` |
 | `PadLeft('abc', 3)` | `'abc'` |
-| `PadLeft('abc', 2)` | `'ab'` |
+| `PadLeft('abc', 2)` | `'abc'` |
 | `PadLeft('abc', 0)` | `''` |
 | `PadLeft('', 5)` | `'     '` |
 | `PadLeft('привет', 8)` | `'  привет'` |
@@ -48,7 +46,7 @@ TODO: решить, должен ли `PadLeft(value, null)` / `PadRight(value, 
 | `PadLeft('abc', 5, '*')` | `'**abc'` |
 | `PadLeft('abc', 5, '0')` | `'00abc'` |
 | `PadLeft('abc', 3, '*')` | `'abc'` |
-| `PadLeft('abc', 2, '*')` | `'ab'` |
+| `PadLeft('abc', 2, '*')` | `'abc'` |
 | `PadLeft('abc', 0, '*')` | `''` |
 | `PadLeft('', 5, '-')` | `'-----'` |
 | `PadLeft('123', 5, '0')` | `'00123'` |
@@ -71,7 +69,7 @@ TODO: решить, должен ли `PadLeft(value, null)` / `PadRight(value, 
 | --- | --- |
 | `PadRight('abc', 5)` | `'abc  '` |
 | `PadRight('abc', 3)` | `'abc'` |
-| `PadRight('abc', 2)` | `'ab'` |
+| `PadRight('abc', 2)` | `'abc'` |
 | `PadRight('abc', 0)` | `''` |
 | `PadRight('', 5)` | `'     '` |
 | `PadRight('привет', 8)` | `'привет  '` |
@@ -97,7 +95,7 @@ TODO: решить, должен ли `PadLeft(value, null)` / `PadRight(value, 
 | `PadRight('abc', 5, '*')` | `'abc**'` |
 | `PadRight('abc', 5, '0')` | `'abc00'` |
 | `PadRight('abc', 3, '*')` | `'abc'` |
-| `PadRight('abc', 2, '*')` | `'ab'` |
+| `PadRight('abc', 2, '*')` | `'abc'` |
 | `PadRight('abc', 0, '*')` | `''` |
 | `PadRight('', 5, '-')` | `'-----'` |
 | `PadRight('123', 5, '0')` | `'12300'` |

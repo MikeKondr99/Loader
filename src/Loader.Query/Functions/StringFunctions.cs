@@ -26,14 +26,14 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("input", DataType.Text)
             .Arg("count", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"if({1} >= 0, if(lengthUTF8({0}) >= {1}, substringUTF8({0}, 1, {1}), substringUTF8(concat(repeat(' ', {1}), {0}), -{1}, {1})), '')");
+            .Template($"if({1} > 0, if(lengthUTF8({0}) >= {1}, {0}, leftPadUTF8({0}, {1}, ' ')), '')");
 
         Method("PadRight")
             .Doc("Дополняет строку справа пробелами до указанной длины")
             .Arg("input", DataType.Text)
             .Arg("count", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"if({1} >= 0, substringUTF8(concat({0}, repeat(' ', {1})), 1, {1}), '')");
+            .Template($"if({1} > 0, if(lengthUTF8({0}) >= {1}, {0}, rightPadUTF8({0}, {1}, ' ')), '')");
 
         Method("PadLeft")
             .Doc("Дополняет строку слева указанным символом до указанной длины")
@@ -41,7 +41,7 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("count", DataType.Integer)
             .Arg("symbol", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"if({1} >= 0, if(lengthUTF8({0}) >= {1}, substringUTF8({0}, 1, {1}), substringUTF8(concat(repeat({2}, {1}), {0}), -{1}, {1})), '')");
+            .Template($"if({1} > 0, if(lengthUTF8({0}) >= {1} OR {2} = '', {0}, leftPadUTF8({0}, {1}, {2})), '')");
 
         Method("PadRight")
             .Doc("Дополняет строку справа указанным символом до указанной длины")
@@ -49,7 +49,7 @@ public sealed class StringFunctions : FunctionDescriptor
             .Arg("count", DataType.Integer)
             .Arg("symbol", DataType.Text)
             .Returns(DataType.Text)
-            .Template($"if({1} >= 0, substringUTF8(concat({0}, repeat({2}, {1})), 1, {1}), '')");
+            .Template($"if({1} > 0, if(lengthUTF8({0}) >= {1} OR {2} = '', {0}, rightPadUTF8({0}, {1}, {2})), '')");
 
         Method("Lower")
             .Doc("Преобразует текст в нижний регистр")
