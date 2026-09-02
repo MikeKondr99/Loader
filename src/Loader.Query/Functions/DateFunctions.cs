@@ -4,20 +4,22 @@ namespace Loader.Query.Functions;
 
 public sealed class DateFunctions : FunctionDescriptor
 {
+    private const string DateTimeJodaFormat = "yyyy-MM-dd HH:mm:ss";
+
     protected override void DefineFunctions()
     {
         Method("Date")
             .Doc("Создает дату по указанному году")
             .Arg("year", DataType.Integer)
             .Returns(DataType.DateTime)
-            .Template($"toDateTime(concat(toString({0}), '-01-01 00:00:00'))");
+            .Template($"parseDateTimeInJodaSyntaxOrNull(concat(leftPad(toString({0}), 4, '0'), '-01-01 00:00:00'), '{DateTimeJodaFormat}')");
 
         Method("Date")
             .Doc("Создает дату по году и месяцу")
             .Arg("year", DataType.Integer)
             .Arg("month", DataType.Integer)
             .Returns(DataType.DateTime)
-            .Template($"toDateTime(concat(toString({0}), '-', leftPad(toString({1}), 2, '0'), '-01 00:00:00'))");
+            .Template($"parseDateTimeInJodaSyntaxOrNull(concat(leftPad(toString({0}), 4, '0'), '-', leftPad(toString({1}), 2, '0'), '-01 00:00:00'), '{DateTimeJodaFormat}')");
 
         Method("Date")
             .Doc("Создает дату по году, месяцу и дню")
@@ -25,14 +27,22 @@ public sealed class DateFunctions : FunctionDescriptor
             .Arg("month", DataType.Integer)
             .Arg("day", DataType.Integer)
             .Returns(DataType.DateTime)
-            .Template($"toDateTime(concat(toString({0}), '-', leftPad(toString({1}), 2, '0'), '-', leftPad(toString({2}), 2, '0'), ' 00:00:00'))");
+            .Template($"parseDateTimeInJodaSyntaxOrNull(concat(leftPad(toString({0}), 4, '0'), '-', leftPad(toString({1}), 2, '0'), '-', leftPad(toString({2}), 2, '0'), ' 00:00:00'), '{DateTimeJodaFormat}')");
 
         Method("Date")
             .Doc("Парсит строку как дату")
             .Arg("input", DataType.Text)
             .Returns(DataType.DateTime)
             .CustomNullPropagation(_ => true)
-            .Template($"parseDateTimeBestEffortOrNull({0})");
+            .Template($"""
+                       COALESCE(
+                           parseDateTimeInJodaSyntaxOrNull({0}, 'yyyy-MM-dd HH:mm:ss'),
+                           parseDateTimeInJodaSyntaxOrNull({0}, 'yyyy-MM-dd HH:mm'),
+                           parseDateTimeInJodaSyntaxOrNull({0}, 'yyyy-MM-dd''T''HH:mm:ss'),
+                           parseDateTimeInJodaSyntaxOrNull({0}, 'yyyy-MM-dd''T''HH:mm'),
+                           parseDateTimeInJodaSyntaxOrNull({0}, 'yyyy-MM-dd')
+                       )
+                       """);
 
         Method("Date")
             .Doc("Парсит строку как дату по Joda format")

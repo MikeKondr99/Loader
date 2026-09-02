@@ -176,6 +176,36 @@ public sealed class LoadStatementMixedTests
     }
 
     [Test]
+    [DisplayName("Script Date с невалидными компонентами возвращает null")]
+    public async Task Execute_script_invalid_date_components_return_null()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            dates:
+            LOAD
+                Date(99) AS short_year,
+                Date(2107, 1) AS overflow_year_month,
+                Date(2107, 1, 1) AS overflow_year_day,
+                Date(2026, 13, 1) AS bad_month,
+                Date(2026, 1, 32) AS bad_day,
+                Date(2026, 2, 29) AS bad_leap_day
+            FROM Inline(dummy;
+                1);
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["short_year", "overflow_year_month", "overflow_year_day", "bad_month", "bad_day", "bad_leap_day"],
+            [
+                new object?[] { null, null, null, null, null, null }
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("Script вычисляет аппроксимацию pi через ряд Лейбница")]
     public async Task Execute_script_calculates_pi_with_leibniz_series()
     {

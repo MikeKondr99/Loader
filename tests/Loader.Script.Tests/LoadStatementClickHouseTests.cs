@@ -162,4 +162,35 @@ public sealed class LoadStatementClickHouseTests
             ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [DisplayName("LOAD Date text не искажает ClickHouse Date32 вне диапазона DateTime")]
+    public async Task ClickHouse_load_date_text_rejects_date32_outside_datetime_range()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            ch_dates:
+            LOAD
+                Text(old_date32) AS old_text,
+                Text(future_date32) AS future_text,
+                Date(Text(old_date32)) AS old_reparsed,
+                Date(Text(future_date32)) AS future_reparsed
+            FROM Connect(name='container_ch')
+            SQL SELECT
+                toDate32('1900-01-02') AS old_date32,
+                toDate32('2299-12-31') AS future_date32;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["old_text", "future_text", "old_reparsed", "future_reparsed"],
+            [
+                ["1900-01-02 00:00:00", "2299-12-31 00:00:00", null, null]
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
 }

@@ -101,6 +101,11 @@ public sealed class ClickHouseConversionFunctionTests : ClickHouseExpressionTest
 
     [Test]
     [Arguments("Date('2025-03-27 21:19')", "@2025-03-27 21:19")]
+    [Arguments("Date('2025-03-27 21:19:30')", "@2025-03-27 21:19:30")]
+    [Arguments("Date('2025-03-27T21:19:30')", "@2025-03-27 21:19:30")]
+    [Arguments("Date('1900-01-02')", null)]
+    [Arguments("Date('2299-12-31')", null)]
+    [Arguments("Date('02 Jan 2026')", null)]
     [Arguments("'2025-03-27 21:40'.Date()", "@2025-03-27 21:40")]
     [Arguments("Date('2025-03-27')", "@2025-03-27 00:00")]
     [Arguments("''.EmptyIsNull().Date()", null)]
