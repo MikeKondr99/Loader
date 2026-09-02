@@ -1,5 +1,8 @@
 ﻿using Loader.Script.Tests.Infrastructure;
 
+using System.Globalization;
+using System.Numerics;
+
 namespace Loader.Script.Tests;
 
 [TestWithDependency(DatabaseDependency.ClickHouseDwh, DatabaseDependency.ClickHouse)]
@@ -123,6 +126,40 @@ public sealed class LoadStatementClickHouseTests
                 [2, "Bob"]
             ],
             "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("LOAD из Connect ClickHouse source материализует wide integer типы")]
+    public async Task ClickHouse_load_materializes_wide_integer_types()
+    {
+        var int128Value = BigInteger.Parse("170141183460469231731687303715884105727", CultureInfo.InvariantCulture);
+        var uint128Value = BigInteger.Parse("340282366920938463463374607431768211455", CultureInfo.InvariantCulture);
+        var uint256Value = BigInteger.Parse("123", CultureInfo.InvariantCulture);
+        var int256Value = BigInteger.Parse("-6", CultureInfo.InvariantCulture);
+
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            $$"""
+            ch_wide:
+            LOAD *
+            FROM Connect(name='container_ch')
+            SQL SELECT
+                toInt128('{{int128Value.ToString(CultureInfo.InvariantCulture)}}') AS int128_value,
+                toUInt128('{{uint128Value.ToString(CultureInfo.InvariantCulture)}}') AS uint128_value,
+                toUInt256('{{uint256Value.ToString(CultureInfo.InvariantCulture)}}') AS uint256_value,
+                toInt256('{{int256Value.ToString(CultureInfo.InvariantCulture)}}') AS int256_value;
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["int128_value", "uint128_value", "uint256_value", "int256_value"],
+            [
+                [int128Value, uint128Value, uint256Value, int256Value]
+            ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 }

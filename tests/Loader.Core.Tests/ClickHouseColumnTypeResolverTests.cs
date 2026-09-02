@@ -29,6 +29,17 @@ public sealed class ClickHouseColumnTypeResolverTests
     }
 
     [Test]
+    [DisplayName("ClickHouse type resolver BigInteger выбирает wide integer без сужения по bounds")]
+    public async Task BigInteger_uses_wide_integer_type()
+    {
+        var signed = Resolve(Field(DataType.Integer, typeof(BigInteger)), meta: null);
+        var unsigned = Resolve(Field(DataType.Integer, typeof(BigInteger)), Meta(DataType.Integer, 1m, 5m));
+
+        await Assert.That(signed).IsEqualTo("Int256");
+        await Assert.That(unsigned).IsEqualTo("UInt256");
+    }
+
+    [Test]
     [MethodDataSource(nameof(NullableCases))]
     [DisplayName("ClickHouse type resolver nullable определяется по meta density или schema AllowDBNull")]
     public async Task Nullable_is_resolved_from_meta_density_or_schema_flag(

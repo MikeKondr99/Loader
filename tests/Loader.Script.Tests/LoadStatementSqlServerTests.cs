@@ -80,6 +80,47 @@ public sealed class LoadStatementSqlServerTests
     }
 
     [Test]
+    [DisplayName("LOAD из Connect SqlServer source материализует bigint")]
+    public async Task SqlServer_load_materializes_bigint()
+    {
+        var sourceTable = $"script_sql_bigint_source_{Guid.NewGuid():N}";
+        await ExecuteSqlServerAsync(
+            sqlServer,
+            $$"""
+            CREATE TABLE dbo.{{sourceTable}}
+            (
+                id bigint not null
+            );
+            INSERT INTO dbo.{{sourceTable}} (id) VALUES
+            (9223372036854775807),
+            (-9223372036854775808);
+            """);
+
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            clickHouse,
+            $$"""
+            sql_bigint:
+            LOAD *
+            FROM Connect(name='container_mssql')
+            SQL SELECT * FROM dbo.{{sourceTable}} ORDER BY id DESC;
+            """,
+            sqlServer);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            clickHouse,
+            result[0],
+            ["id"],
+            [
+                [long.MaxValue],
+                [long.MinValue]
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
+    }
+
+    [Test]
     [DisplayName("LOAD из результата SqlServer LOAD сохраняет time как Text")]
     public async Task SqlServer_load_from_previous_load_preserves_time_as_text()
     {

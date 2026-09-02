@@ -1,6 +1,7 @@
 using Loader.Core.Decorators;
 using Loader.Core.Models;
 using ClickHouse.Client.Numerics;
+using System.Numerics;
 
 namespace Loader.Core.Writers.ClickHouse;
 
@@ -56,6 +57,11 @@ internal sealed class ClickHouseColumnTypeResolver
 
     private static string ResolveInteger(DataField field, DataColumnMeta? meta)
     {
+        if (field.ClrType == typeof(BigInteger))
+        {
+            return meta?.Min > 0 ? "UInt256" : "Int256";
+        }
+
         if (meta?.Min is not null && meta.Max is not null)
         {
             return ResolveIntegerByBounds(meta.Min.Value, meta.Max.Value);

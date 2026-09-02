@@ -126,6 +126,46 @@ public sealed class LoadStatementPostgresTests
     }
 
     [Test]
+    [DisplayName("LOAD из Connect Postgres source материализует bigint")]
+    public async Task Postgres_load_materializes_bigint()
+    {
+        var sourceTable = $"script_pg_bigint_source_{Guid.NewGuid():N}";
+        await postgres.ExecuteAsync(
+            $$"""
+            CREATE TABLE public.{{sourceTable}}
+            (
+                id bigint not null
+            );
+            INSERT INTO public.{{sourceTable}} (id) VALUES
+            (9223372036854775807),
+            (-9223372036854775808);
+            """);
+
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            clickHouse,
+            $$"""
+            pg_bigint:
+            LOAD *
+            FROM Connect(name='container_pg')
+            SQL SELECT * FROM public.{{sourceTable}} ORDER BY id DESC;
+            """,
+            postgres);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            clickHouse,
+            result[0],
+            ["id"],
+            [
+                [long.MaxValue],
+                [long.MinValue]
+            ],
+            "ORDER BY `column1` DESC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(clickHouse, execution);
+    }
+
+    [Test]
     [DisplayName("LOAD из Postgres сохраняет final table с физическими columnN при пользовательских alias")]
     public async Task Postgres_load_keeps_final_table_physical_columns_for_user_aliases()
     {
