@@ -201,6 +201,42 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("Execute LOAD ругается если provider вернул ноль полей")]
+    public async Task Execute_load_rejects_source_reader_with_zero_fields()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                SourceKind = "connect",
+                ColumnNames = [],
+                RowValues = []
+            }
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD *
+            FROM Connect(name='pg') SQL 'select nothing';
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.SourceCall.Span);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("Источник вернул ноль полей.");
+        await Assert.That(executor.WriteCalls).IsEqualTo(0);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("Execute ApplyMap ругается если mapping-таблица не найдена")]
     public async Task Execute_apply_map_rejects_missing_mapped_table()
     {

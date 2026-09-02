@@ -26,6 +26,7 @@ public class TempTableMaterializer
             NormalizeForTempTable(stageNameReader, source),
             ToInt32(statement.First, nameof(statement.First)));
 
+        ValidateSourceHasFields(statement, stageReader.DataSchema.Fields.Count);
         ValidateMappedTempTableSchema(statement, stageReader.DataSchema.Fields.Count);
 
         var tempTable = CreatePhysicalTempTableName(context);
@@ -201,5 +202,19 @@ public class TempTableMaterializer
         throw new QueryResolutionException(
             $"MAPPED LOAD * получил source с {fieldCount} полями, ожидалось 2: key и value.",
             statement.KindSpan ?? statement.LoadSpan);
+    }
+
+    private static void ValidateSourceHasFields(
+        LoadStatement statement,
+        int fieldCount)
+    {
+        if (fieldCount > 0)
+        {
+            return;
+        }
+
+        throw new QueryResolutionException(
+            "Источник вернул ноль полей.",
+            statement.SourceCall.Span);
     }
 }
