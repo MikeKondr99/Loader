@@ -931,10 +931,11 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
-    [DisplayName("Resolver Connect игнорирует лишние options")]
-    public async Task Resolve_connect_ignores_unknown_options()
+    [DisplayName("Resolver Connect отклоняет лишние options")]
+    public async Task Resolve_connect_rejects_unknown_options()
     {
         var resolver = new LoadProviderResolver();
+        var unknownSpan = Span(7, 15, 35);
         var registry = new InMemoryConnectionRegistry(
         [
             new ScriptConnection
@@ -945,17 +946,20 @@ public sealed class LoadProviderResolverTests
             }
         ]);
 
-        var source = await resolver.ResolveAsync(
-            CreateStatement(
-                "Connect",
-                [
-                    Option("name", "main_pg"),
-                    Option("connection", "Host=ignored")
-                ],
-                sql: "SELECT * FROM public.orders"),
-            CreateContext(registry: registry));
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [
+                        Option("name", "main_pg"),
+                        Option("connection", "Host=ignored", unknownSpan)
+                    ],
+                    sql: "SELECT * FROM public.orders"),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
 
-        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(unknownSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("Опция 'connection' не поддерживается provider-ом 'Connect'.");
     }
 
     [Test]

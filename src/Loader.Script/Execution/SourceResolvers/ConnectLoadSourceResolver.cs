@@ -21,6 +21,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         CancellationToken cancellationToken)
     {
         options = options.MapPositionals(Name, ["name"]);
+        RejectUnknownOptions(Name, options, errors, ["name"]);
         var nameOption = options.GetOption("name");
         var name = options.RequiredString(
             "name",
