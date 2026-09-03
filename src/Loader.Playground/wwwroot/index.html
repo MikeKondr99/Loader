@@ -53,7 +53,7 @@
 
     main {
       display: grid;
-      grid-template-columns: 280px minmax(420px, 1.1fr) minmax(360px, .78fr);
+      grid-template-columns: minmax(420px, 1.1fr) minmax(360px, .78fr);
       gap: 16px;
       height: calc(100vh - 80px);
       padding: 16px;
@@ -68,6 +68,7 @@
     }
 
     .toolbar {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -76,51 +77,81 @@
       background: var(--panel-soft);
     }
 
-    .files-panel {
-      height: 100%;
-      overflow: auto;
-      padding: 8px;
+    .source-menu {
+      position: relative;
     }
 
-    .sidebar-section {
-      border-bottom: 1px solid var(--border);
-    }
-
-    .sidebar-section:last-child {
-      border-bottom: 0;
-    }
-
-    .sidebar-section summary {
-      padding: 10px 6px;
+    .toolbar-icon-button,
+    .source-menu > summary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid #bcc8d8;
+      border-radius: 9px;
+      background: #ffffff;
+      color: var(--accent);
+      font-size: 18px;
       font-weight: 700;
+      line-height: 1;
       cursor: pointer;
+      list-style: none;
       user-select: none;
     }
 
-    .sidebar-section[open] summary {
-      color: var(--accent);
+    .source-menu > summary {
+      font-size: 21px;
+      line-height: .9;
+      padding-bottom: 2px;
     }
 
-    .sidebar-section-body {
-      padding-bottom: 8px;
+    .source-menu > summary::-webkit-details-marker {
+      display: none;
     }
 
-    .upload-row {
-      padding: 0 4px 8px;
+    .source-menu[open] > summary {
+      border-color: var(--accent);
+      background: var(--accent-soft);
     }
 
-    .upload-label {
-      display: block;
+    .source-menu-panel {
+      position: absolute;
+      z-index: 30;
+      top: calc(100% + 8px);
+      left: 0;
+      width: 240px;
+      max-width: calc(100vw - 32px);
+      max-height: min(320px, calc(100vh - 130px));
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding: 5px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 14px 34px rgba(30, 35, 28, .14);
+    }
+
+    .source-list {
+      display: grid;
+      gap: 1px;
+    }
+
+    .upload-label,
+    .source-menu-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
       width: 100%;
-      padding: 9px 10px;
-      border: 1px dashed #aeb9c9;
-      border-radius: 10px;
-      background: #fbfcff;
-      color: var(--accent);
-      line-height: 1.2;
-      font-size: 13px;
-      font-weight: 650;
-      text-align: center;
+      min-height: 24px;
+      padding: 3px 7px;
+      border: 0;
+      border-radius: 3px;
+      background: transparent;
+      color: var(--text);
+      font: 13px "Segoe UI", sans-serif;
+      text-align: left;
       cursor: pointer;
     }
 
@@ -128,58 +159,8 @@
       display: none;
     }
 
-    .file-list {
-      padding: 8px;
-    }
-
-    .connection-list {
-      padding: 8px;
-    }
-
-    .other-source-list {
-      display: grid;
-      gap: 6px;
-      padding: 8px;
-    }
-
-    .file-row {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: center;
-      padding: 8px;
-      border-radius: 10px;
-    }
-
-    .file-row:hover {
-      background: var(--accent-soft);
-    }
-
-    .connection-row {
-      display: block;
-      width: 100%;
-      padding: 8px;
-      border: 0;
-      border-radius: 10px;
-      background: transparent;
-      text-align: left;
-    }
-
-    .connection-row:hover {
-      background: var(--accent-soft);
-    }
-
-    .other-source-row {
-      display: block;
-      width: 100%;
-      padding: 8px;
-      border: 0;
-      border-radius: 10px;
-      background: transparent;
-      text-align: left;
-    }
-
-    .other-source-row:hover {
+    .upload-label:hover,
+    .source-menu-row:hover {
       background: var(--accent-soft);
     }
 
@@ -188,7 +169,7 @@
       background: transparent;
       padding: 0;
       color: var(--text);
-      font: 12px Consolas, monospace;
+      font: inherit;
       text-align: left;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -196,26 +177,14 @@
       cursor: pointer;
     }
 
-    .file-meta {
-      margin-top: 2px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .connection-type {
-      margin-top: 2px;
-      color: var(--muted);
-      font-size: 11px;
-    }
-
     .delete-file {
-      width: 26px;
-      height: 26px;
+      width: 20px;
+      height: 20px;
       padding: 0;
       border-color: transparent;
       background: transparent;
       color: var(--muted);
-      font-size: 18px;
+      font-size: 15px;
       line-height: 1;
     }
 
@@ -225,7 +194,7 @@
     }
 
     .empty-files {
-      padding: 10px;
+      padding: 4px 7px;
       color: var(--muted);
       font-size: 13px;
     }
@@ -531,57 +500,33 @@
   </header>
 
   <main>
-    <aside class="card files-panel">
-      <details class="sidebar-section" open>
-        <summary>Файлы</summary>
-        <div class="sidebar-section-body">
-          <div class="upload-row">
-            <label class="upload-label">
-              Загрузить файл
-              <input type="file" id="file-upload">
-            </label>
-          </div>
-          <div class="file-list" id="file-list">
-            <div class="empty-files">Файлы еще не загружены.</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="sidebar-section" open>
-        <summary>Подключения</summary>
-        <div class="sidebar-section-body">
-          <div class="connection-list" id="connection-list">
-            <div class="empty-files">No connections.</div>
-          </div>
-        </div>
-      </details>
-
-      <details class="sidebar-section">
-        <summary>Другое</summary>
-        <div class="sidebar-section-body">
-          <div class="other-source-list" id="other-source-list">
-            <button class="other-source-row" type="button" data-source-template="Calendar">
-              <div class="file-name">Calendar</div>
-              <div class="connection-type">Календарь по диапазону дат</div>
-            </button>
-            <button class="other-source-row" type="button" data-source-template="Numbers">
-              <div class="file-name">Numbers</div>
-              <div class="connection-type">Последовательность чисел</div>
-            </button>
-            <button class="other-source-row" type="button" data-source-template="Inline">
-              <div class="file-name">Inline</div>
-              <div class="connection-type">Данные прямо в скрипте</div>
-            </button>
-          </div>
-        </div>
-      </details>
-    </aside>
-
     <section class="card">
       <div class="toolbar">
-        <button class="primary" id="run">Run script</button>
-        <button id="parse">Parse only</button>
-        <button id="sample">Reset sample</button>
+        <button class="primary toolbar-icon-button" id="run" title="Выполнить script">&#9654;</button>
+        <details class="source-menu" id="source-menu">
+          <summary title="Добавить источник">&#43;</summary>
+          <div class="source-menu-panel">
+            <div class="source-list">
+              <label class="upload-label">
+                * Новый файл
+                <input type="file" id="file-upload">
+              </label>
+              <div id="file-list"></div>
+              <div id="connection-list"></div>
+              <div id="other-source-list">
+                <button class="source-menu-row" type="button" data-source-template="Calendar">
+                  <span class="file-name">Calendar</span>
+                </button>
+                <button class="source-menu-row" type="button" data-source-template="Numbers">
+                  <span class="file-name">Numbers</span>
+                </button>
+                <button class="source-menu-row" type="button" data-source-template="Inline">
+                  <span class="file-name">Inline</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
       <div id="editor"></div>
     </section>
@@ -647,8 +592,7 @@ LIMIT 10;`;
     const infoPanel = document.getElementById('info-panel');
     const dataPanel = document.getElementById('data-panel');
     const runButton = document.getElementById('run');
-    const parseButton = document.getElementById('parse');
-    const sampleButton = document.getElementById('sample');
+    const sourceMenu = document.getElementById('source-menu');
     const fileUpload = document.getElementById('file-upload');
     const fileList = document.getElementById('file-list');
     const connectionList = document.getElementById('connection-list');
@@ -736,14 +680,6 @@ LIMIT 10;`;
     });
 
     runButton.onclick = () => send('/api/run', 'Выполняю script...');
-    parseButton.onclick = () => send('/api/parse', 'Парсю script...');
-    sampleButton.onclick = () => {
-      editor.setValue(sample);
-      clearMarkers();
-      clearPreview();
-      clearProgress();
-      setResult('Готово', 'Напиши script и нажми Run.', null);
-    };
     copyErrorButton.onclick = () => copyLastErrorForAi();
     otherSourceList?.addEventListener('click', event => {
       const button = event.target instanceof Element
@@ -898,7 +834,6 @@ LIMIT 10;`;
 
     function setBusy(value) {
       runButton.disabled = value;
-      parseButton.disabled = value;
     }
 
     function activateOutputTab(tab) {
@@ -1459,7 +1394,7 @@ LIMIT 10;`;
       if (!connections.length) {
         connectionList.innerHTML = warning
           ? `<div class="empty-files">No connections. ${escapeHtml(warning)}</div>`
-          : '<div class="empty-files">No connections.</div>';
+          : '';
         return;
       }
 
@@ -1473,37 +1408,31 @@ LIMIT 10;`;
 
       for (const connection of connections) {
         const row = document.createElement('button');
-        row.className = 'connection-row';
+        row.className = 'source-menu-row';
         row.type = 'button';
         row.title = 'Insert LOAD from connection';
         row.onclick = () => insertConnectionLoad(connection);
 
-        const name = document.createElement('div');
+        const name = document.createElement('span');
         name.className = 'file-name';
         name.textContent = connection.name;
 
-        const type = document.createElement('div');
-        type.className = 'connection-type';
-        type.textContent = connection.type || 'Connect';
-
         row.appendChild(name);
-        row.appendChild(type);
         connectionList.appendChild(row);
       }
     }
 
     function renderFiles(files) {
       if (!files.length) {
-        fileList.innerHTML = '<div class="empty-files">Файлы еще не загружены.</div>';
+        fileList.innerHTML = '';
         return;
       }
 
       fileList.innerHTML = '';
       for (const file of files) {
         const row = document.createElement('div');
-        row.className = 'file-row';
+        row.className = 'source-menu-row';
 
-        const info = document.createElement('div');
         const name = document.createElement('button');
         name.className = 'file-name';
         name.type = 'button';
@@ -1511,27 +1440,20 @@ LIMIT 10;`;
         name.textContent = file.name;
         name.onclick = () => insertFileLoad(file.name);
 
-        const meta = document.createElement('div');
-        meta.className = 'file-meta';
-        meta.textContent = `${formatSize(file.size)} | ${new Date(file.modifiedUtc).toLocaleString()}`;
-
         const remove = document.createElement('button');
         remove.className = 'delete-file';
         remove.type = 'button';
         remove.title = 'Удалить файл';
-        remove.textContent = '×';
+        remove.textContent = 'x';
         remove.onclick = () => deleteFile(file.name);
 
-        info.appendChild(name);
-        info.appendChild(meta);
-        row.appendChild(info);
+        row.appendChild(name);
         row.appendChild(remove);
         fileList.appendChild(row);
       }
     }
 
     async function deleteFile(name) {
-      if (!confirm(`Удалить ${name}?`)) return;
       try {
         clearPreview();
         const response = await fetch(`/api/files/${encodeURIComponent(name)}`, { method: 'DELETE' });
@@ -1546,16 +1468,25 @@ LIMIT 10;`;
     function insertFileLoad(name) {
       if (!editor) return;
       insertScript(buildFileLoadScript(name), 'files-panel');
+      closeSourceMenu();
     }
 
     function insertConnectionLoad(connection) {
       if (!editor) return;
       insertScript(buildConnectionLoadScript(connection), 'connections-panel');
+      closeSourceMenu();
     }
 
     function insertOtherSourceLoad(template) {
       if (!editor) return;
       insertScript(buildOtherSourceLoadScript(template), 'other-sources-panel');
+      closeSourceMenu();
+    }
+
+    function closeSourceMenu() {
+      if (sourceMenu) {
+        sourceMenu.open = false;
+      }
     }
 
     function insertScript(text, source) {
@@ -1621,12 +1552,6 @@ LIMIT 10;`;
 
     function quoteScriptString(value) {
       return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
-    }
-
-    function formatSize(bytes) {
-      if (bytes < 1024) return `${bytes} B`;
-      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     }
 
     function escapeHtml(text) {
