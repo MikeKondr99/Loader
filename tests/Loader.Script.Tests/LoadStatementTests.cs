@@ -358,7 +358,7 @@ public sealed class LoadStatementTests
             OrderBy = null
         };
 
-        await executor.ExecuteAsync(context, statement);
+        var loadedTable = await executor.ExecuteAsync(context, statement);
 
         await Assert.That(logger.Events.Select(static item => item.Kind).ToArray())
             .IsEquivalentTo(
@@ -374,6 +374,7 @@ public sealed class LoadStatementTests
             .Contains("1");
         await Assert.That(logger.Events.Single(static item => item.Kind == "TransformationRowsLoaded").Message)
             .Contains("1");
+        await Assert.That(loadedTable.RowCount).IsEqualTo(1);
     }
 
     [Test]

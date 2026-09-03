@@ -1104,13 +1104,21 @@ LIMIT 10;`;
 
       const lines = [];
       if (data.elapsedMs !== undefined && data.elapsedMs !== null) {
-        lines.push(`Elapsed: ${data.elapsedMs} ms`);
+        lines.push(`Время выполнения: ${data.elapsedMs} мс`);
         lines.push('');
       }
 
       if (data.tables.length === 0) {
         lines.push('Таблиц нет.');
         return lines.join('\n');
+      }
+
+      for (const table of data.tables) {
+        const name = table.alias || table.name || `table ${table.index + 1}`;
+        const rowCount = table.rowCount === undefined || table.rowCount === null
+          ? '?'
+          : table.rowCount;
+        lines.push(`${name}: ${rowCount} записей`);
       }
 
       return lines.join('\n').trimEnd();

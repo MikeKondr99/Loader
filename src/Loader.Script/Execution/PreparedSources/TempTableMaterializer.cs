@@ -125,12 +125,11 @@ public class TempTableMaterializer
         {
             ConnectionString = context.TargetConnectionString
         };
-        var meta = new DataMetaContainer();
-        await using var metaReader = stageReader.CollectMeta(meta);
+        await using var countingReader = stageReader.CountRows();
         await new ClickHouseWriter()
             .WriteAsync(
                 source,
-                metaReader,
+                countingReader,
                 new ClickHouseWriteOptions
                 {
                     TableName = tempTable,
@@ -139,7 +138,7 @@ public class TempTableMaterializer
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return meta.RowCount;
+        return countingReader.RowCount;
     }
 
     protected virtual async ValueTask DropTempTableAsync(

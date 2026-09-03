@@ -52,7 +52,7 @@ public class LoadStatementExecutor
         await context.Logger.TransformationRowsLoadedAsync(finalRowCount, cancellationToken).ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
-        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName);
+        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName, finalRowCount);
         context.AddLoadedTable(loadedTable);
         finalTable.Commit();
         return loadedTable;
@@ -251,19 +251,18 @@ public class LoadStatementExecutor
         await using var finalNameReader = rawReader.AbstractColumns();
         await using var finalReader = finalNameReader.Normalize();
 
-        var meta = new DataMetaContainer();
-        await using var metaReader = finalReader.CollectMeta(meta);
+        await using var countingReader = finalReader.CountRows();
         await new ClickHouseWriter()
             .WriteAsync(
                 source,
-                metaReader,
+                countingReader,
                 CreateWriteOptions(
                     finalTable,
                     statement.IsMapped ? LoadClickHouseTableKind.Mapped : LoadClickHouseTableKind.Final),
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return meta.RowCount;
+        return countingReader.RowCount;
     }
 
     private static ClickHouseWriteOptions CreateWriteOptions(
@@ -345,7 +344,8 @@ public class LoadStatementExecutor
     private static LoadedTable CreateLoadedTable(
         LoadStatement statement,
         ResolvedQuery resolvedQuery,
-        ClickHouseTableName finalTable)
+        ClickHouseTableName finalTable,
+        long rowCount)
     {
         return new LoadedTable
         {
@@ -357,6 +357,7 @@ public class LoadStatementExecutor
                 LoadTableKind.Mapped => LoadedTableKind.Mapped,
                 _ => LoadedTableKind.Normal
             },
+            RowCount = rowCount,
             Fields = resolvedQuery.OutputFields.Select(field => new LoadedTableField
             {
                 Name = field.Alias,

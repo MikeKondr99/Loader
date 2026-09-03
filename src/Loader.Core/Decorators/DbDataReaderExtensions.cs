@@ -46,6 +46,11 @@ public static class DbDataReaderExtensions
         return new MetaCollectingDataReader(reader, metaContainer);
     }
 
+    public static RowCountingDomainDataReader CountRows(this DomainDataReader reader)
+    {
+        return new RowCountingDomainDataReader(reader);
+    }
+
     public static DomainDataReader CollectAutoCast(this DomainDataReader reader, AutoCastAnalyzer analyzer)
     {
         return new AutoCastAnalyzingDataReader(reader, analyzer);
