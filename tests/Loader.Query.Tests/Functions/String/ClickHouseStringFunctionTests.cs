@@ -54,6 +54,20 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [Arguments("Capitalize('hello world')", "Hello World")]
+    [Arguments("Capitalize('already Capitalized')", "Already Capitalized")]
+    [Arguments("Capitalize('mixed-case text')", "Mixed-Case Text")]
+    [Arguments("Capitalize('')", "")]
+    [Arguments("Capitalize('привет мир')", "Привет Мир")]
+    [Arguments("Capitalize('ёЖИК В тУмАНе')", "Ёжик В Тумане")]
+    [Arguments("Capitalize('😀hello 👍world')", "😀Hello 👍World")]
+    [Arguments("Capitalize(null)", null)]
+    public Task FuncCapitalizeTests(string expr, object? expected)
+    {
+        return AssertExpressionAsync(expr, expected);
+    }
+
+    [Test]
     [Arguments("Lower('Hello World!')", "hello world!")]
     [Arguments("Lower('')", "")]
     [Arguments("Lower('already lower')", "already lower")]

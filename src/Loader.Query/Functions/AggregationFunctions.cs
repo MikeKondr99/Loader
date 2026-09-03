@@ -1,6 +1,7 @@
 using Loader.Lang;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
+using Loader.Query.Template;
 using QueryTemplate = Loader.Query.Template.Template;
 
 namespace Loader.Query.Functions;
@@ -79,6 +80,27 @@ public sealed class AggregationFunctions : FunctionDescriptor
                 .ReturnsAggregated(DataType.Number)
                 .CustomNullPropagation(_ => true)
                 .Template($"CASE WHEN isNaN(AVG({0})) THEN NULL ELSE AVG({0}) END");
+
+            Function("STDDEV")
+                .Doc("Вычисляет стандартное отклонение генеральной совокупности для non-null числовых значений")
+                .Arg("value", type)
+                .ReturnsAggregated(DataType.Number)
+                .CustomNullPropagation(_ => true)
+                .Template($"CASE WHEN isFinite(stddevPopStable({0})) THEN stddevPopStable({0}) ELSE NULL END");
+        }
+
+        foreach (var leftType in Numbers())
+        {
+            foreach (var rightType in Numbers())
+            {
+                Function("CORREL")
+                    .Doc("Вычисляет коэффициент корреляции Пирсона для двух числовых полей")
+                    .Arg("left", leftType)
+                    .Arg("right", rightType)
+                    .ReturnsAggregated(DataType.Number)
+                    .CustomNullPropagation(_ => true)
+                    .Template($"CASE WHEN isFinite(corr({CorrelArgument(leftType, 0)}, {CorrelArgument(rightType, 1)})) THEN corr({CorrelArgument(leftType, 0)}, {CorrelArgument(rightType, 1)}) ELSE NULL END");
+            }
         }
 
         Function("AVG")
@@ -122,14 +144,20 @@ public sealed class AggregationFunctions : FunctionDescriptor
         }
 
         Function("CONCAT")
-            .Doc("Aggregates all non-NULL values into a single string without delimiter")
+            .Doc("Склеивает все non-null текстовые значения в одну строку без разделителя")
             .Arg("value", DataType.Text)
             .ReturnsAggregated(DataType.Text)
             .CustomNullPropagation(_ => true)
             .Template($"if(empty(groupArray({0})), NULL, arrayStringConcat(groupArray({0}), ''))");
 
+        Function("COUNT_IF")
+            .Doc("Подсчитывает строки, где boolean выражение истинно")
+            .Arg("condition", DataType.Boolean)
+            .ReturnsAggregatedNotNull(DataType.Integer)
+            .Template($"countIf({0})");
+
         Function("CONCAT")
-            .Doc("Aggregates all non-NULL values into a single string with delimiter")
+            .Doc("Склеивает все non-null текстовые значения в одну строку с разделителем")
             .Arg("value", DataType.Text)
             .Arg("delimiter", DataType.Text)
             .ReturnsAggregated(DataType.Text)
@@ -139,7 +167,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
         foreach (var type in AllWithoutBool())
         {
             Function("CONCAT")
-                .Doc("Aggregates values into a string with delimiter after sorting by specified column")
+                .Doc("Склеивает текстовые значения с разделителем после сортировки по указанному полю")
                 .Arg("value", DataType.Text)
                 .Arg("delimiter", DataType.Text)
                 .Arg("sort", type)
@@ -165,6 +193,13 @@ public sealed class AggregationFunctions : FunctionDescriptor
     {
         yield return DataType.Integer;
         yield return DataType.Number;
+    }
+
+    private static ITemplate CorrelArgument(DataType type, int ordinal)
+    {
+        return type == DataType.Number
+            ? QueryTemplate.Create($"CAST({ordinal} AS Nullable(Float64))")
+            : QueryTemplate.Create($"{ordinal}");
     }
 
     private static IEnumerable<DataType> AllWithoutBool()

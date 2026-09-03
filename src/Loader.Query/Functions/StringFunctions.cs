@@ -63,6 +63,12 @@ public sealed class StringFunctions : FunctionDescriptor
             .Returns(DataType.Text)
             .Template($"upperUTF8({0})");
 
+        Method("Capitalize")
+            .Doc("Приводит первую букву каждого слова к верхнему регистру")
+            .Arg("input", DataType.Text)
+            .Returns(DataType.Text)
+            .Template($"initcapUTF8({0})");
+
         Method("Trim")
             .Doc("Удаляет пробелы в начале и конце строки")
             .Arg("input", DataType.Text)

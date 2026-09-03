@@ -91,6 +91,145 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [DisplayName("STDDEV(int): считает population standard deviation")]
+    public async Task Stddev_integer()
+    {
+        int?[] values = [2, 4, 4, 4, 5, 5, 7, 9];
+        var inline = CreateSingleColumnInline(DataType.Integer, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "STDDEV(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
+    [DisplayName("STDDEV(num): игнорирует NULL")]
+    public async Task Stddev_number_with_nulls()
+    {
+        double?[] values = [2, null, 4, 4, 4, 5, 5, 7, 9, null];
+        var inline = CreateSingleColumnInline(DataType.Number, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "STDDEV(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
+    [DisplayName("STDDEV(Num(text)): работает с Decimal результатом Num")]
+    public async Task Stddev_number_from_num_text_decimal()
+    {
+        string?[] values = ["2", null, "4", "4", "4", "5", "5", "7", "9"];
+        var inline = CreateSingleColumnInline(DataType.Text, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "STDDEV(Num(x))");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
+    }
+
+    [Test]
+    [DisplayName("STDDEV(num): пустой набор возвращает NULL")]
+    public async Task Stddev_empty_returns_null()
+    {
+        double?[] values = [1, 2, 3];
+        var inline = CreateSingleColumnInline(DataType.Number, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "STDDEV(x)", where: "false");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
+    [DisplayName("CORREL(num, num): считает корреляцию Пирсона")]
+    public async Task Correl_number_number()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Number),
+                new InlineField("y", DataType.Number)
+            ],
+            [
+                ["1.0", "2.0"],
+                ["2.0", "4.0"],
+                ["3.0", "6.0"],
+                ["4.0", "8.0"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CORREL(x, y)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 1);
+    }
+
+    [Test]
+    [DisplayName("CORREL(int, num): игнорирует строки с NULL")]
+    public async Task Correl_integer_number_with_nulls()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Integer),
+                new InlineField("y", DataType.Number)
+            ],
+            [
+                ["1", "2.0"],
+                ["2", "NULL"],
+                ["3", "6.0"],
+                ["NULL", "8.0"],
+                ["4", "8.0"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CORREL(x, y)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 1);
+    }
+
+    [Test]
+    [DisplayName("CORREL(Num(text), Num(text)): работает с Decimal результатом Num")]
+    public async Task Correl_number_from_num_text_decimal()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Text),
+                new InlineField("y", DataType.Text)
+            ],
+            [
+                ["'1.25'", "'2.50'"],
+                ["'2.50'", "'5.00'"],
+                ["'3.75'", "'7.50'"],
+                ["'5.00'", "'10.00'"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CORREL(Num(x), Num(y))");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 1);
+    }
+
+    [Test]
+    [DisplayName("CORREL(num, num): пустой набор возвращает NULL")]
+    public async Task Correl_empty_returns_null()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Number),
+                new InlineField("y", DataType.Number)
+            ],
+            [
+                ["1.0", "2.0"],
+                ["2.0", "4.0"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CORREL(x, y)", where: "false");
+
+        var result = await GetScalarAsync(query);
+
+        await Assert.That(result).IsNull();
+    }
+
+    [Test]
     [DisplayName("AVG(date): считает среднюю дату с точностью до секунды")]
     public async Task Avg_datetime()
     {
@@ -193,6 +332,19 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
         var result = await GetScalarAsync(query);
 
         await AssertNumberAsync(result, 3);
+    }
+
+    [Test]
+    [DisplayName("COUNT_IF(bool): считает только true значения")]
+    public async Task Count_if_boolean_condition()
+    {
+        bool?[] values = [true, null, false, true, false];
+        var inline = CreateSingleColumnInline(DataType.Boolean, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, "COUNT_IF(x)");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 2);
     }
 
     [Test]

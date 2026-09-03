@@ -67,6 +67,63 @@ public sealed class ClickHouseQueryCompilerTests
             "OFFSET 5"));
     }
 
+    [Test]
+    [DisplayName("CORREL для int,int компилируется без лишних cast")]
+    public async Task Compile_correl_integer_integer_without_float_cast()
+    {
+        var sql = CompileCorrel(DataType.Integer, DataType.Integer);
+
+        await Assert.That(sql).IsEqualTo(string.Join(
+            Environment.NewLine,
+            "SELECT",
+            "    CASE WHEN isFinite(corr(stage.x, stage.y)) THEN corr(stage.x, stage.y) ELSE NULL END AS `correlation`",
+            "FROM `tmp_values` AS stage"));
+    }
+
+    [Test]
+    [DisplayName("CORREL для num,num кастует аргументы в Float64 для decimal значений")]
+    public async Task Compile_correl_number_number_casts_decimal_arguments()
+    {
+        var sql = CompileCorrel(DataType.Number, DataType.Number);
+
+        await Assert.That(sql).IsEqualTo(string.Join(
+            Environment.NewLine,
+            "SELECT",
+            "    CASE WHEN isFinite(corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64)))) THEN corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64))) ELSE NULL END AS `correlation`",
+            "FROM `tmp_values` AS stage"));
+    }
+
+    private static string CompileCorrel(DataType leftType, DataType rightType)
+    {
+        var source = new QuerySource
+        {
+            Sql = "`tmp_values`",
+            Alias = "stage",
+            Fields =
+            [
+                Field("x", leftType),
+                Field("y", rightType)
+            ]
+        };
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                new SelectItem { Alias = "correlation", Expression = Expr.Parse("CORREL(x, y)").Value }
+            ]
+        };
+        var resolved = new QueryResolver()
+            .Resolve(query, ClickHouseFunctions.CreateResolver())
+            .Value!;
+        var compiler = new ClickHouseQueryCompiler
+        {
+            ExpressionCompiler = new ExpressionCompiler()
+        };
+
+        return compiler.Compile(resolved);
+    }
+
     private static Field Field(string alias, DataType dataType)
     {
         return new Field

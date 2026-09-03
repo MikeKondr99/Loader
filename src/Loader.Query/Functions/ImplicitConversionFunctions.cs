@@ -14,7 +14,7 @@ public sealed class ImplicitConversionFunctions : FunctionDescriptor
             .Template($"toFloat64({0})");
 
         Function("ToNum2")
-            .Doc("Direct implicit cast from required integer to nullable number")
+            .Doc("Неявно преобразует обязательное целое число в nullable дробное")
             .ImplicitCast(3)
             .ReqArg("input", DataType.Integer)
             .Returns(DataType.Number)
