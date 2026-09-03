@@ -11,9 +11,16 @@ using Loader.Lang;
 using Loader.Script;
 using Loader.Script.Execution;
 using Microsoft.AspNetCore.Http.Features;
+using OpenTelemetry.Exporter;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using LangScript = Loader.Lang.Script;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddPlaygroundOpenTelemetry(builder.Configuration, builder.Environment);
+builder.Logging.AddPlaygroundOpenTelemetry(builder.Configuration, builder.Environment);
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.WriteIndented = true;
@@ -747,4 +754,82 @@ internal sealed record PlaygroundSpan
     public required uint EndRow { get; init; }
 
     public required uint EndColumn { get; init; }
+}
+
+internal static class PlaygroundOpenTelemetry
+{
+    public static IServiceCollection AddPlaygroundOpenTelemetry(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
+    {
+        var section = configuration.GetSection("OpenTelemetry");
+        if (!section.GetValue("Enabled", false))
+        {
+            return services;
+        }
+
+        var serviceName = section["ServiceName"] ?? environment.ApplicationName;
+        services
+            .AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(serviceName))
+            .WithMetrics(metrics =>
+            {
+                metrics
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddOtlpExporter(options => ConfigureOtlp(options, section));
+            })
+            .WithTracing(tracing =>
+            {
+                tracing
+                    .AddAspNetCoreInstrumentation()
+                    .AddHttpClientInstrumentation()
+                    .AddSource(
+                        "LoadScript",
+                        "Loader.Lang",
+                        "Loader.Core.Odbc");
+
+                tracing.AddOtlpExporter(options => ConfigureOtlp(options, section));
+            });
+
+        return services;
+    }
+
+    public static ILoggingBuilder AddPlaygroundOpenTelemetry(
+        this ILoggingBuilder logging,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
+    {
+        var section = configuration.GetSection("OpenTelemetry");
+        if (!section.GetValue("Enabled", false))
+        {
+            return logging;
+        }
+
+        var serviceName = section["ServiceName"] ?? environment.ApplicationName;
+        logging.AddOpenTelemetry(options =>
+        {
+            options.IncludeFormattedMessage = true;
+            options.IncludeScopes = true;
+            options.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName));
+            options.AddOtlpExporter(exporter => ConfigureOtlp(exporter, section));
+        });
+
+        return logging;
+    }
+
+    private static void ConfigureOtlp(OtlpExporterOptions options, IConfiguration section)
+    {
+        var otlp = section.GetSection("Otlp");
+        if (Uri.TryCreate(otlp["Endpoint"], UriKind.Absolute, out var endpoint))
+        {
+            options.Endpoint = endpoint;
+        }
+
+        if (Enum.TryParse<OtlpExportProtocol>(otlp["Protocol"], ignoreCase: true, out var protocol))
+        {
+            options.Protocol = protocol;
+        }
+    }
 }

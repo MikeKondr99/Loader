@@ -69,9 +69,31 @@ public class LoadStatementExecutor
 
         ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, source);
-        var resolvedQuery = ResolveQuery(query, CreateExpressionResolutionContext(context));
+        var resolvedQuery = ResolveQueryWithTelemetry(context, statement, source, query);
         var querySql = CompileQuery(statement, resolvedQuery);
+        activity?
+            .SetSanitizedTag("load.query_sql", querySql);
         return new ResolvedQuerySql(resolvedQuery, querySql);
+    }
+
+    private ResolvedQuery ResolveQueryWithTelemetry(
+        ScriptContext context,
+        LoadStatement statement,
+        PreparedLoadSource source,
+        QueryModel query)
+    {
+        using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.QueryResolve");
+        activity?
+            .SetTag("load.table_name", statement.TableName)
+            .SetTag("load.source_field_count", source.Fields.Count)
+            .SetTag("load.select_count", query.Select.Count)
+            .SetTag("load.group_by_count", query.GroupBy.Count)
+            .SetTag("load.order_by_count", query.OrderBy.Count);
+
+        var resolvedQuery = ResolveQuery(query, CreateExpressionResolutionContext(context));
+        activity?
+            .SetTag("load.output_field_count", resolvedQuery.OutputFields.Count);
+        return resolvedQuery;
     }
 
     protected virtual ExpressionResolutionContext CreateExpressionResolutionContext(ScriptContext context)

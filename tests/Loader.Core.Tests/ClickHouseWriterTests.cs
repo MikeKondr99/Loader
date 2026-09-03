@@ -1,4 +1,5 @@
 using System.Data;
+using System.Diagnostics;
 using ClickHouse.Client.Numerics;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -78,6 +79,41 @@ public sealed class ClickHouseWriterTests
                 ((byte)2, DBNull.Value, "London", false),
                 ((byte)3, (ClickHouseDecimal)20.25m, "Moscow", true)
             ]);
+    }
+
+    [Test]
+    [DisplayName("ClickHouseWriter добавляет telemetry tags с CREATE TABLE и INSERT sql")]
+    public async Task Write_adds_current_activity_sql_tags()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, 10.50m, "Moscow", true);
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader.Normalize();
+
+        using var activity = new Activity("test").Start();
+        var tableName = "writer_telemetry_" + Guid.NewGuid().ToString("N");
+
+        await new ClickHouseWriter().WriteAsync(
+            Source(),
+            reader,
+            new ClickHouseWriteOptions
+            {
+                TableName = new ClickHouseTableName
+                {
+                    Table = tableName
+                }
+            });
+
+        var tags = activity.TagObjects.ToDictionary(
+            static tag => tag.Key,
+            static tag => tag.Value);
+
+        await Assert.That(tags["db.system"]).IsEqualTo("clickhouse");
+        await Assert.That(tags["db.statement.create_table"]?.ToString()).Contains($"`{tableName}`");
+        await Assert.That(tags["db.statement.create_table"]?.ToString()).Contains("CREATE TABLE");
+        await Assert.That(tags["db.statement.insert"]?.ToString()).IsEqualTo(
+            $"INSERT INTO `{tableName}` (`id`, `amount`, `city`, `active`)");
     }
 
     [Test]

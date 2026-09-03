@@ -45,13 +45,20 @@ internal sealed class LoadFromPreparer
 
         // 4. Выбор пути подготовки остается здесь: resolver только описывает source,
         // а preparer решает, нужна ли физическая temp table.
-        return source switch
+        var preparedSource = source switch
         {
             SqlLoadFromSource sqlSource => PrepareSqlSource(sqlSource, statement.First),
             ReaderLoadFromSource readerSource => await PrepareReaderSourceAsync(context, statement, readerSource, activity, cancellationToken)
                 .ConfigureAwait(false),
             _ => throw new NotSupportedException($"FROM source '{source.GetType().Name}' не поддерживается.")
         };
+
+        activity?
+            .SetSanitizedTag("load.prepared_source_sql", preparedSource.Sql)
+            .SetTag("load.prepared_source_alias", preparedSource.Alias)
+            .SetTag("load.prepared_source_field_count", preparedSource.Fields.Count);
+
+        return preparedSource;
     }
 
     /// <summary>
@@ -87,8 +94,6 @@ internal sealed class LoadFromPreparer
     {
         var tempTable = await tempTableMaterializer.MaterializeAsync(context, statement, source, cancellationToken)
             .ConfigureAwait(false);
-        activity?
-            .SetTag("load.temp_table", tempTable.TableName.Table);
         return PrepareTempTable(tempTable);
     }
 

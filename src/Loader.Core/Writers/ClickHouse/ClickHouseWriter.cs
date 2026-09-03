@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.Copy;
 using Loader.Core.Decorators;
@@ -23,6 +24,9 @@ public sealed class ClickHouseWriter
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
         var createSql = BuildCreateTableSql(reader, options, meta);
+        Activity.Current?
+            .SetTag("db.system", "clickhouse")
+            .SetTag("db.statement.create_table", createSql);
 
         try
         {
@@ -37,6 +41,9 @@ public sealed class ClickHouseWriter
         }
 
         var insertSql = BuildInsertContextSql(reader, options);
+        Activity.Current?
+            .SetTag("db.statement.insert", insertSql);
+
         try
         {
             // 2. Передаем поток строк в ClickHouseBulkCopy, который пишет через binary protocol.
