@@ -396,8 +396,8 @@ public sealed class CsvProviderTests
     }
 
     [Test]
-    [DisplayName("Csv с повторяющимися header names кидает DuplicateDataFieldNameException")]
-    public async Task Duplicate_headers_throw_schema_exception()
+    [DisplayName("Csv с повторяющимися header names дедублицирует имена при Normalize")]
+    public async Task Duplicate_headers_are_deduplicated_on_normalize()
     {
         var source = new InlineCsv(
             """
@@ -412,9 +412,14 @@ public sealed class CsvProviderTests
                 FileName = "any-file-name.csv"
             });
 
-        await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<DuplicateDataFieldNameException>()
-            .WithMessage("Column name 'id' is duplicated.");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "id_2"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "2")
+            ]);
     }
 
     [Test]
@@ -999,8 +1004,8 @@ public sealed class CsvProviderTests
     }
 
     [Test]
-    [DisplayName("Csv trimHeaders=true выявляет дубли после удаления пробелов")]
-    public async Task Trim_headers_duplicate_names_throw_schema_exception()
+    [DisplayName("Csv trimHeaders=true дедублицирует дубли после удаления пробелов")]
+    public async Task Trim_headers_duplicate_names_are_deduplicated()
     {
         var source = new InlineCsv("id, id \r\n1,2");
 
@@ -1012,9 +1017,14 @@ public sealed class CsvProviderTests
                 TrimHeaders = true
             });
 
-        await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<DuplicateDataFieldNameException>()
-            .WithMessage("Column name 'id' is duplicated.");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "id_2"],
+            types: [DataType.Text, DataType.Text],
+            rows: [
+                ("1", "2")
+            ]);
     }
 
     [Test]

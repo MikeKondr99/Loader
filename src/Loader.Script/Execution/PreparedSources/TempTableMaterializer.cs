@@ -20,10 +20,11 @@ public class TempTableMaterializer
         await using var providerReader = await OpenProviderReaderAsync(statement, source, cancellationToken)
             .ConfigureAwait(false);
 
-        await using var stageNameReader = providerReader.AbstractColumns();
+        await using var sourceReader = NormalizeSource(providerReader, source);
+        await using var stageNameReader = sourceReader.AbstractColumns();
 
         await using var stageReader = LimitSourceRows(
-            NormalizeForTempTable(stageNameReader, source),
+            NormalizeForTempTable(stageNameReader),
             ToInt32(statement.First, nameof(statement.First)));
 
         ValidateSourceHasFields(statement, stageReader.DataSchema.Fields.Count);
@@ -83,14 +84,19 @@ public class TempTableMaterializer
         }
     }
 
-    private static DomainDataReader NormalizeForTempTable(
-        RenameColumnDataReader stageNameReader,
+    private static DomainDataReader NormalizeSource(
+        DbDataReader reader,
         ReaderLoadFromSource source)
     {
-        return stageNameReader.Normalize(new NormalizeOptions
+        return reader.Normalize(new NormalizeOptions
         {
             Buffer = source.RequiresBuffer
         });
+    }
+
+    private static DomainDataReader NormalizeForTempTable(RenameColumnDataReader stageNameReader)
+    {
+        return stageNameReader.Normalize();
     }
 
     private static DomainDataReader LimitSourceRows(DomainDataReader reader, int? limit)

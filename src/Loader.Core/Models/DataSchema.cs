@@ -47,6 +47,10 @@ public sealed record DataSchema
     internal static DataSchema FromReader(DbDataReader reader)
     {
         var columnSchemaByOrdinal = ReadColumnSchemaByOrdinal(reader);
+        var names = DataFieldNameDeduplicator.Deduplicate(
+            Enumerable.Range(0, reader.FieldCount)
+                .Select(reader.GetName)
+                .ToArray());
 
         // 1. Берем имена и CLR-типы из reader.
         var fields = Enumerable
@@ -59,7 +63,7 @@ public sealed record DataSchema
                 return new DataField
                 {
                     Ordinal = i,
-                    Name = reader.GetName(i),
+                    Name = names[i],
                     DataType = mapping.DataType,
                     ClrType = mapping.ClrType,
                     AllowDBNull = column?.AllowDBNull,
@@ -71,15 +75,6 @@ public sealed record DataSchema
                 };
             })
             .ToArray();
-
-        // 2. Запрещаем неявно неоднозначную адресацию по имени.
-        var duplicate = fields
-            .GroupBy(field => field.Name, StringComparer.Ordinal)
-            .FirstOrDefault(group => group.Count() > 1);
-        if (duplicate is not null)
-        {
-            throw new DuplicateDataFieldNameException(duplicate.Key);
-        }
 
         return new DataSchema
         {

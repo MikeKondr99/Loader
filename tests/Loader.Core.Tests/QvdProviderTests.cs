@@ -256,14 +256,15 @@ public sealed class QvdProviderTests
     }
 
     [Test]
-    [DisplayName("QVD duplicate column names падает при Normalize")]
-    public async Task Duplicate_column_names_throw_on_normalize()
+    [DisplayName("QVD duplicate column names дедублицируются при Normalize")]
+    public async Task Duplicate_column_names_are_deduplicated_on_normalize()
     {
         await using var rawReader = await OpenAsync("duplicate_column_names.qvd");
 
-        await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<DuplicateDataFieldNameException>()
-            .WithMessage("Column name 'value' is duplicated.");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader.GetName(0)).IsEqualTo("value");
+        await Assert.That(reader.GetName(1)).IsEqualTo("value_2");
     }
 
     [Test]

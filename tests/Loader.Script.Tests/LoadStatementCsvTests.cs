@@ -78,6 +78,30 @@ public sealed class LoadStatementCsvTests
     }
 
     [Test]
+    [DisplayName("LOAD * из CSV дедублицирует имена source fields после Normalize")]
+    public async Task Csv_load_deduplicates_source_field_names_after_normalize()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            duplicate_fields:
+            LOAD *
+            FROM Csv(path='duplicate-fields.csv', delimiter=',', header=true, trimHeaders=true);
+            """);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["id", "id_2", "x", "x_2", "x_3"],
+            [
+                ["1", "2", "3", "4", "5"]
+            ]);
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("LOAD из CSV создает Time преобразованием и сохраняет тип при следующем LOAD")]
     public async Task Csv_load_time_transformation_preserves_time_type_in_next_load()
     {

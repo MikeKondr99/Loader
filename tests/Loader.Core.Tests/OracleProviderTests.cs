@@ -232,14 +232,19 @@ public sealed class OracleProviderTests
     }
 
     [Test]
-    [DisplayName("Oracle повторяющиеся имена колонок кидают явную ошибку схемы")]
-    public async Task Duplicate_column_names_throw_schema_exception()
+    [DisplayName("Oracle повторяющиеся имена колонок дедублицируются при Normalize")]
+    public async Task Duplicate_column_names_are_deduplicated_on_normalize()
     {
         await using var rawReader = await OpenReaderAsync("select 1 as value, 2 as value from dual");
 
-        await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<DuplicateDataFieldNameException>()
-            .WithMessage("Column name 'VALUE' is duplicated.");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["VALUE", "VALUE_2"],
+            types: [DataType.Integer, DataType.Integer],
+            rows: [
+                (1, 2)
+            ]);
     }
 
     [Test]

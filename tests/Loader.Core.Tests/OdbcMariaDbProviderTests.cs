@@ -209,14 +209,19 @@ public sealed class OdbcMariaDbProviderTests
     }
 
     [Test]
-    [DisplayName("MariaDB через ODBC повторяющиеся имена колонок кидают явную ошибку схемы")]
-    public async Task Duplicate_column_names_throw_schema_exception()
+    [DisplayName("MariaDB через ODBC повторяющиеся имена колонок дедублицируются при Normalize")]
+    public async Task Duplicate_column_names_are_deduplicated_on_normalize()
     {
         await using var rawReader = await OpenSharedReaderAsync("select 1 as value, 2 as value");
 
-        await Assert.That(() => rawReader.Normalize())
-            .ThrowsExactly<DuplicateDataFieldNameException>()
-            .WithMessage("Column name 'value' is duplicated.");
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["value", "value_2"],
+            types: [DataType.Integer, DataType.Integer],
+            rows: [
+                (1, 2)
+            ]);
     }
 
     [Test]
