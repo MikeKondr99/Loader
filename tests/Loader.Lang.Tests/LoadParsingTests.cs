@@ -57,6 +57,14 @@ public sealed class LoadParsingTests
     }
 
     [Test]
+    public async Task Load_table_name_prefix_parses_name_span()
+    {
+        var load = ParseLoad("orders: LOAD * FROM Csv(path='orders.csv');");
+
+        await Assert.That(load.TableNameSpan).IsEqualTo(new LangSpan(1, 0, 1, 6));
+    }
+
+    [Test]
     [DisplayName("LOAD FIRST ограничивает исходные строки provider перед LOAD")]
     public async Task Load_first_parses_source_row_limit_before_load()
     {

@@ -49,6 +49,8 @@ public sealed record LoadStatement : Statement
     /// </summary>
     public required string TableName { get; init; }
 
+    public LangSpan? TableNameSpan { get; init; }
+
     /// <summary>
     /// Явно перечисленные поля формы <c>expr AS name</c>.
     /// Если значение <c>null</c>, это форма <c>LOAD *</c>.

@@ -32,6 +32,7 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
+        ThrowIfTableNameAlreadyLoaded(context, statement);
         ValidateMappedStatementFields(statement);
 
         await context.Logger.LoadTableStartedAsync(statement.TableName, cancellationToken).ConfigureAwait(false);
@@ -412,6 +413,18 @@ public class LoadStatementExecutor
                 $"LOAD select alias '{field.Name}' is duplicated.",
                 field.Span);
         }
+    }
+
+    private static void ThrowIfTableNameAlreadyLoaded(ScriptContext context, LoadStatement statement)
+    {
+        if (!context.ContainsLoadedTable(statement.TableName))
+        {
+            return;
+        }
+
+        throw new QueryResolutionException(
+            $"Имя LOAD таблицы '{statement.TableName}' уже занято.",
+            statement.TableNameSpan ?? statement.LoadSpan);
     }
 
     private static void ValidateMappedStatementFields(LoadStatement statement)

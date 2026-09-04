@@ -32,6 +32,33 @@ public sealed class DropStatementTests
     }
 
     [Test]
+    [DisplayName("Script DROP освобождает имя таблицы для повторного LOAD")]
+    public async Task Execute_script_drop_allows_reusing_load_table_name()
+    {
+        var loadExecutor = new NoopLoadStatementExecutor();
+        var executor = new ScriptExecutor
+        {
+            LoadStatementExecutor = loadExecutor,
+            DropStatementExecutor = new TestDropStatementExecutor()
+        };
+        var dropExecutor = (TestDropStatementExecutor)executor.DropStatementExecutor;
+
+        var tables = await executor.ExecuteAsync(
+            CreateContext(),
+            Parse(
+                """
+                orders: LOAD * FROM Inline(x; 1);
+                DROP orders;
+                orders: LOAD * FROM Inline(x; 1);
+                """));
+
+        await Assert.That(loadExecutor.LoadCalls).IsEqualTo(2);
+        await Assert.That(dropExecutor.DropCalls).IsEqualTo(1);
+        await Assert.That(tables).Count().IsEqualTo(1);
+        await Assert.That(tables[0].Alias).IsEqualTo("orders");
+    }
+
+    [Test]
     [DisplayName("Script не чистит TEMP LOAD повторно если его уже удалил DROP")]
     public async Task Execute_script_drop_temp_load_prevents_second_cleanup_drop()
     {
@@ -168,11 +195,14 @@ public sealed class DropStatementTests
 
     private sealed class NoopLoadStatementExecutor : LoadStatementExecutor
     {
+        public int LoadCalls { get; private set; }
+
         public override ValueTask<LoadedTable> ExecuteAsync(
             ScriptContext context,
             LoadStatement statement,
             CancellationToken cancellationToken = default)
         {
+            LoadCalls++;
             var table = LoadedTable("physical_orders", statement.TableName) with
             {
                 Kind = statement.IsTemporary ? LoadedTableKind.Temp : LoadedTableKind.Normal

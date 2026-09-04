@@ -101,6 +101,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Kind = VisitLoadKind(context.load_kind()),
             KindSpan = context.load_kind() is null ? null : Span(context.load_kind()),
             TableName = tableName,
+            TableNameSpan = Span(context.load_table_name().name()),
             Fields = fields,
             FromSpan = Span(context.FROM()),
             SourceCall = sourceCall,

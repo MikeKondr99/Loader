@@ -133,6 +133,43 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("ScriptExecutor запрещает повторный LOAD с уже занятым именем таблицы")]
+    public async Task Execute_script_rejects_repeated_load_table_name()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                name AS city
+            FROM Inline(x; 1);
+
+            orders:
+            LOAD
+                id
+            FROM Inline(x; 1);
+            """).Value!;
+        var repeatedStatement = (LoadStatement)script.Statements[1];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(1);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(repeatedStatement.TableNameSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("Имя LOAD таблицы 'orders' уже занято.");
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
+    }
+
+    [Test]
     [DisplayName("Execute MAPPED LOAD с явными полями требует ровно key и value")]
     public async Task Execute_mapped_load_with_explicit_fields_rejects_not_two_fields()
     {

@@ -38,12 +38,25 @@ public sealed record ScriptContext
 
     public void AddLoadedTable(LoadedTable table)
     {
+        if (table.Alias is not null && ContainsLoadedTable(table.Alias))
+        {
+            throw new QueryResolutionException($"Имя LOAD таблицы '{table.Alias}' уже занято.");
+        }
+
         _loadedTables.Add(table);
+    }
+
+    public bool ContainsLoadedTable(string alias)
+    {
+        return _loadedTables.Any(table => string.Equals(
+            table.Alias,
+            alias,
+            StringComparison.Ordinal));
     }
 
     public LoadedTable? FindLoadedTable(string alias)
     {
-        return _loadedTables.SingleOrDefault(table => string.Equals(
+        return _loadedTables.FirstOrDefault(table => string.Equals(
             table.Alias,
             alias,
             StringComparison.Ordinal));
