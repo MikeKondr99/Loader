@@ -8,15 +8,16 @@ namespace Loader.Core.Providers.Csv;
 
 /// <summary>
 /// Provider потокового чтения CSV через Sylvan.Data.Csv.
-/// CSV values intentionally stay textual: schema fields are normalized to <c>DataType.Text</c>
-/// and values are exposed as strings by <c>DomainDataReader</c>.
-/// When <c>HasHeader</c> is false, column names are generated as Excel-style names:
+/// CSV-значения намеренно остаются текстовыми: поля схемы нормализуются в <c>DataType.Text</c>,
+/// а значения отдаются строками через <c>DomainDataReader</c>.
+/// Если <c>HasHeader</c> выключен, имена колонок генерируются в Excel-стиле:
 /// <c>A</c>, <c>B</c>, ... <c>Z</c>, <c>AA</c>, <c>AB</c>.
-/// Missing row values are left as <c>DBNull</c>. Extra row values beyond the schema are ignored.
-/// Empty CSV with required headers is normalized to <see cref="NoHeaderCsvProviderException"/>.
-/// Malformed CSV rows are normalized to <see cref="MalformedCsvProviderException"/>.
-/// Reader uses Sylvan <see cref="CsvStyle.Lax"/> to accept common non-strict CSV files:
-/// whitespace or text after a closing quote and unclosed quotes do not fail parsing.
+/// Пропущенные значения в строке подчиняются тому же правилу nullability, что и пустые значения.
+/// Лишние значения сверх схемы игнорируются.
+/// Пустой CSV с обязательными заголовками нормализуется в <see cref="NoHeaderCsvProviderException"/>.
+/// Некорректные CSV-строки нормализуются в <see cref="MalformedCsvProviderException"/>.
+/// Reader использует Sylvan <see cref="CsvStyle.Lax"/>, чтобы принимать распространенные нестрогие CSV:
+/// пробелы или текст после закрывающей кавычки и незакрытые кавычки не валят parsing.
 /// </summary>
 public sealed class CsvProvider : IProvider<IFileSource, CsvTableConfig>
 {

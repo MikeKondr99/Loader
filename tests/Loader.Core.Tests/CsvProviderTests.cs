@@ -1072,6 +1072,32 @@ public sealed class CsvProviderTests
                 ("1", DBNull.Value),
                 ("2", DBNull.Value)
             ]);
+        await Assert.That(reader.DataSchema.Fields[1].AllowDBNull).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Csv emptyAsNull=true превращает хвостовые пропущенные значения в DBNull")]
+    public async Task Empty_as_null_converts_trailing_missing_values_to_db_null()
+    {
+        var source = new InlineCsv("id,name,amount,note\r\n1");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                EmptyAsNull = true
+            });
+        await using var reader = rawReader.Normalize();
+
+        await Assert.That(reader).HaveData(
+            columns: ["id", "name", "amount", "note"],
+            types: [DataType.Text, DataType.Text, DataType.Text, DataType.Text],
+            rows: [
+                ("1", DBNull.Value, DBNull.Value, DBNull.Value)
+            ]);
+        await Assert.That(reader.DataSchema.Fields.Select(static field => field.AllowDBNull == true).ToArray())
+            .IsEquivalentTo([true, true, true, true]);
     }
 
     [Test]

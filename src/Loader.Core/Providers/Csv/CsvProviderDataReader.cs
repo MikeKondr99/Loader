@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Data;
 using Sylvan.Data.Csv;
 
 namespace Loader.Core.Providers.Csv;
@@ -137,6 +138,22 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
         }
 
         return (string)value;
+    }
+
+    public override DataTable? GetSchemaTable()
+    {
+        var table = Inner.GetSchemaTable();
+        if (!_emptyAsNull || table is null || !table.Columns.Contains(SchemaTableColumn.AllowDBNull))
+        {
+            return table;
+        }
+
+        foreach (DataRow row in table.Rows)
+        {
+            row[SchemaTableColumn.AllowDBNull] = true;
+        }
+
+        return table;
     }
 
     public override async Task<bool> ReadAsync(CancellationToken cancellationToken)

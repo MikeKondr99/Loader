@@ -1920,6 +1920,39 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Csv emptyAsNull=true применяет nullability к пропущенным хвостовым значениям")]
+    public async Task Resolve_csv_empty_as_null_converts_trailing_missing_values_to_db_null()
+    {
+        var resolver = new LoadProviderResolver();
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Csv",
+                [
+                    Option("path", "orders.csv"),
+                    Option("emptyAsNull", new BooleanLiteral(true), Span())
+                ]),
+            CreateContext(new StubFileSource("id,name,amount,note\r\n1,Alice\r\n2,Bob,10,ok")));
+
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
+        var columns = reader.GetColumnSchema();
+
+        await Assert.That(columns.Select(static column => column.AllowDBNull == true).ToArray())
+            .IsEquivalentTo([true, true, true, true]);
+
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Alice");
+        await Assert.That(reader.IsDBNull(2)).IsTrue();
+        await Assert.That(reader.GetValue(2)).IsEqualTo(DBNull.Value);
+        await Assert.That(reader.IsDBNull(3)).IsTrue();
+        await Assert.That(reader.GetValue(3)).IsEqualTo(DBNull.Value);
+
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(2)).IsEqualTo("10");
+        await Assert.That(reader.GetValue(3)).IsEqualTo("ok");
+    }
+
+    [Test]
     [DisplayName("Resolver Csv comment из нескольких символов отклоняет как provider option")]
     public async Task Resolve_csv_rejects_multi_character_comment()
     {
