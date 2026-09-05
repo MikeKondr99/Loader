@@ -97,7 +97,8 @@ public sealed class QueryResolver
                     {
                         DataType = resolvedExpression.Type.DataType,
                         CanBeNull = resolvedExpression.Type.CanBeNull
-                    }
+                    },
+                    Aggregated = resolvedExpression.Type.Aggregated
                 }
             };
 
@@ -321,7 +322,8 @@ public sealed class QueryResolver
             {
                 DataType = type.DataType,
                 CanBeNull = type.CanBeNull
-            }
+            },
+            Aggregated = type.Aggregated
         });
     }
 

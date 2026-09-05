@@ -20,28 +20,30 @@ public sealed class FunctionStorage : IFunctionResolver
         implicitCasts = materialized.Where(static function => function.ImplicitCast is not null).ToLookup(static function => function.Arguments[0].Type);
     }
 
-    public FunctionResolution? Resolve(FunctionSignature signature)
+    public FunctionResolutionResult Resolve(FunctionSignature signature)
     {
         var returnsConst = ConstPropagationValue(signature.ArgumentTypes);
         var returnsAggregated = AggPropagationValue(signature.ArgumentTypes);
         if (returnsAggregated is null)
         {
-            return null;
+            return FunctionResolutionResult.Failure($"Аргументы функции '{signature.Name}' должны быть либо все агрегатными, нет.");
         }
 
+        var skippedNestedAggregate = false;
         var matches = new List<FunctionResolution>();
         foreach (var function in GetValidFunctions(signature))
         {
-            if (function.ReturnType.Aggregated && returnsAggregated.Value)
-            {
-                continue;
-            }
-
             var casts = function.Arguments
                 .Zip(signature.ArgumentTypes, (argument, type) => GetCast(type, argument.Type))
                 .ToArray();
             if (casts.Any(static cast => cast is null))
             {
+                continue;
+            }
+
+            if (function.ReturnType.Aggregated && returnsAggregated.Value)
+            {
+                skippedNestedAggregate = true;
                 continue;
             }
 
@@ -61,7 +63,15 @@ public sealed class FunctionStorage : IFunctionResolver
             });
         }
 
-        return matches.MinBy(static match => match.Casts.Sum(static cast => Math.Pow(10, cast.ImplicitCast?.Cost ?? 0)));
+        var match = matches.MinBy(static match => match.Casts.Sum(static cast => Math.Pow(10, cast.ImplicitCast?.Cost ?? 0)));
+        if (match is not null)
+        {
+            return FunctionResolutionResult.Success(match);
+        }
+
+        return skippedNestedAggregate
+            ? FunctionResolutionResult.Failure($"Агрегатная функция '{signature.Name}' не может принимать агрегатное выражение.")
+            : FunctionResolutionResult.Failure($"Функция '{signature.Name}' с указанными аргументами не найдена");
     }
 
     private IEnumerable<FunctionDefinition> GetValidFunctions(FunctionSignature signature)
