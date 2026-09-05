@@ -826,8 +826,8 @@ public sealed class CsvProviderTests
     }
 
     [Test]
-    [DisplayName("Csv header с пустым именем колонки сохраняет пустое имя")]
-    public async Task Header_empty_column_name_is_kept()
+    [DisplayName("Csv header с пустым именем колонки отклоняется")]
+    public async Task Header_empty_column_name_is_rejected()
     {
         var source = new InlineCsv("id,,name\r\n1,2,Alice");
 
@@ -837,14 +837,39 @@ public sealed class CsvProviderTests
             {
                 FileName = "any-file-name.csv"
             });
-        await using var reader = rawReader.Normalize();
 
-        await Assert.That(reader).HaveData(
-            columns: ["id", "", "name"],
-            types: [DataType.Text, DataType.Text, DataType.Text],
-            rows: [
-                ("1", "2", "Alice")
-            ]);
+        var exception = await Assert.That(() => rawReader.Normalize())
+            .ThrowsExactly<CsvEmptyHeaderProviderException>();
+
+        await Assert.That(exception!.FileName).IsEqualTo("any-file-name.csv");
+        await Assert.That(exception.Ordinal).IsEqualTo(1);
+        await Assert.That(exception.PreviousColumnName).IsEqualTo("id");
+        await Assert.That(exception.Message).Contains("пустое имя колонки");
+        await Assert.That(exception.Message).Contains("предыдущая колонка 'id'");
+    }
+
+    [Test]
+    [DisplayName("Csv trimHeaders=true отклоняет header из пробелов")]
+    public async Task Trim_headers_rejects_whitespace_only_column_name()
+    {
+        var source = new InlineCsv("id,   ,name\r\n1,2,Alice");
+
+        await using var rawReader = await Provider.OpenReaderAsync(
+            source,
+            new CsvTableConfig
+            {
+                FileName = "any-file-name.csv",
+                TrimHeaders = true
+            });
+
+        var exception = await Assert.That(() => rawReader.Normalize())
+            .ThrowsExactly<CsvEmptyHeaderProviderException>();
+
+        await Assert.That(exception!.FileName).IsEqualTo("any-file-name.csv");
+        await Assert.That(exception.Ordinal).IsEqualTo(1);
+        await Assert.That(exception.PreviousColumnName).IsEqualTo("id");
+        await Assert.That(exception.Message).Contains("пустое имя колонки");
+        await Assert.That(exception.Message).Contains("предыдущая колонка 'id'");
     }
 
     [Test]

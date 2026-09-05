@@ -1,4 +1,5 @@
-﻿using Loader.Script.Tests.Infrastructure;
+﻿using Loader.Core.Exceptions;
+using Loader.Script.Tests.Infrastructure;
 
 namespace Loader.Script.Tests;
 
@@ -99,6 +100,26 @@ public sealed class LoadStatementCsvTests
                 ["1", "2", "3", "4", "5"]
             ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("LOAD из CSV с пустым именем header падает до SQL")]
+    public async Task Csv_load_rejects_empty_header_before_sql()
+    {
+        var exception = await Assert.That(async () => await ScriptIntegrationAssert.ExecuteScriptAsync(
+                database,
+                """
+                csv_empty_header:
+                LOAD *
+                FROM Csv(path='empty-header.csv', delimiter=',', header=true);
+                """))
+            .ThrowsExactly<CsvEmptyHeaderProviderException>();
+
+        await Assert.That(exception!.FileName).IsEqualTo("empty-header.csv");
+        await Assert.That(exception.Ordinal).IsEqualTo(1);
+        await Assert.That(exception.PreviousColumnName).IsEqualTo("id");
+        await Assert.That(exception.Message).Contains("пустое имя колонки");
+        await Assert.That(exception.Message).Contains("предыдущая колонка 'id'");
     }
 
     [Test]

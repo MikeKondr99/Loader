@@ -49,7 +49,27 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
         var name = _useGeneratedColumnNames
             ? GetExcelColumnName(ordinal)
             : Inner.GetName(ordinal);
-        return _trimHeaders && !_useGeneratedColumnNames
+        name = _trimHeaders && !_useGeneratedColumnNames
+            ? name.Trim()
+            : name;
+
+        if (!_useGeneratedColumnNames && name.Length == 0)
+        {
+            throw new CsvEmptyHeaderProviderException(_fileName, ordinal, GetPreviousHeaderName(ordinal));
+        }
+
+        return name;
+    }
+
+    private string? GetPreviousHeaderName(int ordinal)
+    {
+        if (_useGeneratedColumnNames || ordinal == 0)
+        {
+            return null;
+        }
+
+        var name = Inner.GetName(ordinal - 1);
+        return _trimHeaders
             ? name.Trim()
             : name;
     }
@@ -143,14 +163,25 @@ internal sealed class CsvProviderDataReader : DbDataReaderDecorator
     public override DataTable? GetSchemaTable()
     {
         var table = Inner.GetSchemaTable();
-        if (!_emptyAsNull || table is null || !table.Columns.Contains(SchemaTableColumn.AllowDBNull))
+        if (table is null)
         {
             return table;
         }
 
-        foreach (DataRow row in table.Rows)
+        var hasColumnName = table.Columns.Contains(SchemaTableColumn.ColumnName);
+        var hasAllowDbNull = table.Columns.Contains(SchemaTableColumn.AllowDBNull);
+        for (var ordinal = 0; ordinal < table.Rows.Count; ordinal++)
         {
-            row[SchemaTableColumn.AllowDBNull] = true;
+            var row = table.Rows[ordinal];
+            if (hasColumnName)
+            {
+                row[SchemaTableColumn.ColumnName] = GetName(ordinal);
+            }
+
+            if (_emptyAsNull && hasAllowDbNull)
+            {
+                row[SchemaTableColumn.AllowDBNull] = true;
+            }
         }
 
         return table;
