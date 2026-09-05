@@ -7,6 +7,8 @@ public sealed record ResolvedSelectItem
 {
     public required string Alias { get; init; }
 
+    public required string ColumnName { get; init; }
+
     public required ResolvedExpression Expression { get; init; }
 
     public required Field OutputField { get; init; }

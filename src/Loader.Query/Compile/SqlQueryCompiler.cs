@@ -62,7 +62,7 @@ public abstract class SqlQueryCompiler : IQueryCompiler
             builder.Append("    ");
             WriteOutputExpression(builder, field.Expression);
             builder.Append(" AS ");
-            WriteIdentifier(builder, field.Alias);
+            WriteIdentifier(builder, field.ColumnName);
 
             if (i != last)
             {

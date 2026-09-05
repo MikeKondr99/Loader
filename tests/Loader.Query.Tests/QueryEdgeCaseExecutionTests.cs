@@ -438,7 +438,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query duplicate SELECT alias сейчас отклоняется reader/schema слоем")]
+    [DisplayName("Query duplicate SELECT alias отклоняется на resolve")]
     public async Task Duplicate_select_alias_is_rejected()
     {
         // Arrange
@@ -457,7 +457,9 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var act = async () => await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act).Throws<Exception>();
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("LOAD select alias 'value' дублируется.");
     }
 
     [Test]

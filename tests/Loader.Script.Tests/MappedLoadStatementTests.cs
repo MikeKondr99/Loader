@@ -528,8 +528,7 @@ public sealed class MappedLoadStatementTests
 
         await Assert.That(exception!.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
         await Assert.That(exception.Errors).Count().IsEqualTo(1);
-        await Assert.That(exception.Errors[0].Message).Contains("0");
-        await Assert.That(exception.Errors[0].Message).Contains("ожидалось 2");
+        await Assert.That(exception.Errors[0].Message).Contains("Источник вернул ноль полей.");
     }
 
     [Test]

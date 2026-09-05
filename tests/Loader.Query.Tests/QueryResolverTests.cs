@@ -58,6 +58,8 @@ public sealed class QueryResolverTests
         await Assert.That(result.IsSuccess).IsTrue();
         await Assert.That(result.Value!.Source).IsSameReferenceAs(source);
         await Assert.That(result.Value.OutputFields[0].Alias).IsEqualTo("amount");
+        await Assert.That(result.Value.Select[0].Alias).IsEqualTo("amount");
+        await Assert.That(result.Value.Select[0].ColumnName).IsEqualTo("column1");
         await Assert.That(result.Value.Select[0].Expression.Template.ToString()).IsEqualTo("stage.column1");
         await Assert.That(result.Value.Where!.Template.ToString()).IsEqualTo("({0} > {1})");
         await Assert.That(result.Value.OrderBy[0].Direction).IsEqualTo(OrderDirection.Desc);

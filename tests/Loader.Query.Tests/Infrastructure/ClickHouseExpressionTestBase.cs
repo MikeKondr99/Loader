@@ -116,9 +116,10 @@ public abstract class ClickHouseExpressionTestBase
 
     protected async Task<IReadOnlyList<IReadOnlyDictionary<string, object?>>> GetRowsAsync(Query.Models.Query query)
     {
-        var sql = CompileQuery(query);
-        await using var rawReader = await OpenReaderAsync(sql).ConfigureAwait(false);
-        await using var reader = rawReader.Normalize();
+        var compiled = CompileQuery(query);
+        await using var rawReader = await OpenReaderAsync(compiled.Sql).ConfigureAwait(false);
+        await using var namedReader = rawReader.RenameColumns(compiled.OutputAliases);
+        await using var reader = namedReader.Normalize();
 
         var rows = new List<IReadOnlyDictionary<string, object?>>();
         while (await reader.ReadAsync().ConfigureAwait(false))
@@ -182,7 +183,7 @@ public abstract class ClickHouseExpressionTestBase
         return new ExpressionCompiler().Compile(resolved);
     }
 
-    private static string CompileQuery(Query.Models.Query query)
+    private static CompiledQuery CompileQuery(Query.Models.Query query)
     {
         var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
         if (!result.IsSuccess)
@@ -190,10 +191,15 @@ public abstract class ClickHouseExpressionTestBase
             throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Select(error => error.Message)));
         }
 
-        return new ClickHouseQueryCompiler
+        var resolved = result.Value!;
+        var sql = new ClickHouseQueryCompiler
         {
             ExpressionCompiler = new ExpressionCompiler()
-        }.Compile(result.Value!);
+        }.Compile(resolved);
+
+        return new CompiledQuery(
+            sql,
+            resolved.OutputFields.Select(static field => field.Alias).ToArray());
     }
 
     private ValueTask<DbDataReader> OpenReaderAsync(string sql)
@@ -208,4 +214,6 @@ public abstract class ClickHouseExpressionTestBase
                 Sql = sql
             });
     }
+
+    private sealed record CompiledQuery(string Sql, IReadOnlyList<string> OutputAliases);
 }

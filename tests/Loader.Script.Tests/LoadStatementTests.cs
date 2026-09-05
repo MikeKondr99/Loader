@@ -64,7 +64,7 @@ public sealed class LoadStatementTests
         await Assert.That(executor.DropFinalCalls).IsEqualTo(0);
         await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
         await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
-        await Assert.That(executor.QuerySql).Contains(".`column2` AS `city`");
+        await Assert.That(executor.QuerySql).Contains(".`column2` AS `column1`");
         await Assert.That(executor.QuerySql).Contains("WHERE (source_");
         await Assert.That(executor.QuerySql).Contains(".`column1` > 0)");
         await Assert.That(executor.QuerySql).Contains("ORDER BY source_");
@@ -101,7 +101,7 @@ public sealed class LoadStatementTests
         await Assert.That(executor.DropCalls).IsEqualTo(0);
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
         await Assert.That(executor.QuerySql).Contains("FROM `physical_source` AS source_");
-        await Assert.That(executor.QuerySql).Contains(".`column2` AS `mapped_value`");
+        await Assert.That(executor.QuerySql).Contains(".`column2` AS `column1`");
         await Assert.That(loadedTable.Alias).IsEqualTo("result");
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("mapped_value");
     }
@@ -437,7 +437,7 @@ public sealed class LoadStatementTests
         await Assert.That(executor.WriteCalls).IsEqualTo(1);
         await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
             .IsEquivalentTo([0L, 1L, 2L, 3L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-        await Assert.That(executor.QuerySql).Contains(".`column1` AS `value`");
+        await Assert.That(executor.QuerySql).Contains(".`column1` AS `column1`");
         await Assert.That(loadedTable.Alias).IsEqualTo("numbers");
         await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("value");

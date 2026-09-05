@@ -57,8 +57,8 @@ public sealed class ClickHouseQueryCompilerTests
         await Assert.That(sql).IsEqualTo(string.Join(
             Environment.NewLine,
             "SELECT",
-            "    stage.city AS `city`, ",
-            "    COALESCE(SUM(stage.amount), 0) AS `total`",
+            "    stage.city AS `column1`, ",
+            "    COALESCE(SUM(stage.amount), 0) AS `column2`",
             "FROM `tmp_orders` AS stage",
             "WHERE (stage.amount > toFloat64(0))",
             "GROUP BY stage.city",
@@ -76,7 +76,7 @@ public sealed class ClickHouseQueryCompilerTests
         await Assert.That(sql).IsEqualTo(string.Join(
             Environment.NewLine,
             "SELECT",
-            "    CASE WHEN isFinite(corr(stage.x, stage.y)) THEN corr(stage.x, stage.y) ELSE NULL END AS `correlation`",
+            "    CASE WHEN isFinite(corr(stage.x, stage.y)) THEN corr(stage.x, stage.y) ELSE NULL END AS `column1`",
             "FROM `tmp_values` AS stage"));
     }
 
@@ -89,7 +89,7 @@ public sealed class ClickHouseQueryCompilerTests
         await Assert.That(sql).IsEqualTo(string.Join(
             Environment.NewLine,
             "SELECT",
-            "    CASE WHEN isFinite(corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64)))) THEN corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64))) ELSE NULL END AS `correlation`",
+            "    CASE WHEN isFinite(corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64)))) THEN corr(CAST(stage.x AS Nullable(Float64)), CAST(stage.y AS Nullable(Float64))) ELSE NULL END AS `column1`",
             "FROM `tmp_values` AS stage"));
     }
 

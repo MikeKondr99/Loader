@@ -35,6 +35,7 @@ public sealed class QueryResolver
         ValidateLimit(query, context);
         ValidateWhere(where, context);
         ValidateSelect(query, select, aggregationState, context);
+        ValidateSelectAliases(query, context);
         ValidateGroupBy(groupBy, context);
         ValidateOrderBy(orderBy, aggregationState, context);
         context.Errors.AddRange(context.ExpressionContext.Errors);
@@ -63,8 +64,9 @@ public sealed class QueryResolver
     private IReadOnlyList<ResolvedSelectItem> ResolveSelect(QueryModel query, ResolutionContext context)
     {
         var select = new List<ResolvedSelectItem>(query.Select.Count);
-        foreach (var item in query.Select)
+        for (var ordinal = 0; ordinal < query.Select.Count; ordinal++)
         {
+            var item = query.Select[ordinal];
             var resolvedExpression = expressionResolver.Resolve(item.Expression, context);
             if (resolvedExpression is null)
             {
@@ -74,6 +76,7 @@ public sealed class QueryResolver
             select.Add(new ResolvedSelectItem
             {
                 Alias = item.Alias,
+                ColumnName = $"column{ordinal + 1}",
                 Expression = resolvedExpression,
                 OutputField = new Field
                 {
@@ -201,6 +204,25 @@ public sealed class QueryResolver
             {
                 Span = item.Expression.Expression.Span,
                 Message = $"SELECT expression '{item.Alias}' должен быть агрегирован или совпадать с выражением из GROUP BY."
+            });
+        }
+    }
+
+    private static void ValidateSelectAliases(QueryModel query, ResolutionContext context)
+    {
+        // Script LOAD обычно проверяет alias до query resolving; этот guard сохраняет прямой Query API однозначным.
+        var aliases = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var item in query.Select)
+        {
+            if (aliases.Add(item.Alias))
+            {
+                continue;
+            }
+
+            context.Errors.Add(new LangError
+            {
+                Span = item.Expression.Span,
+                Message = $"LOAD select alias '{item.Alias}' дублируется."
             });
         }
     }
