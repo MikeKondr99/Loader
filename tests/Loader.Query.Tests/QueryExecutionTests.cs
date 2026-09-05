@@ -58,7 +58,7 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
         // Arrange
         var query = UsersQuery() with
         {
-            Select = ["UserId * 2".As("UserId")],
+            Select = ["UserId * 2".As("DoubleUserId")],
             Where = Expr("UserId > 5"),
             OrderBy = ["UserId".Asc()]
         };
@@ -67,7 +67,7 @@ public sealed class QueryExecutionTests : ClickHouseExpressionTestBase
         var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(rows.Ints("UserId"))
+        await Assert.That(rows.Ints("DoubleUserId"))
             .IsEquivalentTo([12, 14, 16], CollectionOrdering.Matching);
     }
 

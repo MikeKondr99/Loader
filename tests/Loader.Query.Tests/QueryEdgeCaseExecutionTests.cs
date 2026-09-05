@@ -583,7 +583,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
             Source = source,
             Select =
             [
-                "Upper(city)".As("city"),
+                "Upper(city)".As("upper_city"),
                 "COUNT()".As("count")
             ],
             GroupBy = [Expr("Upper(city)")],
@@ -594,7 +594,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(rows.Texts("city"))
+        await Assert.That(rows.Texts("upper_city"))
             .IsEquivalentTo(["MOSCOW", "PARIS"], CollectionOrdering.Matching);
         await Assert.That(rows.Ints("count"))
             .IsEquivalentTo([2, 1], CollectionOrdering.Matching);
@@ -617,7 +617,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
             Source = source,
             Select =
             [
-                "Lower(name)".As("name"),
+                "Lower(name)".As("lower_name"),
                 "COUNT()".As("count")
             ],
             GroupBy = [Expr("Lower(name)")],
@@ -628,7 +628,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(rows.Texts("name"))
+        await Assert.That(rows.Texts("lower_name"))
             .IsEquivalentTo(["alice", "bob"], CollectionOrdering.Matching);
         await Assert.That(rows.Ints("count"))
             .IsEquivalentTo([1, 2], CollectionOrdering.Matching);
