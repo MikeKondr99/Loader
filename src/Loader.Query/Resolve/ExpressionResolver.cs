@@ -22,7 +22,7 @@ public sealed class ExpressionResolver
 
     private static ResolvedExpression? ResolveName(NameExpr name, ResolutionContext context)
     {
-        var field = context.Source.Fields.FirstOrDefault(field => field.Alias == name.Value);
+        var field = context.Fields.FirstOrDefault(field => field.Alias == name.Value);
         if (field is null)
         {
             context.Errors.Add(new LangError

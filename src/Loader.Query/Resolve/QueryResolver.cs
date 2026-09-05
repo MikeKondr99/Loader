@@ -18,31 +18,42 @@ public sealed class QueryResolver
         IFunctionResolver functions,
         ExpressionResolutionContext? expressionContext = null)
     {
-        var context = new ResolutionContext
+        var errors = new List<LangError>();
+        var expressionResolutionContext = expressionContext ?? ExpressionResolutionContext.Empty;
+        var sourceContext = new ResolutionContext
         {
             Source = query.Source,
+            Fields = query.Source.Fields.ToList(),
             Functions = functions,
-            ExpressionContext = expressionContext ?? ExpressionResolutionContext.Empty,
-            Errors = []
+            ExpressionContext = expressionResolutionContext,
+            Errors = errors
+        };
+        var selectContext = new ResolutionContext
+        {
+            Source = query.Source,
+            Fields = query.Source.Fields.ToList(),
+            Functions = functions,
+            ExpressionContext = expressionResolutionContext,
+            Errors = errors
         };
 
-        var select = ResolveSelect(query, context);
-        var where = query.Where is null ? null : expressionResolver.Resolve(query.Where, context);
-        var groupBy = ResolveExpressions(query.GroupBy, context);
-        var orderBy = ResolveOrderBy(query, context);
+        var select = ResolveSelect(query, selectContext);
+        var where = query.Where is null ? null : expressionResolver.Resolve(query.Where, selectContext);
+        var groupBy = ResolveExpressions(query.GroupBy, selectContext);
+        var orderBy = ResolveOrderBy(query, selectContext);
         var aggregationState = AggregationValidationState.Create(select, groupBy, orderBy);
 
-        ValidateLimit(query, context);
-        ValidateWhere(where, context);
-        ValidateSelect(query, select, aggregationState, context);
-        ValidateSelectAliases(query, context);
-        ValidateGroupBy(groupBy, context);
-        ValidateOrderBy(orderBy, aggregationState, context);
-        context.Errors.AddRange(context.ExpressionContext.Errors);
+        ValidateLimit(query, sourceContext);
+        ValidateWhere(where, sourceContext);
+        ValidateSelect(query, select, aggregationState, sourceContext);
+        ValidateSelectAliases(query, sourceContext);
+        ValidateGroupBy(groupBy, sourceContext);
+        ValidateOrderBy(orderBy, aggregationState, sourceContext);
+        errors.AddRange(expressionResolutionContext.Errors);
 
-        if (context.Errors.Count > 0)
+        if (errors.Count > 0)
         {
-            return ResolveResult<ResolvedQuery>.Failure(context.Errors);
+            return ResolveResult<ResolvedQuery>.Failure(errors);
         }
 
         var outputFields = select.Count == 0
@@ -73,7 +84,7 @@ public sealed class QueryResolver
                 continue;
             }
 
-            select.Add(new ResolvedSelectItem
+            var selectItem = new ResolvedSelectItem
             {
                 Alias = item.Alias,
                 ColumnName = $"column{ordinal + 1}",
@@ -88,7 +99,10 @@ public sealed class QueryResolver
                         CanBeNull = resolvedExpression.Type.CanBeNull
                     }
                 }
-            });
+            };
+
+            select.Add(selectItem);
+            AddOrReplaceField(context, item.Alias, resolvedExpression.Type, select.Count);
         }
 
         return select;
@@ -285,6 +299,30 @@ public sealed class QueryResolver
     private static bool RequiresGrouping(ResolvedExpression expression)
     {
         return !expression.Type.Aggregated && !expression.Type.IsConstant;
+    }
+
+    private static void AddOrReplaceField(
+        ResolutionContext context,
+        string name,
+        ExprType type,
+        int outputOrdinal)
+    {
+        var existingIndex = context.Fields.FindIndex(existing => existing.Alias == name);
+        if (existingIndex >= 0)
+        {
+            context.Fields.RemoveAt(existingIndex);
+        }
+
+        context.Fields.Insert(0, new Field
+        {
+            Alias = name,
+            Template = QueryTemplate.Text($"`column{outputOrdinal.ToString(System.Globalization.CultureInfo.InvariantCulture)}`"),
+            Type = new FieldType
+            {
+                DataType = type.DataType,
+                CanBeNull = type.CanBeNull
+            }
+        });
     }
 
     private static void ValidateLimit(QueryModel query, ResolutionContext context)
