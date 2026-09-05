@@ -22,7 +22,7 @@ public sealed class ExpressionResolver
 
     private static ResolvedExpression? ResolveName(NameExpr name, ResolutionContext context)
     {
-        var field = context.Source.Fields.FirstOrDefault(field => field.Alias == name.Value);
+        var field = context.Fields.FirstOrDefault(field => field.Alias == name.Value);
         if (field is null)
         {
             context.Errors.Add(new LangError
@@ -40,8 +40,9 @@ public sealed class ExpressionResolver
             Type = new ExprType
             {
                 DataType = field.Type.DataType,
-                CanBeNull = field.Type.CanBeNull
-            }
+                CanBeNull = field.Type.CanBeNull,
+                Aggregated = field.Aggregated,
+            },
         };
     }
 
@@ -67,17 +68,18 @@ public sealed class ExpressionResolver
             Kind = function.Kind,
             ArgumentTypes = arguments.Select(argument => argument.Type).ToArray()
         };
-        var resolution = context.Functions.Resolve(signature);
-        if (resolution is null)
+        var resolutionResult = context.Functions.Resolve(signature);
+        if (resolutionResult.Resolution is null)
         {
             context.Errors.Add(new LangError
             {
                 Span = function.Span,
-                Message = $"Функция '{function.Name}' с указанными аргументами не найдена"
+                Message = resolutionResult.Error?.Message ?? $"Функция '{function.Name}' с указанными аргументами не найдена"
             });
             return null;
         }
 
+        var resolution = resolutionResult.Resolution;
         var definition = resolution.Function;
         if (!ValidateConstArguments(function, definition, arguments, context))
         {

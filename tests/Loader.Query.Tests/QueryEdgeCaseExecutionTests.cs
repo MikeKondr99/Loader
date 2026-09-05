@@ -438,6 +438,33 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query резолвит SELECT alias последовательно")]
+    public async Task Select_aliases_are_resolved_sequentially()
+    {
+        // Arrange
+        var source = AmountsSource();
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "amount * 2".As("amount"),
+                "amount + 1".As("next_amount")
+            ],
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Numbers("amount"))
+            .IsEquivalentTo([20.0, 40.0, 60.0], CollectionOrdering.Matching);
+        await Assert.That(rows.Numbers("next_amount"))
+            .IsEquivalentTo([21.0, 41.0, 61.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
     [DisplayName("Query duplicate SELECT alias отклоняется на resolve")]
     public async Task Duplicate_select_alias_is_rejected()
     {
@@ -463,8 +490,8 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [DisplayName("Query сейчас не поддерживает ORDER BY по SELECT alias")]
-    public async Task Order_by_select_alias_is_not_supported_yet()
+    [DisplayName("Query поддерживает ORDER BY по SELECT alias")]
+    public async Task Order_by_select_alias_is_supported()
     {
         // Arrange
         var source = AmountsSource();
@@ -476,10 +503,67 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         };
 
         // Act
-        var act = async () => await GetRowsAsync(query);
+        var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(act).ThrowsExactly<InvalidOperationException>();
+        await Assert.That(rows.Numbers("total"))
+            .IsEquivalentTo([20.0, 40.0, 60.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query поддерживает WHERE по SELECT alias")]
+    public async Task Where_select_alias_is_supported()
+    {
+        // Arrange
+        var source = AmountsSource();
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select = ["amount * 2".As("total")],
+            Where = Expr("total > 30"),
+            OrderBy = ["id".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Numbers("total"))
+            .IsEquivalentTo([40.0, 60.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query поддерживает GROUP BY по SELECT alias")]
+    public async Task Group_by_select_alias_is_supported()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [new InlineField("city", DataType.Text)],
+            [
+                ["'Moscow'"],
+                ["'moscow'"],
+                ["'Paris'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "Upper(city)".As("city"),
+                "COUNT()".As("count")
+            ],
+            GroupBy = [Expr("city")],
+            OrderBy = ["city".Asc()]
+        };
+
+        // Act
+        var rows = await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(rows.Texts("city"))
+            .IsEquivalentTo(["MOSCOW", "PARIS"], CollectionOrdering.Matching);
+        await Assert.That(rows.Ints("count"))
+            .IsEquivalentTo([2, 1], CollectionOrdering.Matching);
     }
 
     [Test]
@@ -499,7 +583,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
             Source = source,
             Select =
             [
-                "Upper(city)".As("city"),
+                "Upper(city)".As("upper_city"),
                 "COUNT()".As("count")
             ],
             GroupBy = [Expr("Upper(city)")],
@@ -510,7 +594,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(rows.Texts("city"))
+        await Assert.That(rows.Texts("upper_city"))
             .IsEquivalentTo(["MOSCOW", "PARIS"], CollectionOrdering.Matching);
         await Assert.That(rows.Ints("count"))
             .IsEquivalentTo([2, 1], CollectionOrdering.Matching);
@@ -533,7 +617,7 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
             Source = source,
             Select =
             [
-                "Lower(name)".As("name"),
+                "Lower(name)".As("lower_name"),
                 "COUNT()".As("count")
             ],
             GroupBy = [Expr("Lower(name)")],
@@ -544,10 +628,43 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
         var rows = await GetRowsAsync(query);
 
         // Assert
-        await Assert.That(rows.Texts("name"))
+        await Assert.That(rows.Texts("lower_name"))
             .IsEquivalentTo(["alice", "bob"], CollectionOrdering.Matching);
         await Assert.That(rows.Ints("count"))
             .IsEquivalentTo([1, 2], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query ORDER BY выражение от GROUP BY поля сейчас отклоняется")]
+    public async Task Order_by_expression_over_group_by_field_is_rejected()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [new InlineField("category", DataType.Text)],
+            [
+                ["'a'"],
+                ["'A'"],
+                ["'b'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "category".As("category"),
+                "COUNT()".As("count")
+            ],
+            GroupBy = [Expr("category")],
+            OrderBy = ["Upper(category)".Asc()]
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("ORDER BY expression должен быть агрегирован или совпадать с выражением из GROUP BY.");
     }
 
     [Test]

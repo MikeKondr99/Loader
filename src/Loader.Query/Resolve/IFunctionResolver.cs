@@ -5,5 +5,5 @@ namespace Loader.Query.Resolve;
 /// </summary>
 public interface IFunctionResolver
 {
-    FunctionResolution? Resolve(FunctionSignature signature);
+    FunctionResolutionResult Resolve(FunctionSignature signature);
 }

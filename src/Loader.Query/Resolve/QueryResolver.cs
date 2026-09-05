@@ -18,31 +18,42 @@ public sealed class QueryResolver
         IFunctionResolver functions,
         ExpressionResolutionContext? expressionContext = null)
     {
-        var context = new ResolutionContext
+        var errors = new List<LangError>();
+        var expressionResolutionContext = expressionContext ?? ExpressionResolutionContext.Empty;
+        var sourceContext = new ResolutionContext
         {
             Source = query.Source,
+            Fields = query.Source.Fields.ToList(),
             Functions = functions,
-            ExpressionContext = expressionContext ?? ExpressionResolutionContext.Empty,
-            Errors = []
+            ExpressionContext = expressionResolutionContext,
+            Errors = errors
+        };
+        var selectContext = new ResolutionContext
+        {
+            Source = query.Source,
+            Fields = query.Source.Fields.ToList(),
+            Functions = functions,
+            ExpressionContext = expressionResolutionContext,
+            Errors = errors
         };
 
-        var select = ResolveSelect(query, context);
-        var where = query.Where is null ? null : expressionResolver.Resolve(query.Where, context);
-        var groupBy = ResolveExpressions(query.GroupBy, context);
-        var orderBy = ResolveOrderBy(query, context);
+        var select = ResolveSelect(query, selectContext);
+        var where = query.Where is null ? null : expressionResolver.Resolve(query.Where, selectContext);
+        var groupBy = ResolveExpressions(query.GroupBy, selectContext);
+        var orderBy = ResolveOrderBy(query, selectContext);
         var aggregationState = AggregationValidationState.Create(select, groupBy, orderBy);
 
-        ValidateLimit(query, context);
-        ValidateWhere(where, context);
-        ValidateSelect(query, select, aggregationState, context);
-        ValidateSelectAliases(query, context);
-        ValidateGroupBy(groupBy, context);
-        ValidateOrderBy(orderBy, aggregationState, context);
-        context.Errors.AddRange(context.ExpressionContext.Errors);
+        ValidateLimit(query, sourceContext);
+        ValidateWhere(where, sourceContext);
+        ValidateSelect(query, select, aggregationState, sourceContext);
+        ValidateSelectAliases(query, sourceContext);
+        ValidateGroupBy(groupBy, sourceContext);
+        ValidateOrderBy(orderBy, aggregationState, sourceContext);
+        errors.AddRange(expressionResolutionContext.Errors);
 
-        if (context.Errors.Count > 0)
+        if (errors.Count > 0)
         {
-            return ResolveResult<ResolvedQuery>.Failure(context.Errors);
+            return ResolveResult<ResolvedQuery>.Failure(errors);
         }
 
         var outputFields = select.Count == 0
@@ -73,7 +84,7 @@ public sealed class QueryResolver
                 continue;
             }
 
-            select.Add(new ResolvedSelectItem
+            var selectItem = new ResolvedSelectItem
             {
                 Alias = item.Alias,
                 ColumnName = $"column{ordinal + 1}",
@@ -86,9 +97,13 @@ public sealed class QueryResolver
                     {
                         DataType = resolvedExpression.Type.DataType,
                         CanBeNull = resolvedExpression.Type.CanBeNull
-                    }
+                    },
+                    Aggregated = resolvedExpression.Type.Aggregated
                 }
-            });
+            };
+
+            select.Add(selectItem);
+            AddOrReplaceField(context, item.Alias, resolvedExpression.Type, select.Count);
         }
 
         return select;
@@ -287,6 +302,31 @@ public sealed class QueryResolver
         return !expression.Type.Aggregated && !expression.Type.IsConstant;
     }
 
+    private static void AddOrReplaceField(
+        ResolutionContext context,
+        string name,
+        ExprType type,
+        int outputOrdinal)
+    {
+        var existingIndex = context.Fields.FindIndex(existing => existing.Alias == name);
+        if (existingIndex >= 0)
+        {
+            context.Fields.RemoveAt(existingIndex);
+        }
+
+        context.Fields.Insert(0, new Field
+        {
+            Alias = name,
+            Template = QueryTemplate.Text($"`column{outputOrdinal.ToString(System.Globalization.CultureInfo.InvariantCulture)}`"),
+            Type = new FieldType
+            {
+                DataType = type.DataType,
+                CanBeNull = type.CanBeNull
+            },
+            Aggregated = type.Aggregated
+        });
+    }
+
     private static void ValidateLimit(QueryModel query, ResolutionContext context)
     {
         if (query.Limit is not 0)
@@ -328,12 +368,42 @@ public sealed class QueryResolver
                 select.Any(static item => item.Expression.Type.Aggregated) ||
                 orderBy.Any(static item => item.Expression.Type.Aggregated),
                 groupBy.Count > 0,
-                groupBy.Select(static expression => expression.Expression.Hash).ToHashSet());
+                GroupByHashes(select, groupBy));
         }
 
         public bool ContainsGroupByExpression(ResolvedExpression expression)
         {
             return groupByHashes.Contains(expression.Expression.Hash);
+        }
+
+        private static HashSet<int> GroupByHashes(
+            IReadOnlyList<ResolvedSelectItem> select,
+            IReadOnlyList<ResolvedExpression> groupBy)
+        {
+            // Сначала фиксируем ровно то, что пользователь написал в GROUP BY.
+            var hashes = groupBy.Select(static expression => expression.Expression.Hash).ToHashSet();
+
+            foreach (var item in select)
+            {
+                var expressionHash = item.Expression.Expression.Hash;
+                var aliasHash = new NameExpr(item.Alias).Hash;
+
+                // Если GROUP BY содержит простое поле SELECT item-а, то его alias тоже считается сгруппированным:
+                // LOAD cat AS cat2 GROUP BY cat разрешает дальнейшие проверки по cat2.
+                if (item.Expression.Expression is NameExpr && hashes.Contains(expressionHash))
+                {
+                    hashes.Add(aliasHash);
+                }
+
+                // Если GROUP BY содержит alias SELECT item-а, то исходное выражение тоже считается сгруппированным:
+                // LOAD cat AS cat2 GROUP BY cat2 разрешает дальнейшие проверки по cat.
+                if (hashes.Contains(aliasHash))
+                {
+                    hashes.Add(expressionHash);
+                }
+            }
+
+            return hashes;
         }
     }
 }
