@@ -635,6 +635,39 @@ public sealed class QueryEdgeCaseExecutionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
+    [DisplayName("Query ORDER BY выражение от GROUP BY поля сейчас отклоняется")]
+    public async Task Order_by_expression_over_group_by_field_is_rejected()
+    {
+        // Arrange
+        var source = InlineQueryArrange.Source(
+            [new InlineField("category", DataType.Text)],
+            [
+                ["'a'"],
+                ["'A'"],
+                ["'b'"]
+            ]);
+        var query = new Query.Models.Query
+        {
+            Source = source,
+            Select =
+            [
+                "category".As("category"),
+                "COUNT()".As("count")
+            ],
+            GroupBy = [Expr("category")],
+            OrderBy = ["Upper(category)".Asc()]
+        };
+
+        // Act
+        var act = async () => await GetRowsAsync(query);
+
+        // Assert
+        await Assert.That(act)
+            .ThrowsExactly<InvalidOperationException>()
+            .WithMessage("ORDER BY expression должен быть агрегирован или совпадать с выражением из GROUP BY.");
+    }
+
+    [Test]
     [DisplayName("Query применяет string functions в WHERE")]
     public async Task Where_with_string_functions()
     {

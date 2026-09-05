@@ -368,12 +368,42 @@ public sealed class QueryResolver
                 select.Any(static item => item.Expression.Type.Aggregated) ||
                 orderBy.Any(static item => item.Expression.Type.Aggregated),
                 groupBy.Count > 0,
-                groupBy.Select(static expression => expression.Expression.Hash).ToHashSet());
+                GroupByHashes(select, groupBy));
         }
 
         public bool ContainsGroupByExpression(ResolvedExpression expression)
         {
             return groupByHashes.Contains(expression.Expression.Hash);
+        }
+
+        private static HashSet<int> GroupByHashes(
+            IReadOnlyList<ResolvedSelectItem> select,
+            IReadOnlyList<ResolvedExpression> groupBy)
+        {
+            // Сначала фиксируем ровно то, что пользователь написал в GROUP BY.
+            var hashes = groupBy.Select(static expression => expression.Expression.Hash).ToHashSet();
+
+            foreach (var item in select)
+            {
+                var expressionHash = item.Expression.Expression.Hash;
+                var aliasHash = new NameExpr(item.Alias).Hash;
+
+                // Если GROUP BY содержит простое поле SELECT item-а, то его alias тоже считается сгруппированным:
+                // LOAD cat AS cat2 GROUP BY cat разрешает дальнейшие проверки по cat2.
+                if (item.Expression.Expression is NameExpr && hashes.Contains(expressionHash))
+                {
+                    hashes.Add(aliasHash);
+                }
+
+                // Если GROUP BY содержит alias SELECT item-а, то исходное выражение тоже считается сгруппированным:
+                // LOAD cat AS cat2 GROUP BY cat2 разрешает дальнейшие проверки по cat.
+                if (hashes.Contains(aliasHash))
+                {
+                    hashes.Add(expressionHash);
+                }
+            }
+
+            return hashes;
         }
     }
 }
