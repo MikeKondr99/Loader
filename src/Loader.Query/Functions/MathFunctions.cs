@@ -1,4 +1,5 @@
 using Loader.Query.Models;
+using Loader.Query.Resolve;
 
 namespace Loader.Query.Functions;
 
@@ -76,12 +77,12 @@ public sealed class MathFunctions : FunctionDescriptor
 
         Function("E")
             .Doc("Возвращает математическую константу e")
-            .Returns(DataType.Number)
+            .ReturnsNotNull(DataType.Number, ConstPropagation.AlwaysTrue)
             .Template("2.718281828459045");
 
         Function("Pi")
             .Doc("Возвращает математическую константу pi")
-            .Returns(DataType.Number)
+            .ReturnsNotNull(DataType.Number, ConstPropagation.AlwaysTrue)
             .Template("3.141592653589793");
     }
 }

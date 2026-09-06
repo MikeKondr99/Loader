@@ -10,6 +10,8 @@ public sealed record ResolutionContext
 {
     public required QuerySource Source { get; init; }
 
+    public List<Field> Fields { get; init; } = [];
+
     public required IFunctionResolver Functions { get; init; }
 
     public ExpressionResolutionContext ExpressionContext { get; init; } = ExpressionResolutionContext.Empty;

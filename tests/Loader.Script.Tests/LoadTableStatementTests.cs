@@ -32,8 +32,8 @@ public sealed class LoadTableStatementTests
 
             final_names:
             LOAD
-                Text(Int(id)) AS id,
-                [upper-name] AS name
+                Text(Int(id)) AS text_id,
+                [upper-name] AS upper_name
             FROM raw_names
             WHERE name != 'Bob'
             ORDER BY id DESC;
@@ -47,7 +47,7 @@ public sealed class LoadTableStatementTests
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             database,
             result[1],
-            ["id", "name"],
+            ["text_id", "upper_name"],
             [
                 ["3", "CHARLIE"],
                 ["1", "ALICE"]
@@ -146,8 +146,8 @@ public sealed class LoadTableStatementTests
 
             final_names:
             LOAD
-                Text(Int(id)) AS id,
-                Upper(name) AS name
+                Text(Int(id)) AS text_id,
+                Upper(name) AS upper_name
             FROM raw_names
             WHERE name != 'Bob'
             ORDER BY id DESC;
@@ -158,7 +158,7 @@ public sealed class LoadTableStatementTests
         await ScriptIntegrationAssert.AssertFinalTableAsync(
             database,
             execution.Tables[0],
-            ["id", "name"],
+            ["text_id", "upper_name"],
             [
                 ["3", "CHARLIE"],
                 ["1", "ALICE"]

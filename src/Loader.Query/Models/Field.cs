@@ -12,4 +12,8 @@ public sealed record Field
     public required ITemplate Template { get; init; }
 
     public required FieldType Type { get; init; }
+
+    public bool Aggregated { get; init; }
+
+    public bool IsConstant { get; init; }
 }

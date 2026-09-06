@@ -61,7 +61,7 @@ public sealed class ClickHouseQueryCompilerTests
             "    COALESCE(SUM(stage.amount), 0) AS `column2`",
             "FROM `tmp_orders` AS stage",
             "WHERE (stage.amount > toFloat64(0))",
-            "GROUP BY stage.city",
+            "GROUP BY `column1`",
             "ORDER BY COALESCE(SUM(stage.amount), 0) DESC",
             "LIMIT 10",
             "OFFSET 5"));
