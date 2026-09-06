@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Globalization;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Decorators;
 using Loader.Core.Models;
 using Loader.Core.Providers;
@@ -54,16 +55,16 @@ public abstract class ClickHouseExpressionTestBase
 
         if (IsFloating(value) || IsFloating(expected))
         {
-            var actual = Convert.ToDouble(value, CultureInfo.InvariantCulture);
-            var expectedDouble = Convert.ToDouble(expected, CultureInfo.InvariantCulture);
+            var actual = ToDouble(value);
+            var expectedDouble = ToDouble(expected);
             await Assert.That(actual).IsEqualTo(expectedDouble).Within(0.000001);
             return;
         }
 
         if (IsNumber(value) && IsNumber(expected))
         {
-            await Assert.That(Convert.ToDecimal(value, CultureInfo.InvariantCulture))
-                .IsEqualTo(Convert.ToDecimal(expected, CultureInfo.InvariantCulture));
+            await Assert.That(ToDecimal(value))
+                .IsEqualTo(ToDecimal(expected));
             return;
         }
 
@@ -152,12 +153,26 @@ public abstract class ClickHouseExpressionTestBase
 
     private static bool IsNumber(object? value)
     {
-        return value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal;
+        return value is byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal or ClickHouseDecimal;
     }
 
     private static bool IsFloating(object? value)
     {
         return value is float or double;
+    }
+
+    private static double ToDouble(object value)
+    {
+        return value is ClickHouseDecimal decimalValue
+            ? Convert.ToDouble(decimalValue.ToDecimal(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
+            : Convert.ToDouble(value, CultureInfo.InvariantCulture);
+    }
+
+    private static decimal ToDecimal(object value)
+    {
+        return value is ClickHouseDecimal decimalValue
+            ? decimalValue.ToDecimal(CultureInfo.InvariantCulture)
+            : Convert.ToDecimal(value, CultureInfo.InvariantCulture);
     }
 
     private static string CompileExpression(string expressionText)
@@ -171,7 +186,7 @@ public abstract class ClickHouseExpressionTestBase
                 Alias = "stage",
                 Fields = []
             },
-            Functions = ClickHouseFunctions.CreateResolver(),
+            Functions = TestClickHouseFunctions.CreateResolver(),
             Errors = []
         };
         var resolved = new ExpressionResolver().Resolve(expression, context);
@@ -185,7 +200,7 @@ public abstract class ClickHouseExpressionTestBase
 
     private static CompiledQuery CompileQuery(Query.Models.Query query)
     {
-        var result = new QueryResolver().Resolve(query, ClickHouseFunctions.CreateResolver());
+        var result = new QueryResolver().Resolve(query, TestClickHouseFunctions.CreateResolver());
         if (!result.IsSuccess)
         {
             throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors.Select(error => error.Message)));

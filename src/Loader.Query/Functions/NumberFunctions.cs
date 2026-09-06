@@ -118,6 +118,6 @@ public sealed class NumberFunctions : FunctionDescriptor
             .Doc("Возвращает дробную часть числа")
             .Arg("input", DataType.Number)
             .Returns(DataType.Number)
-            .Template($"MOD({0}, 1)");
+            .Template($"({0} - trunc({0}))");
     }
 }

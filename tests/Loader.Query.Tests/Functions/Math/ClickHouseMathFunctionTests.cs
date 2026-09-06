@@ -13,6 +13,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     [Arguments("2 + 2", 4)]
     [Arguments("1_000 + 2_000", 3000)]
     [Arguments("2.5 + 3.5", 6.0)]
+    [Arguments("TestDec(2.5, 18, 2) + TestDec(3.5, 18, 2)", 6.0)]
+    [Arguments("TestDec(2.5, 18, 2) + 3.5", 6.0)]
+    [Arguments("2.5 + TestDec(3.5, 18, 2)", 6.0)]
     [Arguments("1_000.25 + 2_000.75", 3001.0)]
     [Arguments("2.5 + 4", 6.5)]
     [Arguments("Type(3 + 3)", "int!")]
@@ -26,6 +29,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     [Test]
     [Arguments("3 - 8", -5)]
     [Arguments("3.0 - 8.5", -5.5)]
+    [Arguments("TestDec(3.0, 18, 2) - TestDec(8.5, 18, 2)", -5.5)]
+    [Arguments("TestDec(3.0, 18, 2) - 8.5", -5.5)]
+    [Arguments("3.0 - TestDec(8.5, 18, 2)", -5.5)]
     public Task Subtract(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -34,6 +40,7 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     [Test]
     [Arguments("-4", -4)]
     [Arguments("-3.0", -3.0)]
+    [Arguments("-TestDec(3.0, 18, 2)", -3.0)]
     [Arguments("-0.0", 0.0)]
     [Arguments("-0", 0)]
     public Task Unary_minus(string expression, object? expected)
@@ -43,6 +50,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("-4.0 * 8.0", -32.0)]
+    [Arguments("TestDec(-4.0, 18, 2) * TestDec(8.0, 18, 2)", -32.0)]
+    [Arguments("TestDec(-4.0, 18, 2) * 8.0", -32.0)]
+    [Arguments("-4.0 * TestDec(8.0, 18, 2)", -32.0)]
     [Arguments("-8 * -3", 24)]
     public Task Multiply(string expression, object? expected)
     {
@@ -62,6 +72,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     [Arguments("If((10 / 3) > 3.4, 1, 0)", 0)]
     [Arguments("If((-5 / 2) > -2.5, 1, 0)", 0)]
     [Arguments("10.0 / 4.0", 2.5)]
+    [Arguments("TestDec(10.0, 18, 2) / TestDec(4.0, 18, 2)", 2.5)]
+    [Arguments("TestDec(10.0, 18, 2) / 4.0", 2.5)]
+    [Arguments("10.0 / TestDec(4.0, 18, 2)", 2.5)]
     [Arguments("1 / 0", null)]
     [Arguments("1.0 / 0.0", null)]
     [Arguments("If((1 / 0) > 1, 1, 0)", 0)]
@@ -76,6 +89,9 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Div(10, 6)", 1)]
     [Arguments("Div(7, 2)", 3)]
     [Arguments("Div(7.1, 2.3)", 3)]
+    [Arguments("Div(TestDec(7.1, 18, 2), TestDec(2.3, 18, 2))", 3)]
+    [Arguments("Div(TestDec(7.1, 18, 2), 2.3)", 3)]
+    [Arguments("Div(7.1, TestDec(2.3, 18, 2))", 3)]
     [Arguments("Div(7.1, 2)", 3)]
     [Arguments("Div(7, 2.3)", 3)]
     [Arguments("Div(9, 3)", 3)]
@@ -109,9 +125,15 @@ public sealed class ClickHouseMathFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Pow(2.0, 3.0)", 8.0)]
+    [Arguments("Pow(TestDec(2.0, 18, 2), TestDec(3.0, 18, 2))", 8.0)]
+    [Arguments("Pow(TestDec(2.0, 18, 2), 3.0)", 8.0)]
+    [Arguments("Pow(2.0, TestDec(3.0, 18, 2))", 8.0)]
     [Arguments("Pow(4.0, 0.5)", 2.0)]
     [Arguments("Pow(2.0, -1.0)", 0.5)]
     [Arguments("2.0 ^ 3.0", 8.0)]
+    [Arguments("TestDec(2.0, 18, 2) ^ TestDec(3.0, 18, 2)", 8.0)]
+    [Arguments("TestDec(2.0, 18, 2) ^ 3.0", 8.0)]
+    [Arguments("2.0 ^ TestDec(3.0, 18, 2)", 8.0)]
     [Arguments("Pow(null, 2.0)", null)]
     [Arguments("Pow(2.0, null)", null)]
     public Task Power(string expression, object? expected)

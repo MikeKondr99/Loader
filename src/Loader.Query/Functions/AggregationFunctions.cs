@@ -115,7 +115,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
             .Arg("value", DataType.Number)
             .ReturnsAggregated(DataType.Number)
             .CustomNullPropagation(_ => true)
-            .Template($"quantileExactInclusive(0.5)({0})");
+            .Template($"quantileExactInclusive(0.5)(CAST({0} AS Nullable(Float64)))");
 
         foreach (var type in Numbers())
         {
@@ -139,7 +139,7 @@ public sealed class AggregationFunctions : FunctionDescriptor
                         return QueryTemplate.Text("NULL");
                     }
 
-                    return QueryTemplate.Create($"quantileExactInclusive({1})({0})");
+                    return QueryTemplate.Create($"quantileExactInclusive({1})(CAST({0} AS Nullable(Float64)))");
                 });
         }
 

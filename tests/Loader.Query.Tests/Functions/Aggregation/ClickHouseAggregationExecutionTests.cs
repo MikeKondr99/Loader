@@ -1,4 +1,5 @@
 using System.Globalization;
+using ClickHouse.Client.Numerics;
 using Loader.Lang.Expressions;
 using Loader.Query.Models;
 using Loader.Query.Tests.Infrastructure;
@@ -627,6 +628,46 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
     }
 
     [Test]
+    [Arguments("SUM(TestDec(x, 18, 2))", 10.0)]
+    [Arguments("AVG(TestDec(x, 18, 2))", 2.5)]
+    [Arguments("STDDEV(TestDec(x, 18, 2))", 1.118033988749895)]
+    [Arguments("MEDIAN(TestDec(x, 18, 2))", 2.5)]
+    [Arguments("FRACTILE(TestDec(x, 18, 2), 0.25)", 1.75)]
+    [DisplayName("Aggregate num-функции принимают Decimal input")]
+    public async Task Number_aggregate_functions_accept_decimal_input(string expression, double expected)
+    {
+        double?[] values = [1, 2, 3, 4];
+        var inline = CreateSingleColumnInline(DataType.Number, ToExpressions(values));
+        var query = CreateSingleColumnQuery(inline, expression);
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, expected);
+    }
+
+    [Test]
+    [DisplayName("CORREL принимает Decimal input")]
+    public async Task Correl_accepts_decimal_input()
+    {
+        var inline = InlineQueryArrange.Source(
+            [
+                new InlineField("x", DataType.Number),
+                new InlineField("y", DataType.Number)
+            ],
+            [
+                ["1.0", "2.0"],
+                ["2.0", "4.0"],
+                ["3.0", "6.0"],
+                ["4.0", "8.0"]
+            ]);
+        var query = CreateSingleColumnQuery(inline, "CORREL(TestDec(x, 18, 2), TestDec(y, 18, 2))");
+
+        var result = await GetScalarAsync(query);
+
+        await AssertNumberAsync(result, 1);
+    }
+
+    [Test]
     [DisplayName("FRACTILE(int, p): работает для integer значений")]
     public async Task Fractile_integer()
     {
@@ -744,7 +785,11 @@ public sealed class ClickHouseAggregationExecutionTests : ClickHouseExpressionTe
 
     private static async Task AssertNumberAsync(object? actual, double expected)
     {
-        await Assert.That(Convert.ToDouble(actual, CultureInfo.InvariantCulture))
+        var value = actual is ClickHouseDecimal decimalValue
+            ? Convert.ToDouble(decimalValue.ToDecimal(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture)
+            : Convert.ToDouble(actual, CultureInfo.InvariantCulture);
+
+        await Assert.That(value)
             .IsEqualTo(expected)
             .Within(0.000001);
     }

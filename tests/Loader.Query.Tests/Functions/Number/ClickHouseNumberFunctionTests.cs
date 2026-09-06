@@ -11,8 +11,10 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Floor(1.2)", 1.0)]
+    [Arguments("Floor(TestDec(1.2, 18, 2))", 1.0)]
     [Arguments("Floor(1.8)", 1.0)]
     [Arguments("Floor(4.7, 2.0)", 4.0)]
+    [Arguments("Floor(TestDec(4.7, 18, 2), TestDec(2.0, 18, 2))", 4.0)]
     [Arguments("Floor(2.4)", 2.0)]
     [Arguments("Floor(4.2)", 4.0)]
     [Arguments("Floor(3.88, .1)", 3.8)]
@@ -20,6 +22,7 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Floor(1.1, 1.0)", 1.0)]
     [Arguments("Floor(4.7, .5)", 4.5)]
     [Arguments("Floor(1.1, 1.0, 0.5)", 0.5)]
+    [Arguments("Floor(TestDec(1.1, 18, 2), TestDec(1.0, 18, 2), TestDec(0.5, 18, 2))", 0.5)]
     [Arguments("Floor(-150.0, 50.0, 25.0)", -175.0)]
     public Task Floor(string expression, object? expected)
     {
@@ -28,10 +31,13 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Ceil(1.2)", 2.0)]
+    [Arguments("Ceil(TestDec(1.2, 18, 2))", 2.0)]
     [Arguments("Ceil(1.8)", 2.0)]
     [Arguments("Ceil(4.7, .5)", 5.0)]
+    [Arguments("Ceil(TestDec(4.7, 18, 2), TestDec(.5, 18, 2))", 5.0)]
     [Arguments("Ceil(4.7, 2.0)", 6.0)]
     [Arguments("Ceil(1.1, 1.0, -0.01)", 1.99)]
+    [Arguments("Ceil(TestDec(1.1, 18, 2), TestDec(1.0, 18, 2), TestDec(-0.01, 18, 2))", 1.99)]
     public Task Ceil(string expression, object? expected)
     {
         return AssertExpressionAsync(expression, expected);
@@ -39,16 +45,19 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Round(1.2)", 1.0)]
+    [Arguments("Round(TestDec(1.2, 18, 2))", 1.0)]
     [Arguments("Round(1.8)", 2.0)]
     [Arguments("Round(0.5)", 1.0)]
     [Arguments("Round(0.7)", 1.0)]
     [Arguments("Round(4.7, 2.0)", 4.0)]
+    [Arguments("Round(TestDec(4.7, 18, 2), TestDec(2.0, 18, 2))", 4.0)]
     [Arguments("Round(5.3, 2.0)", 6.0)]
     [Arguments("Round(4.7, .5)", 4.5)]
     [Arguments("Round(5.3, .5)", 5.5)]
     [Arguments("Round(2.5, 1.0)", 3.0)]
     [Arguments("Round(2.0, 4.0)", 4.0)]
     [Arguments("Round(1.1, 1.0, .5)", 1.5)]
+    [Arguments("Round(TestDec(1.1, 18, 2), TestDec(1.0, 18, 2), TestDec(.5, 18, 2))", 1.5)]
     [Arguments("Round(2.0, 4.0, .0)", 4.0)]
     [Arguments("Round(100.0, 1.0, 200.0)", 100.0)]
     [Arguments("Round(-130.0, 50.0, 25.0)", -125.0)]
@@ -87,6 +96,7 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
 
     [Test]
     [Arguments("Abs(1.5)", 1.5)]
+    [Arguments("Abs(TestDec(1.5, 18, 2))", 1.5)]
     [Arguments("Abs(.0 - 1.5)", 1.5)]
     [Arguments("Abs(3)", 3)]
     [Arguments("Abs(-3)", 3)]
@@ -118,6 +128,7 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Sign(-2)", -1)]
     [Arguments("Sign(0.0)", 0)]
     [Arguments("Sign(2.1)", 1)]
+    [Arguments("Sign(TestDec(2.1, 18, 2))", 1)]
     [Arguments("(-2.1).Sign()", -1)]
     [Arguments("If(Sign(2.1) > 1.4, 1, 0)", 0)]
     [Arguments("Sign(null)", null)]
@@ -130,6 +141,7 @@ public sealed class ClickHouseNumberFunctionTests : ClickHouseExpressionTestBase
     [Arguments("Frac(0.0)", 0.0)]
     [Arguments("Frac(10.0)", 0.0)]
     [Arguments("Frac(1.123)", 0.123)]
+    [Arguments("Frac(TestDec(1.123, 18, 3))", 0.123)]
     [Arguments("Frac(-2.123456789)", -0.123456789)]
     public Task Frac(string expression, object? expected)
     {
