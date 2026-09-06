@@ -98,7 +98,8 @@ public sealed class QueryResolver
                         DataType = resolvedExpression.Type.DataType,
                         CanBeNull = resolvedExpression.Type.CanBeNull
                     },
-                    Aggregated = resolvedExpression.Type.Aggregated
+                    Aggregated = resolvedExpression.Type.Aggregated,
+                    IsConstant = resolvedExpression.Type.IsConstant
                 }
             };
 
@@ -323,7 +324,8 @@ public sealed class QueryResolver
                 DataType = type.DataType,
                 CanBeNull = type.CanBeNull
             },
-            Aggregated = type.Aggregated
+            Aggregated = type.Aggregated,
+            IsConstant = type.IsConstant
         });
     }
 

@@ -60,7 +60,7 @@ public sealed class QueryAggregationResolverTests
 
         await Assert.That(result.IsSuccess).IsFalse();
         await Assert.That(result.Errors.Select(static error => error.Message).ToArray())
-            .Contains("Аргументы функции '+' должны быть либо все агрегатными, нет.");
+            .Contains("При наличии агрегатного аргумента остальные аргументы функции '+' должны быть агрегатными или константами.");
     }
 
     private static ResolveResult<ResolvedQuery> Resolve(Query.Models.Query query)

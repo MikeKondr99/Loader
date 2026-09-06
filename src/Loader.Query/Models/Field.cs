@@ -14,4 +14,6 @@ public sealed record Field
     public required FieldType Type { get; init; }
 
     public bool Aggregated { get; init; }
+
+    public bool IsConstant { get; init; }
 }

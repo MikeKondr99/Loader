@@ -42,6 +42,7 @@ public sealed class ExpressionResolver
                 DataType = field.Type.DataType,
                 CanBeNull = field.Type.CanBeNull,
                 Aggregated = field.Aggregated,
+                IsConstant = field.IsConstant
             },
         };
     }

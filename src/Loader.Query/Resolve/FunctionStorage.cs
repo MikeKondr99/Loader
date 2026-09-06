@@ -26,7 +26,7 @@ public sealed class FunctionStorage : IFunctionResolver
         var returnsAggregated = AggPropagationValue(signature.ArgumentTypes);
         if (returnsAggregated is null)
         {
-            return FunctionResolutionResult.Failure($"Аргументы функции '{signature.Name}' должны быть либо все агрегатными, нет.");
+            return FunctionResolutionResult.Failure($"При наличии агрегатного аргумента остальные аргументы функции '{signature.Name}' должны быть агрегатными или константами.");
         }
 
         var skippedNestedAggregate = false;

@@ -14,7 +14,7 @@ public sealed class ReflectionFunctions : FunctionDescriptor
 
         Function("DbVersion")
             .Doc("Возвращает версию текущей используемой внутри базы данных")
-            .Returns(DataType.Text)
+            .ReturnsNotNull(DataType.Text, ConstPropagation.AlwaysTrue)
             .Template("version()");
 
         Method("RawType")

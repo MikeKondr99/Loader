@@ -307,6 +307,79 @@ public sealed class QuerySelectAliasExecutionTests : ClickHouseExpressionTestBas
     }
 
     [Test]
+    [DisplayName("Query выражение может использовать агрегатный alias и literal constant alias")]
+    public async Task Expression_can_use_aggregate_alias_and_literal_constant_alias()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CategoriesSource(),
+            Select =
+            [
+                "category".As("category"),
+                "SUM(amount)".As("total"),
+                "1".As("one"),
+                "total + one".As("total_plus_one")
+            ],
+            GroupBy = [Expr("category")],
+            OrderBy = ["category".Asc()]
+        };
+
+        var rows = await GetRowsAsync(query);
+
+        await Assert.That(rows.Numbers("total_plus_one"))
+            .IsEquivalentTo([31.0, 71.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query выражение может использовать агрегатный alias и вычисленный constant alias")]
+    public async Task Expression_can_use_aggregate_alias_and_computed_constant_alias()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CategoriesSource(),
+            Select =
+            [
+                "category".As("category"),
+                "SUM(amount)".As("total"),
+                "1 + 1".As("two"),
+                "total + two".As("total_plus_two")
+            ],
+            GroupBy = [Expr("category")],
+            OrderBy = ["category".Asc()]
+        };
+
+        var rows = await GetRowsAsync(query);
+
+        await Assert.That(rows.Numbers("total_plus_two"))
+            .IsEquivalentTo([32.0, 72.0], CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("Query выражение может использовать агрегатный alias и function constant alias")]
+    public async Task Expression_can_use_aggregate_alias_and_function_constant_alias()
+    {
+        var query = new Query.Models.Query
+        {
+            Source = CategoriesSource(),
+            Select =
+            [
+                "category".As("category"),
+                "SUM(amount)".As("total"),
+                "Pi()".As("pi"),
+                "total + pi".As("total_plus_pi")
+            ],
+            GroupBy = [Expr("category")],
+            OrderBy = ["category".Asc()]
+        };
+
+        var rows = await GetRowsAsync(query);
+
+        var values = rows.Numbers("total_plus_pi");
+        await Assert.That(values[0]).IsEqualTo(33.141592653589793).Within(0.000001);
+        await Assert.That(values[1]).IsEqualTo(73.141592653589793).Within(0.000001);
+    }
+
+    [Test]
     [DisplayName("Query GROUP BY видит SELECT alias")]
     public async Task Group_by_can_use_select_alias()
     {

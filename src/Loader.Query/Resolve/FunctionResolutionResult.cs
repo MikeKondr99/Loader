@@ -5,9 +5,13 @@ namespace Loader.Query.Resolve;
 /// </summary>
 public sealed record FunctionResolutionResult
 {
-    public FunctionResolution? Resolution { get; init; }
+    private FunctionResolutionResult()
+    {
+    }
 
-    public FunctionResolutionError? Error { get; init; }
+    public FunctionResolution? Resolution { get; private init; }
+
+    public FunctionResolutionError? Error { get; private init; }
 
     public static FunctionResolutionResult Success(FunctionResolution resolution)
     {

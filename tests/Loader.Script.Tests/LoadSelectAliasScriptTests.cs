@@ -73,4 +73,34 @@ public sealed class LoadSelectAliasScriptTests
             "ORDER BY `column2` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
+
+    [Test]
+    [Arguments("Pi()")]
+    [Arguments("E()")]
+    [Arguments("DbName()")]
+    [Arguments("DbVersion()")]
+    [Arguments("Type(1)")]
+    [Arguments("RawType(1)")]
+    [DisplayName("Script LOAD использует const function вместе с агрегатом")]
+    public async Task Load_select_can_use_const_function_with_aggregate(string constExpression)
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            $$"""
+            result:
+            LOAD
+                COUNT() AS count,
+                {{constExpression}} AS func
+            FROM Inline(value; 1);
+            """);
+
+        await Assert.That(execution.Tables).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[0],
+            ["count", "func"],
+            [],
+            "WHERE 1 = 0");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
 }
