@@ -358,6 +358,41 @@ public sealed class LoadUnionStatementTests
     }
 
     [Test]
+    [Skip("Issue #51: Union currently wraps UInt64 values that do not fit Int64.")]
+    [DisplayName("Script Union не искажает UInt64 больше Int64.MaxValue при объединении с Int64")]
+    public async Task Execute_script_union_preserves_uint64_value_when_merged_with_int64()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            unsigned_source:
+            LOAD *
+            FROM Connect(name='container_ch')
+            SQL SELECT toUInt64('18446744073709551615') AS value;
+
+            signed_source:
+            LOAD *
+            FROM Connect(name='container_ch')
+            SQL SELECT toInt64(-1) AS value;
+
+            result:
+            LOAD *
+            FROM Union(unsigned_source, signed_source)
+            ORDER BY Text(value) DESC;
+            """);
+
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            execution.Tables[2],
+            ["value"],
+            [
+                new object?[] { ulong.MaxValue },
+                new object?[] { -1L }
+            ],
+            "ORDER BY toString(`column1`) DESC");
+    }
+
+    [Test]
     [DisplayName("Script Union допускает повтор одной и той же таблицы")]
     public async Task Execute_script_union_allows_same_table_more_than_once()
     {

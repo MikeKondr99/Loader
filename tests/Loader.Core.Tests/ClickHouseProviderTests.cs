@@ -318,6 +318,83 @@ public sealed class ClickHouseProviderTests
             ]);
     }
 
+    [Test]
+    [Skip("Variant(Int*, UInt*) пока приходит из ClickHouse как System.Object и не мапится в DataValueMapper.")]
+    [DisplayName("ClickHouse Variant Int UInt из UNION читается как Integer BigInteger без потери значения")]
+    public async Task Integer_variant_from_union_maps_to_big_integer_without_value_loss()
+    {
+        var expectedMax = BigInteger.Parse("18446744073709551615", CultureInfo.InvariantCulture);
+        await using var rawReader = await OpenReaderAsync(
+            """
+            SELECT value
+            FROM
+            (
+                SELECT toUInt64('18446744073709551615') AS value
+                UNION ALL
+                SELECT toInt64(-1) AS value
+            )
+            ORDER BY toString(value) DESC
+            """);
+        await using var reader = rawReader.Normalize();
+        var field = reader.DataSchema.Fields[0];
+
+        await Assert.That(field.DataType).IsEqualTo(DataType.Integer);
+        await Assert.That(field.ClrType).IsEqualTo(typeof(BigInteger));
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(expectedMax);
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(new BigInteger(-1));
+        await Assert.That(reader.Read()).IsFalse();
+    }
+
+    [Test]
+    [Skip("Variant(Int*, UInt*) пока приходит из ClickHouse как System.Object и не мапится в DataValueMapper.")]
+    [DisplayName("ClickHouse Variant Int UInt из If читается как Integer BigInteger без потери значения")]
+    public async Task Integer_variant_from_if_maps_to_big_integer_without_value_loss()
+    {
+        var expectedMax = BigInteger.Parse("18446744073709551615", CultureInfo.InvariantCulture);
+        await using var rawReader = await OpenReaderAsync(
+            """
+            SELECT if(number = 0, toUInt64('18446744073709551615'), toInt64(-1)) AS value
+            FROM numbers(2)
+            ORDER BY toString(value) DESC
+            """);
+        await using var reader = rawReader.Normalize();
+        var field = reader.DataSchema.Fields[0];
+
+        await Assert.That(field.DataType).IsEqualTo(DataType.Integer);
+        await Assert.That(field.ClrType).IsEqualTo(typeof(BigInteger));
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(expectedMax);
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(new BigInteger(-1));
+        await Assert.That(reader.Read()).IsFalse();
+    }
+
+    [Test]
+    [Skip("Variant(Int*, UInt*) пока приходит из ClickHouse как System.Object и не мапится в DataValueMapper.")]
+    [DisplayName("ClickHouse Variant Int UInt из CASE читается как Integer BigInteger без потери значения")]
+    public async Task Integer_variant_from_case_maps_to_big_integer_without_value_loss()
+    {
+        var expectedMax = BigInteger.Parse("18446744073709551615", CultureInfo.InvariantCulture);
+        await using var rawReader = await OpenReaderAsync(
+            """
+            SELECT CASE WHEN number = 0 THEN toUInt64('18446744073709551615') ELSE toInt64(-1) END AS value
+            FROM numbers(2)
+            ORDER BY toString(value) DESC
+            """);
+        await using var reader = rawReader.Normalize();
+        var field = reader.DataSchema.Fields[0];
+
+        await Assert.That(field.DataType).IsEqualTo(DataType.Integer);
+        await Assert.That(field.ClrType).IsEqualTo(typeof(BigInteger));
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(expectedMax);
+        await Assert.That(reader.Read()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo(new BigInteger(-1));
+        await Assert.That(reader.Read()).IsFalse();
+    }
+
     public static IEnumerable<(string SqlExpression, DataType ExpectedType, object Expected)> SqlValueCases()
     {
         yield return ("toString('example')", DataType.Text, "example");
