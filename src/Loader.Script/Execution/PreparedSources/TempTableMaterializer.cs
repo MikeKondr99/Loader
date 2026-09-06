@@ -139,7 +139,7 @@ public class TempTableMaterializer
                 new ClickHouseWriteOptions
                 {
                     TableName = tempTable,
-                    Engine = "Log"
+                    Engine = "MergeTree ORDER BY tuple()"
                 },
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);

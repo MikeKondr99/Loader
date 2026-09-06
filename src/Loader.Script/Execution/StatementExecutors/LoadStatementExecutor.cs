@@ -275,11 +275,11 @@ public class LoadStatementExecutor
             TableName = tableName,
             Engine = kind switch
             {
-                // Log не требует ORDER BY и подходит для stage/intermediate таблиц.
-                LoadClickHouseTableKind.Temp => "Log",
+                // Log запрещен в ClickHouse Cloud, поэтому используем минимальный MergeTree без ключа сортировки.
+                LoadClickHouseTableKind.Temp => "MergeTree ORDER BY tuple()",
 
-                // Пока стратегия MergeTree ORDER BY для пользовательских final tables не определена.
-                LoadClickHouseTableKind.Final => "Log",
+                // Полноценная стратегия ORDER BY для пользовательских final tables пока не определена.
+                LoadClickHouseTableKind.Final => "MergeTree ORDER BY tuple()",
 
                 // ApplyMap читает mapping через joinGetOrNull, поэтому нужна ClickHouse Join-таблица.
                 LoadClickHouseTableKind.Mapped => "Join(ANY, LEFT, `column1`)",

@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Data.Common;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -28,12 +30,12 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 });
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = null;
+    options.Limits.MaxRequestBodySize = PlaygroundFiles.MaxUploadBytes + PlaygroundFiles.MultipartOverheadBytes;
 });
 builder.Services.Configure<FormOptions>(options =>
 {
     options.ValueLengthLimit = int.MaxValue;
-    options.MultipartBodyLengthLimit = long.MaxValue;
+    options.MultipartBodyLengthLimit = PlaygroundFiles.MaxUploadBytes + PlaygroundFiles.MultipartOverheadBytes;
     options.MultipartHeadersLengthLimit = int.MaxValue;
 });
 builder.Services.AddSingleton<PlaygroundLastRunStore>();
@@ -41,19 +43,28 @@ builder.Services.AddSingleton<PlaygroundProgressHub>();
 
 var app = builder.Build();
 
+app.Use(static async (context, next) =>
+{
+    PlaygroundUser.GetOrCreate(context);
+    await next().ConfigureAwait(false);
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 Directory.CreateDirectory(PlaygroundFiles.RootPath);
 
-app.MapGet("/api/config", (IConfiguration configuration, IWebHostEnvironment environment) =>
+app.MapGet("/api/config", (HttpContext httpContext, IConfiguration configuration, IWebHostEnvironment environment) =>
 {
+    var user = PlaygroundUser.GetOrCreate(httpContext);
     var config = PlaygroundConfig.From(configuration, environment);
     return Results.Ok(new
     {
         Environment = environment.EnvironmentName,
+        UserId = user.Id,
         config.TargetConnectionString,
-        config.FileRoot,
+        FileRoot = PlaygroundFiles.GetUserRootPath(user.Id),
+        MaxUploadBytes = PlaygroundFiles.MaxUploadBytes,
         PixBi = new
         {
             config.PixBi.Enabled,
@@ -67,11 +78,15 @@ app.MapGet("/api/config", (IConfiguration configuration, IWebHostEnvironment env
     });
 });
 
-app.MapGet("/api/files", () => Results.Ok(new
+app.MapGet("/api/files", (HttpContext httpContext) =>
 {
-    RootPath = PlaygroundFiles.RootPath,
-    Files = PlaygroundFiles.ListFiles()
-}));
+    var user = PlaygroundUser.GetOrCreate(httpContext);
+    return Results.Ok(new
+    {
+        RootPath = PlaygroundFiles.GetUserRootPath(user.Id),
+        Files = PlaygroundFiles.ListFiles(user.Id)
+    });
+});
 
 app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvironment environment, CancellationToken cancellationToken) =>
 {
@@ -123,8 +138,9 @@ app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvi
     });
 });
 
-app.MapPost("/api/files", async (HttpRequest request, CancellationToken cancellationToken) =>
+app.MapPost("/api/files", async (HttpContext httpContext, HttpRequest request, CancellationToken cancellationToken) =>
 {
+    var user = PlaygroundUser.GetOrCreate(httpContext);
     if (!request.HasFormContentType)
     {
         return Results.BadRequest(new { Error = "Expected multipart/form-data." });
@@ -137,20 +153,29 @@ app.MapPost("/api/files", async (HttpRequest request, CancellationToken cancella
         return Results.BadRequest(new { Error = "File is required." });
     }
 
-    var targetPath = PlaygroundFiles.ResolveSafeFilePath(file.FileName);
+    if (file.Length > PlaygroundFiles.MaxUploadBytes)
+    {
+        return Results.BadRequest(new
+        {
+            Error = $"File is too large. Max size is {PlaygroundFiles.MaxUploadBytes} bytes."
+        });
+    }
+
+    var targetPath = PlaygroundFiles.ResolveSafeFilePath(user.Id, file.FileName);
     await using var source = file.OpenReadStream();
     await using var target = File.Create(targetPath);
     await source.CopyToAsync(target, cancellationToken).ConfigureAwait(false);
     return Results.Ok(new
     {
         File = PlaygroundFiles.ToFileInfo(targetPath),
-        Files = PlaygroundFiles.ListFiles()
+        Files = PlaygroundFiles.ListFiles(user.Id)
     });
 });
 
-app.MapDelete("/api/files/{fileName}", (string fileName) =>
+app.MapDelete("/api/files/{fileName}", (HttpContext httpContext, string fileName) =>
 {
-    var path = PlaygroundFiles.ResolveSafeFilePath(fileName);
+    var user = PlaygroundUser.GetOrCreate(httpContext);
+    var path = PlaygroundFiles.ResolveSafeFilePath(user.Id, fileName);
     if (File.Exists(path))
     {
         File.Delete(path);
@@ -158,7 +183,7 @@ app.MapDelete("/api/files/{fileName}", (string fileName) =>
 
     return Results.Ok(new
     {
-        Files = PlaygroundFiles.ListFiles()
+        Files = PlaygroundFiles.ListFiles(user.Id)
     });
 });
 
@@ -181,9 +206,10 @@ app.MapPost("/api/parse", (ScriptRequest request) =>
     }));
 });
 
-app.MapGet("/api/last-run", (PlaygroundLastRunStore lastRunStore) =>
+app.MapGet("/api/last-run", (HttpContext httpContext, PlaygroundLastRunStore lastRunStore) =>
 {
-    var snapshot = lastRunStore.Get();
+    var user = PlaygroundUser.GetOrCreate(httpContext);
+    var snapshot = lastRunStore.Get(user.Id);
     return snapshot is null
         ? Results.NotFound(new { Error = "Успешный запуск еще не выполнялся." })
         : Results.Ok(PlaygroundResponse.Success(ToPlaygroundRunData(snapshot)));
@@ -213,6 +239,7 @@ app.MapGet("/api/progress/{runId}", async (
 });
 
 app.MapPost("/api/run", async (
+    HttpContext httpContext,
     ScriptRequest request,
     IConfiguration configuration,
     IWebHostEnvironment environment,
@@ -226,21 +253,32 @@ app.MapPost("/api/run", async (
         return Results.Ok(PlaygroundResponse.Fail("parse", ToPlaygroundError(parseError!)));
     }
 
+    var user = PlaygroundUser.GetOrCreate(httpContext);
     var config = PlaygroundConfig.From(configuration, environment);
+    var userFileRoot = PlaygroundFiles.GetUserRootPath(user.Id);
+    Directory.CreateDirectory(userFileRoot);
+
     var context = new ScriptContext
     {
-        FileStorage = new FileSystemSource(config.FileRoot),
+        FileStorage = new FileSystemSource(userFileRoot),
         TargetConnectionString = config.TargetConnectionString,
         ConnectionRegistry = config.CreateConnectionRegistry(),
         Logger = string.IsNullOrWhiteSpace(request.RunId)
             ? NullProgressLogger.Instance
             : new PlaygroundProgressLogger(progressHub, request.RunId),
-        Options = new ScriptContextOptions()
+        Options = new ScriptContextOptions
+        {
+            TempTablePrefix = user.TempTablePrefix,
+            FinalTablePrefix = user.FinalTablePrefix
+        }
     };
 
     var stopwatch = Stopwatch.StartNew();
     try
     {
+        lastRunStore.Clear(user.Id);
+        await DropUserTablesAsync(config.TargetConnectionString, user, cancellationToken).ConfigureAwait(false);
+
         var tables = await new ScriptExecutor()
             .ExecuteAsync(context, script!, cancellationToken)
             .ConfigureAwait(false);
@@ -251,7 +289,7 @@ app.MapPost("/api/run", async (
             config.TargetConnectionString,
             stopwatch.ElapsedMilliseconds,
             loadedTables);
-        lastRunStore.Set(snapshot);
+        lastRunStore.Set(user.Id, snapshot);
         return Results.Ok(PlaygroundResponse.Success(ToPlaygroundRunData(snapshot)));
     }
     catch (Exception exception) when (exception is not OperationCanceledException)
@@ -276,11 +314,13 @@ app.MapPost("/api/run", async (
 });
 
 app.MapGet("/api/last-run/tables/{index:int}/preview", async (
+    HttpContext httpContext,
     int index,
     PlaygroundLastRunStore lastRunStore,
     CancellationToken cancellationToken) =>
 {
-    var snapshot = lastRunStore.Get();
+    var user = PlaygroundUser.GetOrCreate(httpContext);
+    var snapshot = lastRunStore.Get(user.Id);
     if (snapshot is null)
     {
         return Results.NotFound(new { Error = "Успешный запуск еще не выполнялся." });
@@ -323,6 +363,64 @@ app.MapGet("/api/last-run/tables/{index:int}/preview", async (
 });
 
 app.Run();
+
+static async Task DropUserTablesAsync(
+    string connectionString,
+    PlaygroundUser user,
+    CancellationToken cancellationToken)
+{
+    var prefixes = new[] { user.FinalTablePrefix, user.TempTablePrefix };
+    var tableNames = new List<string>();
+    await using (var connection = new ClickHouseConnection(connectionString))
+    {
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = $"""
+                SELECT name
+                FROM system.tables
+                WHERE database = currentDatabase()
+                  AND (startsWith(name, {SqlStringLiteral(prefixes[0])})
+                       OR startsWith(name, {SqlStringLiteral(prefixes[1])}))
+                """;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            {
+                var tableName = reader.GetString(0);
+                if (prefixes.Any(prefix => tableName.StartsWith(prefix, StringComparison.Ordinal)))
+                {
+                    tableNames.Add(tableName);
+                }
+            }
+        }
+
+        foreach (var tableName in tableNames)
+        {
+            await using var dropCommand = connection.CreateCommand();
+            dropCommand.CommandText = $"DROP TABLE IF EXISTS {SqlIdentifier(tableName)}";
+            await dropCommand.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+}
+
+static string SqlIdentifier(string value)
+{
+    var builder = new StringBuilder(value.Length + 2);
+    builder.Append('`');
+    foreach (var character in value)
+    {
+        builder.Append(character == '`' ? "``" : character);
+    }
+
+    builder.Append('`');
+    return builder.ToString();
+}
+
+static string SqlStringLiteral(string value)
+{
+    return "'" + value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("'", "\\'", StringComparison.Ordinal) + "'";
+}
 
 static string BuildPreviewSql(LoadedTable table, int limit)
 {
@@ -496,21 +594,29 @@ internal sealed record PlaygroundFieldData(
 internal sealed class PlaygroundLastRunStore
 {
     private readonly object sync = new();
-    private PlaygroundRunSnapshot? snapshot;
+    private readonly Dictionary<string, PlaygroundRunSnapshot> snapshots = new(StringComparer.Ordinal);
 
-    public void Set(PlaygroundRunSnapshot value)
+    public void Set(string userId, PlaygroundRunSnapshot value)
     {
         lock (sync)
         {
-            snapshot = value;
+            snapshots[userId] = value;
         }
     }
 
-    public PlaygroundRunSnapshot? Get()
+    public PlaygroundRunSnapshot? Get(string userId)
     {
         lock (sync)
         {
-            return snapshot;
+            return snapshots.GetValueOrDefault(userId);
+        }
+    }
+
+    public void Clear(string userId)
+    {
+        lock (sync)
+        {
+            snapshots.Remove(userId);
         }
     }
 }
@@ -637,23 +743,105 @@ internal sealed record PlaygroundPixBiConfig(
     string? Password,
     int PageSize);
 
+internal sealed record PlaygroundUser(string Id)
+{
+    private const int HexLength = 12;
+    private const string CookieName = "loader_playground_user";
+    private static readonly TimeSpan CookieLifetime = TimeSpan.FromDays(30);
+
+    public string TempTablePrefix => $"lt_{Id}_";
+
+    public string FinalTablePrefix => $"lf_{Id}_";
+
+    public static PlaygroundUser GetOrCreate(HttpContext context)
+    {
+        if (context.Items.TryGetValue(typeof(PlaygroundUser), out var cached) &&
+            cached is PlaygroundUser user)
+        {
+            return user;
+        }
+
+        user = CreateFromRequest(context);
+        context.Items[typeof(PlaygroundUser)] = user;
+        return user;
+    }
+
+    public static bool IsValidId(string value)
+    {
+        return value.Length == HexLength && value.All(IsLowerHex);
+    }
+
+    private static PlaygroundUser CreateFromRequest(HttpContext context)
+    {
+        var hasCookie = context.Request.Cookies.TryGetValue(CookieName, out var cookieValue);
+        var userId = hasCookie && cookieValue is not null && IsValidId(cookieValue)
+            ? cookieValue
+            : GenerateId();
+
+        if (!hasCookie || cookieValue != userId)
+        {
+            context.Response.Cookies.Append(
+                CookieName,
+                userId,
+                new CookieOptions
+                {
+                    Expires = DateTimeOffset.UtcNow.Add(CookieLifetime),
+                    HttpOnly = true,
+                    IsEssential = true,
+                    SameSite = SameSiteMode.Lax,
+                    Secure = context.Request.IsHttps
+                });
+        }
+
+        return new PlaygroundUser(userId);
+    }
+
+    private static string GenerateId()
+    {
+        Span<byte> bytes = stackalloc byte[HexLength / 2];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static bool IsLowerHex(char value)
+    {
+        return value is >= '0' and <= '9' or >= 'a' and <= 'f';
+    }
+}
+
 internal static class PlaygroundFiles
 {
+    public const long MaxUploadBytes = 25 * 1024 * 1024;
+
+    public const long MultipartOverheadBytes = 1024 * 1024;
+
     public static string RootPath { get; } = Path.GetFullPath(
         Path.Combine(AppContext.BaseDirectory, "loaded_files"));
 
-    public static IReadOnlyList<PlaygroundFile> ListFiles()
+    public static string GetUserRootPath(string userId)
     {
-        Directory.CreateDirectory(RootPath);
+        if (!PlaygroundUser.IsValidId(userId))
+        {
+            throw new InvalidOperationException("Playground user id is not allowed.");
+        }
+
+        return Path.GetFullPath(Path.Combine(RootPath, $"user_{userId}"));
+    }
+
+    public static IReadOnlyList<PlaygroundFile> ListFiles(string userId)
+    {
+        var userRoot = GetUserRootPath(userId);
+        Directory.CreateDirectory(userRoot);
         return Directory
-            .EnumerateFiles(RootPath)
+            .EnumerateFiles(userRoot)
             .Select(ToFileInfo)
             .OrderBy(static file => file.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
     }
 
-    public static string ResolveSafeFilePath(string fileName)
+    public static string ResolveSafeFilePath(string userId, string fileName)
     {
+        var userRoot = GetUserRootPath(userId);
         var safeName = Path.GetFileName(fileName);
         if (safeName.Length == 0 ||
             safeName != fileName ||
@@ -663,12 +851,13 @@ internal static class PlaygroundFiles
             throw new InvalidOperationException($"File name '{fileName}' is not allowed.");
         }
 
-        var path = Path.GetFullPath(Path.Combine(RootPath, safeName));
-        if (!path.StartsWith(RootPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        var path = Path.GetFullPath(Path.Combine(userRoot, safeName));
+        if (!path.StartsWith(userRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"File name '{fileName}' must stay inside loaded_files.");
+            throw new InvalidOperationException($"File name '{fileName}' must stay inside user loaded_files.");
         }
 
+        Directory.CreateDirectory(userRoot);
         return path;
     }
 

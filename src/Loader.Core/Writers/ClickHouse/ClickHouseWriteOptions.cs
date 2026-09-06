@@ -7,7 +7,7 @@ public sealed record ClickHouseWriteOptions
 {
     public required ClickHouseTableName TableName { get; init; }
 
-    public string Engine { get; init; } = "Log";
+    public string Engine { get; init; } = "MergeTree ORDER BY tuple()";
 
     public bool IfNotExists { get; init; }
 

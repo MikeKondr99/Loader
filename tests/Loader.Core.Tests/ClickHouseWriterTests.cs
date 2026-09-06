@@ -149,7 +149,7 @@ public sealed class ClickHouseWriterTests
         await Assert.That(sql).Contains("`id` UInt8");
         await Assert.That(sql).Contains("`amount` Nullable(Decimal(");
         await Assert.That(sql).Contains("`city` LowCardinality(String)");
-        await Assert.That(sql).Contains("ENGINE = Log");
+        await Assert.That(sql).Contains("ENGINE = MergeTree ORDER BY tuple()");
     }
 
     private static DataTable CreateTable()

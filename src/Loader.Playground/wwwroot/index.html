@@ -469,6 +469,18 @@
       white-space: pre-wrap;
     }
 
+    .user-hex {
+      position: fixed;
+      right: 10px;
+      bottom: 7px;
+      z-index: 40;
+      color: rgba(108, 113, 104, .72);
+      font: 11px Consolas, monospace;
+      letter-spacing: .03em;
+      user-select: text;
+      pointer-events: none;
+    }
+
     .monaco-editor .line-error {
       background: rgba(179, 38, 30, .12);
     }
@@ -551,6 +563,7 @@
       </div>
     </section>
   </main>
+  <div class="user-hex" id="user-hex"></div>
 
   <script>
     window.MonacoEnvironment = {
@@ -600,6 +613,8 @@ LIMIT 10;`;
     const outputActions = document.getElementById('output-actions');
     const copyErrorButton = document.getElementById('copy-error');
     const progressLog = document.getElementById('progress-log');
+    const userHex = document.getElementById('user-hex');
+    refreshConfig();
     refreshFiles();
     refreshConnections();
     refreshLastRun();
@@ -712,6 +727,20 @@ LIMIT 10;`;
         fileUpload.value = '';
       }
     };
+
+    async function refreshConfig() {
+      try {
+        const response = await fetch('/api/config');
+        if (!response.ok) return;
+
+        const config = await response.json();
+        if (config.userId && userHex) {
+          userHex.textContent = config.userId;
+        }
+      } catch {
+        // User hex is only for local/demo debugging.
+      }
+    }
 
     async function send(url, pendingText) {
       if (!editor) return;

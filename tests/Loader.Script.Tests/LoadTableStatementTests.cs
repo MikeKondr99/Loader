@@ -227,7 +227,7 @@ public sealed class LoadTableStatementTests
                 `column2` DateTime,
                 `column3` DateTime
             )
-            ENGINE = Log
+            ENGINE = MergeTree ORDER BY tuple()
             """);
         await ScriptIntegrationAssert.ExecuteClickHouseAsync(
             database,

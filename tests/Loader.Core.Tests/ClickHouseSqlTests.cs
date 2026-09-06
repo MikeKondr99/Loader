@@ -108,7 +108,7 @@ public sealed class ClickHouseSqlTests
             "    `city` String," + Environment.NewLine +
             "    `active` Bool" + Environment.NewLine +
             ")" + Environment.NewLine +
-            "ENGINE = Log");
+            "ENGINE = MergeTree ORDER BY tuple()");
     }
 
     [Test]
