@@ -9,6 +9,7 @@ namespace Loader.Script.Execution;
 /// Параметры:
 /// path: Text - путь к файлу внутри file storage.
 /// root: Text - dot-path до массива записей внутри JSON; если не задан, корнем считается весь документ.
+/// textRow: Boolean - читать каждую запись целиком как строку в колонку row, без анализа полей.
 /// </summary>
 internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
 {
@@ -22,19 +23,22 @@ internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
         CancellationToken cancellationToken)
     {
         options = options.MapPositionals(Name, ["path"]);
-        RejectUnknownOptions(Name, options, errors, ["path", "root"]);
+        RejectUnknownOptions(Name, options, errors, ["path", "root", "textRow"]);
         RejectSqlForFileProvider("json", statement, errors);
         var path = RequiredPath("json", statement, options, errors);
         var arrayPath = JsonRootPath(options, errors);
+        var textRow = options.Boolean("textRow", defaultValue: false);
         if (path is null || errors.Count > 0)
         {
             return null!;
         }
 
         var provider = new JsonProvider();
-        var schema = await provider
-            .AnalyzeSchemaAsync(context.FileStorage, path, arrayPath, cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        var schema = textRow
+            ? TextRowSchema()
+            : await provider
+                .AnalyzeSchemaAsync(context.FileStorage, path, arrayPath, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
 
         return new ReaderLoadFromSource
         {
@@ -48,6 +52,17 @@ internal sealed class JsonLoadSourceResolver : LoadSourceResolverBase
                     Schema = schema
                 },
                 token)
+        };
+    }
+
+    private static JsonTableSchema TextRowSchema()
+    {
+        return new JsonTableSchema
+        {
+            Columns =
+            [
+                new JsonColumnSchema { Name = "row", Path = string.Empty }
+            ]
         };
     }
 

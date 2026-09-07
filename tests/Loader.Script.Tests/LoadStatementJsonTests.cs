@@ -48,6 +48,45 @@ public sealed class LoadStatementJsonTests
     }
 
     [Test]
+    [DisplayName("LOAD из JSON textRow читает запись целиком и позволяет разобрать ее вручную")]
+    public async Task Json_load_text_row_materializes_whole_row_as_json_text()
+    {
+        // Arrange
+        // Act
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            raw_inventory:
+            TEMP LOAD *
+            FROM Json(path='inventory.json', textRow=true);
+
+            json_inventory:
+            LOAD
+                Text(Int(row.JsonGetText('$.id'))) AS id,
+                row.JsonGetText('$.user.name') AS name,
+                row.JsonGetText('$.city') AS city
+            FROM raw_inventory
+            WHERE row.JsonGetText('$.city') = 'Moscow'
+            ORDER BY id ASC;
+            """);
+
+        // Assert
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await Assert.That(result[0].Alias).IsEqualTo("json_inventory");
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["id", "name", "city"],
+            [
+                ["1", "Alice", "Moscow"],
+                ["3", "Charlie", "Moscow"]
+            ],
+            "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
     [DisplayName("LOAD из JSON с root читает массив внутри объекта")]
     public async Task Json_load_with_root_materializes_nested_array()
     {

@@ -1291,6 +1291,29 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver JSON textRow читает запись целиком в колонку row")]
+    public async Task Resolve_json_text_row_reads_whole_row()
+    {
+        var resolver = new LoadProviderResolver();
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Json",
+                [
+                    Option("path", "orders.json"),
+                    Option("textRow", new BooleanLiteral(true), Span())
+                ]),
+            CreateContext(new StubFileSource("""[{ "id": 1, "city": "Moscow" }]""")));
+
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("row");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("""{ "id": 1, "city": "Moscow" }""");
+    }
+
+    [Test]
     [DisplayName("Resolver JSON root пустой строки отклоняет как provider option")]
     public async Task Resolve_json_rejects_empty_root_option()
     {
