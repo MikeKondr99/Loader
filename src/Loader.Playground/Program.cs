@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClickHouse.Client.ADO;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Decorators;
 using Loader.Core.Providers.ClickHouse;
 using Loader.Core.Providers.Sql;
@@ -454,13 +455,20 @@ static async Task<PlaygroundPreviewRows> ReadPreviewRowsAsync(
         var row = new object?[reader.FieldCount];
         for (var ordinal = 0; ordinal < reader.FieldCount; ordinal++)
         {
-            row[ordinal] = reader.IsDBNull(ordinal) ? null : reader.GetValue(ordinal);
+            row[ordinal] = reader.IsDBNull(ordinal) ? null : ToPlaygroundValue(reader.GetValue(ordinal));
         }
 
         rows.Add(row);
     }
 
     return new PlaygroundPreviewRows(columns, rows);
+}
+
+static object ToPlaygroundValue(object value)
+{
+    return value is ClickHouseDecimal decimalValue
+        ? decimalValue.ToString()
+        : value;
 }
 
 static PlaygroundRunData ToPlaygroundRunData(PlaygroundRunSnapshot snapshot)
@@ -811,7 +819,7 @@ internal sealed record PlaygroundUser(string Id)
 
 internal static class PlaygroundFiles
 {
-    public const long MaxUploadBytes = 25 * 1024 * 1024;
+    public const long MaxUploadBytes = 200 * 1024 * 1024;
 
     public const long MultipartOverheadBytes = 1024 * 1024;
 

@@ -575,14 +575,13 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <script>
-    const sample = `orders: LOAD
-    id,
+    const sample = `orders:
+LOAD
     city,
-    amount.Num() AS amount
-FROM Csv(path='orders.csv', delimiter=',', header=true)
-WHERE amount > 0
-ORDER BY city ASC
-LIMIT 10;`;
+    SUM(amount) AS total
+FROM Inline(city, amount; Berlin, 10; Paris, 20; Berlin, 15)
+GROUP BY city
+ORDER BY total DESC;`;
 
     let editor;
     let decorations = [];
