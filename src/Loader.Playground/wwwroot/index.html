@@ -576,12 +576,8 @@
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
   <script>
     const sample = `orders:
-LOAD
-    city,
-    SUM(amount) AS total
-FROM Inline(city, amount; Berlin, 10; Paris, 20; Berlin, 15)
-GROUP BY city
-ORDER BY total DESC;`;
+LOAD *
+FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
 
     let editor;
     let decorations = [];
