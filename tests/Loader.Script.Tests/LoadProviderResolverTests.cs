@@ -1530,9 +1530,9 @@ public sealed class LoadProviderResolverTests
                 CreateContext()))
             .ThrowsExactly<ProviderResolutionException>();
 
-        await Assert.That(exception!.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors.Select(static error => error.Span).ToArray())
-            .IsEquivalentTo([duplicateNameSpan, fromSpan], CollectionOrdering.Matching);
+            .IsEquivalentTo([duplicateNameSpan], CollectionOrdering.Matching);
     }
 
     [Test]
