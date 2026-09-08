@@ -152,7 +152,7 @@ internal static class ScriptIntegrationAssert
         ScriptConnectionType provider,
         string connectionString)
     {
-        return new ScriptConnection
+        return new DatabaseScriptConnection
         {
             Name = name,
             Provider = provider,

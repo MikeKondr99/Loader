@@ -688,7 +688,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "generic_odbc",
                 Provider = ScriptConnectionType.Odbc,
@@ -714,7 +714,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = ScriptConnectionType.Postgres,
@@ -740,7 +740,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "ch_dwh",
                 Provider = ScriptConnectionType.ClickHouse,
@@ -848,7 +848,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = ScriptConnectionType.Postgres,
@@ -878,7 +878,7 @@ public sealed class LoadProviderResolverTests
         var nameSpan = Span(3, 21, 38);
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_postgres",
                 Provider = ScriptConnectionType.Postgres,
@@ -908,7 +908,7 @@ public sealed class LoadProviderResolverTests
         var nameSpan = Span(3, 21, 30);
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = (ScriptConnectionType)999,
@@ -938,7 +938,7 @@ public sealed class LoadProviderResolverTests
         var unknownSpan = Span(7, 15, 35);
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = ScriptConnectionType.Postgres,
@@ -970,7 +970,7 @@ public sealed class LoadProviderResolverTests
         var fromSpan = Span(3, 1, 5);
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = ScriptConnectionType.Postgres,
@@ -998,7 +998,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "hive_main",
                 Provider = ScriptConnectionType.Hive,
@@ -1025,7 +1025,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "missing_hive",
                 Provider = ScriptConnectionType.Hive,
@@ -1042,6 +1042,138 @@ public sealed class LoadProviderResolverTests
         await Assert.That(async () => await Reader(source).OpenReaderAsync(CancellationToken.None))
             .ThrowsExactly<DbExecutionException>()
             .WithMessage("Database query failed for provider 'hive': SELECT * FROM default.orders");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect folder маршрутизирует CSV по расширению и передает options")]
+    public async Task Resolve_connect_file_storage_routes_csv_by_extension()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new FileStorageScriptConnection
+            {
+                Name = "folder",
+                Source = new StubFileSource("id|name\r\n1|Alice")
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [
+                    Option("name", "folder"),
+                    Option("path", "orders.csv"),
+                    Option("delimiter", "|")
+                ]),
+            CreateContext(registry: registry));
+
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
+        await Assert.That(reader.FieldCount).IsEqualTo(2);
+        await Assert.That(reader.GetName(0)).IsEqualTo("id");
+        await Assert.That(reader.GetName(1)).IsEqualTo("name");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("1");
+        await Assert.That(reader.GetValue(1)).IsEqualTo("Alice");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect folder маршрутизирует JSON textRow по расширению")]
+    public async Task Resolve_connect_file_storage_routes_json_text_row_by_extension()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new FileStorageScriptConnection
+            {
+                Name = "folder",
+                Source = new StubFileSource("""[{ "id": 1, "city": "Moscow" }]""")
+            }
+        ]);
+
+        var source = await resolver.ResolveAsync(
+            CreateStatement(
+                "Connect",
+                [
+                    Option("name", "folder"),
+                    Option("path", "orders.json"),
+                    Option("textRow", new BooleanLiteral(true), Span())
+                ]),
+            CreateContext(registry: registry));
+
+        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
+
+        await Assert.That(reader.FieldCount).IsEqualTo(1);
+        await Assert.That(reader.GetName(0)).IsEqualTo("row");
+        await Assert.That(await reader.ReadAsync()).IsTrue();
+        await Assert.That(reader.GetValue(0)).IsEqualTo("""{ "id": 1, "city": "Moscow" }""");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect DWH отклоняет SQL после FROM")]
+    public async Task Resolve_connect_dwh_rejects_sql_after_from()
+    {
+        var resolver = new LoadProviderResolver();
+        var sqlSpan = Span(3, 30, 38);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new DwhTableScriptConnection
+            {
+                Name = "dwh_orders",
+                Sql = "orders"
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", "dwh_orders")],
+                    sql: "SELECT 1") with
+                {
+                    SqlPart = new SqlPart
+                    {
+                        Value = "SELECT 1",
+                        Span = sqlSpan
+                    }
+                },
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживает SQL после FROM");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect folder отклоняет неподдерживаемое расширение")]
+    public async Task Resolve_connect_file_storage_rejects_unknown_extension()
+    {
+        var resolver = new LoadProviderResolver();
+        var pathSpan = Span(3, 30, 42);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new FileStorageScriptConnection
+            {
+                Name = "folder",
+                Source = new StubFileSource()
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [
+                        Option("name", "folder"),
+                        Option("path", "orders.bin", pathSpan)
+                    ]),
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(pathSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживает расширение");
     }
 
     [Test]
@@ -1087,7 +1219,7 @@ public sealed class LoadProviderResolverTests
         var resolver = new LoadProviderResolver();
         var registry = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main_pg",
                 Provider = ScriptConnectionType.Postgres,

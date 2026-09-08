@@ -26,6 +26,8 @@ internal sealed class LoadOptionReader
     /// </summary>
     public int PositionalCount => _options.Count(IsPositional);
 
+    public IReadOnlyList<LoadOption> Options => _options;
+
     /// <summary>
     /// Возвращает options, которые еще не были сопоставлены с именованным provider-specific параметром.
     /// </summary>

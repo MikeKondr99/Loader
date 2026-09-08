@@ -74,7 +74,7 @@ app.MapGet("/api/config", (HttpContext httpContext, IConfiguration configuration
         Connections = config.Connections.Select(static connection => new
         {
             connection.Name,
-            Type = connection.Provider.ToString()
+            Type = PlaygroundConnectionDisplay.TypeName(connection)
         }).ToArray()
     });
 });
@@ -96,7 +96,7 @@ app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvi
     connections.AddRange(config.Connections.Select(static connection => new
     {
         connection.Name,
-        Type = connection.Provider.ToString()
+        Type = PlaygroundConnectionDisplay.TypeName(connection)
     }));
 
     string? warning = null;
@@ -123,7 +123,7 @@ app.MapGet("/api/connections", async (IConfiguration configuration, IWebHostEnvi
             connections.Add(new
             {
                 connection.Name,
-                Type = connection.Provider.ToString()
+                Type = PlaygroundConnectionDisplay.TypeName(connection)
             });
         }
     }
@@ -692,6 +692,37 @@ internal sealed record PlaygroundConfig(
         }
 
         var typeText = section["Type"];
+        if (string.Equals(typeText, "DwhTable", StringComparison.OrdinalIgnoreCase))
+        {
+            var sql = section["Sql"];
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                throw new InvalidOperationException($"Playground connection '{name}' requires non-empty Sql.");
+            }
+
+            return new DwhTableScriptConnection
+            {
+                Name = name,
+                Sql = sql
+            };
+        }
+
+        if (string.Equals(typeText, "FileStorage", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(typeText, "Folder", StringComparison.OrdinalIgnoreCase))
+        {
+            var rootPath = section["RootPath"] ?? section["Path"];
+            if (string.IsNullOrWhiteSpace(rootPath))
+            {
+                throw new InvalidOperationException($"Playground connection '{name}' requires non-empty RootPath.");
+            }
+
+            return new FileStorageScriptConnection
+            {
+                Name = name,
+                Source = new FileSystemSource(rootPath)
+            };
+        }
+
         if (!Enum.TryParse<ScriptConnectionType>(typeText, ignoreCase: true, out var type))
         {
             throw new InvalidOperationException($"Playground connection '{name}' has unknown Type '{typeText}'.");
@@ -703,7 +734,7 @@ internal sealed record PlaygroundConfig(
             throw new InvalidOperationException($"Playground connection '{name}' requires non-empty ConnectionString.");
         }
 
-        return new ScriptConnection
+        return new DatabaseScriptConnection
         {
             Name = name,
             Provider = type,
@@ -741,6 +772,20 @@ internal sealed record PlaygroundConfig(
             section["Username"],
             section["Password"],
             section.GetValue("PageSize", 50));
+    }
+}
+
+internal static class PlaygroundConnectionDisplay
+{
+    public static string TypeName(ScriptConnection connection)
+    {
+        return connection switch
+        {
+            DatabaseScriptConnection database => database.Provider.ToString(),
+            DwhTableScriptConnection => "DwhTable",
+            FileStorageScriptConnection => "FileStorage",
+            _ => connection.GetType().Name
+        };
     }
 }
 

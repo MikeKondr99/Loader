@@ -9,7 +9,7 @@ public sealed class ConnectionRegistryTests
         // Arrange
         var first = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main",
                 Provider = ScriptConnectionType.Postgres,
@@ -18,7 +18,7 @@ public sealed class ConnectionRegistryTests
         ]);
         var second = new InMemoryConnectionRegistry(
         [
-            new ScriptConnection
+            new DatabaseScriptConnection
             {
                 Name = "main",
                 Provider = ScriptConnectionType.ClickHouse,
@@ -32,8 +32,10 @@ public sealed class ConnectionRegistryTests
 
         // Assert
         await Assert.That(connection).IsNotNull();
-        await Assert.That(connection!.Provider).IsEqualTo(ScriptConnectionType.Postgres);
-        await Assert.That(connection.ConnectionString).IsEqualTo("Host=first");
+        await Assert.That(connection).IsTypeOf<DatabaseScriptConnection>();
+        var databaseConnection = (DatabaseScriptConnection)connection!;
+        await Assert.That(databaseConnection.Provider).IsEqualTo(ScriptConnectionType.Postgres);
+        await Assert.That(databaseConnection.ConnectionString).IsEqualTo("Host=first");
     }
 
     [Test]
@@ -62,7 +64,7 @@ public sealed class ConnectionRegistryTests
 
     private static ScriptConnection Connection(string name, ScriptConnectionType type)
     {
-        return new ScriptConnection
+        return new DatabaseScriptConnection
         {
             Name = name,
             Provider = type,

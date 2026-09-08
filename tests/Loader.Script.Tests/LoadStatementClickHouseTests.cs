@@ -2,6 +2,7 @@
 
 using System.Globalization;
 using System.Numerics;
+using Loader.Script;
 
 namespace Loader.Script.Tests;
 
@@ -126,6 +127,58 @@ public sealed class LoadStatementClickHouseTests
                 [2, "Bob"]
             ],
             "ORDER BY `column1` ASC");
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("LOAD из DWH Connect использует SQL из connection без внешнего reader")]
+    public async Task Dwh_connect_uses_connection_sql_as_source()
+    {
+        var sourceTable = $"script_dwh_source_{Guid.NewGuid():N}";
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            CREATE TABLE `{{sourceTable}}`
+            (
+                `id` Int32,
+                `city` String
+            )
+            ENGINE = Memory
+            """);
+        await ScriptIntegrationAssert.ExecuteClickHouseAsync(
+            database,
+            $$"""
+            INSERT INTO `{{sourceTable}}` (`id`, `city`) VALUES
+            (1, 'Moscow'),
+            (2, 'Berlin')
+            """);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new DwhTableScriptConnection
+            {
+                Name = "dwh_orders",
+                Sql = $"SELECT id, city FROM `{sourceTable}` WHERE id > 1"
+            }
+        ]);
+
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            dwh_orders:
+            LOAD *
+            FROM Connect('dwh_orders');
+            """,
+            registry);
+
+        var result = execution.Tables;
+        await Assert.That(result).Count().IsEqualTo(1);
+        await ScriptIntegrationAssert.AssertFinalTableAsync(
+            database,
+            result[0],
+            ["id", "city"],
+            [
+                [2, "Berlin"]
+            ]);
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
     }
 
