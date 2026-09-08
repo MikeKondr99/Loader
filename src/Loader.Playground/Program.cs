@@ -270,7 +270,8 @@ app.MapPost("/api/run", async (
         Options = new ScriptContextOptions
         {
             TempTablePrefix = user.TempTablePrefix,
-            FinalTablePrefix = user.FinalTablePrefix
+            FinalTablePrefix = user.FinalTablePrefix,
+            ClickHouseMaxDegreeOfParallelism = config.ClickHouseWriter.MaxDegreeOfParallelism
         }
     };
 
@@ -635,6 +636,7 @@ internal sealed record PlaygroundConfig(
     string TargetConnectionString,
     string FileRoot,
     IReadOnlyList<ScriptConnection> Connections,
+    PlaygroundClickHouseWriterConfig ClickHouseWriter,
     PlaygroundPixBiConfig PixBi)
 {
     public static PlaygroundConfig From(IConfiguration configuration, IWebHostEnvironment environment)
@@ -648,6 +650,7 @@ internal sealed record PlaygroundConfig(
             targetConnectionString,
             PlaygroundFiles.RootPath,
             ReadConnections(configuration),
+            ReadClickHouseWriter(configuration),
             ReadPixBi(configuration));
     }
 
@@ -711,6 +714,18 @@ internal sealed record PlaygroundConfig(
         };
     }
 
+    private static PlaygroundClickHouseWriterConfig ReadClickHouseWriter(IConfiguration configuration)
+    {
+        var section = configuration.GetSection("ClickHouseWriter");
+        var maxDegreeOfParallelism = section.GetValue("MaxDegreeOfParallelism", 1);
+        if (maxDegreeOfParallelism < 1)
+        {
+            throw new InvalidOperationException("ClickHouseWriter:MaxDegreeOfParallelism must be greater than or equal to 1.");
+        }
+
+        return new PlaygroundClickHouseWriterConfig(maxDegreeOfParallelism);
+    }
+
     private static PlaygroundPixBiConfig ReadPixBi(IConfiguration configuration)
     {
         var section = configuration.GetSection("PixBi");
@@ -743,6 +758,8 @@ internal sealed record PlaygroundConfig(
             section.GetValue("PageSize", 50));
     }
 }
+
+internal sealed record PlaygroundClickHouseWriterConfig(int MaxDegreeOfParallelism);
 
 internal sealed record PlaygroundPixBiConfig(
     bool Enabled,

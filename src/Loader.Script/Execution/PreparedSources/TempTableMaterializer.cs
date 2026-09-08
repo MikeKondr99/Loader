@@ -139,7 +139,8 @@ public class TempTableMaterializer
                 new ClickHouseWriteOptions
                 {
                     TableName = tempTable,
-                    Engine = "MergeTree ORDER BY tuple()"
+                    Engine = "MergeTree ORDER BY tuple()",
+                    MaxDegreeOfParallelism = context.Options.ClickHouseMaxDegreeOfParallelism
                 },
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);

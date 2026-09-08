@@ -258,6 +258,7 @@ public class LoadStatementExecutor
                 source,
                 countingReader,
                 CreateWriteOptions(
+                    context.Options,
                     finalTable,
                     statement.IsMapped ? LoadClickHouseTableKind.Mapped : LoadClickHouseTableKind.Final),
                 cancellationToken: cancellationToken)
@@ -267,12 +268,14 @@ public class LoadStatementExecutor
     }
 
     private static ClickHouseWriteOptions CreateWriteOptions(
+        ScriptContextOptions contextOptions,
         ClickHouseTableName tableName,
         LoadClickHouseTableKind kind)
     {
         return new ClickHouseWriteOptions
         {
             TableName = tableName,
+            MaxDegreeOfParallelism = contextOptions.ClickHouseMaxDegreeOfParallelism,
             Engine = kind switch
             {
                 // Log запрещен в ClickHouse Cloud, поэтому используем минимальный MergeTree без ключа сортировки.

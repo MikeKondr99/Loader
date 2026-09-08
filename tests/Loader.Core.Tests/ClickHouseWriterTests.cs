@@ -20,8 +20,8 @@ public sealed class ClickHouseWriterTests
     }
 
     [Test]
-    [DisplayName("ClickHouseWriter создает таблицу по meta и пишет reader через bulk copy")]
-    public async Task Creates_table_from_meta_and_writes_reader_with_bulk_copy()
+    [DisplayName("ClickHouseWriter создает таблицу по meta и пишет reader через InsertBinaryAsync")]
+    public async Task Creates_table_from_meta_and_writes_reader_with_insert_binary()
     {
         using var analyzeTable = CreateTable();
         analyzeTable.Rows.Add(1, 10.50m, "Moscow", true);
@@ -79,6 +79,45 @@ public sealed class ClickHouseWriterTests
                 ((byte)2, DBNull.Value, "London", false),
                 ((byte)3, (ClickHouseDecimal)20.25m, "Moscow", true)
             ]);
+    }
+
+    [Test]
+    [DisplayName("ClickHouseWriter пишет батчи параллельно с отключенной session для insert")]
+    public async Task Writes_parallel_batches_with_session_disabled_for_insert()
+    {
+        using var table = CreateTable();
+        table.Rows.Add(1, 10.50m, "Moscow", true);
+        table.Rows.Add(2, 20.25m, "London", false);
+        table.Rows.Add(3, 30.75m, "Berlin", true);
+        table.Rows.Add(4, 40.00m, "Paris", false);
+
+        using var rawReader = table.CreateDataReader();
+        await using var reader = rawReader.Normalize();
+        var tableName = "writer_parallel_" + Guid.NewGuid().ToString("N");
+
+        await new ClickHouseWriter().WriteAsync(
+            Source(useSession: true),
+            reader,
+            new ClickHouseWriteOptions
+            {
+                TableName = new ClickHouseTableName
+                {
+                    Table = tableName
+                },
+                BatchSize = 4,
+                MaxDegreeOfParallelism = 2
+            });
+
+        await using var rawResultReader = await new ClickHouseProvider().OpenReaderAsync(
+            Source(),
+            new SqlTableConfig
+            {
+                Sql = $"select count() from {tableName}"
+            });
+        await using var resultReader = rawResultReader.Normalize();
+
+        await Assert.That(await resultReader.ReadAsync()).IsTrue();
+        await Assert.That(resultReader.GetValue(0)).IsEqualTo((ulong)4);
     }
 
     [Test]
@@ -162,11 +201,13 @@ public sealed class ClickHouseWriterTests
         return table;
     }
 
-    private ConnectionStringSource Source()
+    private ConnectionStringSource Source(bool useSession = false)
     {
         return new ConnectionStringSource
         {
-            ConnectionString = database.ConnectionString
+            ConnectionString = useSession
+                ? $"{database.ConnectionString};UseSession=true"
+                : database.ConnectionString
         };
     }
 }
