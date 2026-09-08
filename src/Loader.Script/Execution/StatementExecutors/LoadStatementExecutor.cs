@@ -1,9 +1,6 @@
 using System.Text;
 using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
-using Loader.Core.Providers.ClickHouse;
-using Loader.Core.Providers.Sql;
-using Loader.Core.Sources;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
 using Loader.Query.Compile;
@@ -46,7 +43,7 @@ public class LoadStatementExecutor
         // 2. LOAD выражения превращаем в типизированный Query поверх подготовленного source.
         var (resolvedQuery, querySql) = BuildResolvedQuerySql(context, statement, preparedSource);
 
-        // 3. Query выполняем в ClickHouse и результат потоково сохраняем в final table.
+        // 3. Query выполняем в ClickHouse и server-side сохраняем результат в final table.
         await using var finalTable = CreateFinalTable(context);
         var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, querySql, finalTable.TableName, cancellationToken)
             .ConfigureAwait(false);
@@ -242,50 +239,12 @@ public class LoadStatementExecutor
         ClickHouseTableName finalTable,
         CancellationToken cancellationToken)
     {
-        var source = new ConnectionStringSource
-        {
-            ConnectionString = context.TargetConnectionString
-        };
-        await using var rawReader = await new ClickHouseProvider()
-            .OpenReaderAsync(source, new SqlTableConfig { Sql = querySql }, cancellationToken)
-            .ConfigureAwait(false);
-        await using var finalNameReader = rawReader.AbstractColumns();
-        await using var finalReader = finalNameReader.Normalize();
-
-        await using var countingReader = finalReader.CountRows();
-        await new ClickHouseWriter()
-            .WriteAsync(
-                source,
-                countingReader,
-                CreateWriteOptions(
-                    finalTable,
-                    statement.IsMapped ? LoadClickHouseTableKind.Mapped : LoadClickHouseTableKind.Final),
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
-
-        return countingReader.RowCount;
-    }
-
-    private static ClickHouseWriteOptions CreateWriteOptions(
-        ClickHouseTableName tableName,
-        LoadClickHouseTableKind kind)
-    {
-        return new ClickHouseWriteOptions
-        {
-            TableName = tableName,
-            Engine = kind switch
-            {
-                // Log запрещен в ClickHouse Cloud, поэтому используем минимальный MergeTree без ключа сортировки.
-                LoadClickHouseTableKind.Temp => "MergeTree ORDER BY tuple()",
-
-                // Полноценная стратегия ORDER BY для пользовательских final tables пока не определена.
-                LoadClickHouseTableKind.Final => "MergeTree ORDER BY tuple()",
-
-                // ApplyMap читает mapping через joinGetOrNull, поэтому нужна ClickHouse Join-таблица.
-                LoadClickHouseTableKind.Mapped => "Join(ANY, LEFT, `column1`)",
-                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
-            }
-        };
+        return await new ClickHouseFinalTableMaterializer().MaterializeAsync(
+            context,
+            querySql,
+            finalTable,
+            statement.IsMapped ? LoadClickHouseTableKind.Mapped : LoadClickHouseTableKind.Final,
+            cancellationToken).ConfigureAwait(false);
     }
 
     protected virtual async ValueTask DropFinalTableAsync(
