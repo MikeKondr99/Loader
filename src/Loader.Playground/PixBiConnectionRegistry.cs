@@ -44,7 +44,7 @@ internal sealed class PixBiConnectionRegistry : IConnectionRegistry
             return null;
         }
 
-        return new ScriptConnection
+        return new DatabaseScriptConnection
         {
             Name = detail.Name,
             Provider = type,

@@ -1,3 +1,7 @@
+using Loader.Core.Decorators;
+using Loader.Core.Providers.ClickHouse;
+using Loader.Core.Providers.Sql;
+using Loader.Core.Sources;
 using Loader.Lang;
 using Loader.Lang.Statements;
 
@@ -13,6 +17,19 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
 {
     public override string Name => "Connect";
 
+    private static readonly IReadOnlyDictionary<string, Func<ILoadSourceResolver>> FileResolvers =
+        new Dictionary<string, Func<ILoadSourceResolver>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [".csv"] = static () => new CsvLoadSourceResolver(),
+            [".json"] = static () => new JsonLoadSourceResolver(),
+            [".jsonl"] = static () => new JsonLoadSourceResolver(),
+            [".ndjson"] = static () => new JsonLoadSourceResolver(),
+            [".qvd"] = static () => new QvdLoadSourceResolver(),
+            [".xlsx"] = static () => new ExcelLoadSourceResolver(),
+            [".xls"] = static () => new ExcelLoadSourceResolver(),
+            [".xml"] = static () => new XmlLoadSourceResolver()
+        };
+
     public override async ValueTask<LoadFromSource> ResolveAsync(
         LoadStatement statement,
         ScriptContext context,
@@ -21,14 +38,12 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         CancellationToken cancellationToken)
     {
         options = options.MapPositionals(Name, ["name"]);
-        RejectUnknownOptions(Name, options, errors, ["name"]);
         var nameOption = options.GetOption("name");
         var name = options.RequiredString(
             "name",
             statement.SourceCall.Span,
             "Для Connect требуется опция name='connection_name'.");
-        var sql = SourceSql("connect", statement, errors);
-        if (name is null || sql is null || errors.Count > 0)
+        if (name is null || errors.Count > 0)
         {
             return null!;
         }
@@ -49,6 +64,31 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
             return null!;
         }
 
+        return connection switch
+        {
+            DatabaseScriptConnection database => ResolveDatabaseConnection(statement, options, database, nameOption, errors),
+            DwhTableScriptConnection dwh => await ResolveDwhTableConnectionAsync(statement, context, options, dwh, errors, cancellationToken)
+                .ConfigureAwait(false),
+            FileStorageScriptConnection fileStorage => await ResolveFileStorageConnectionAsync(statement, context, options, fileStorage, errors, cancellationToken)
+                .ConfigureAwait(false),
+            _ => throw new NotSupportedException($"Connection '{connection.Name}' имеет неподдерживаемый тип '{connection.GetType().Name}'.")
+        };
+    }
+
+    private static LoadFromSource ResolveDatabaseConnection(
+        LoadStatement statement,
+        LoadOptionReader options,
+        DatabaseScriptConnection connection,
+        LoadOption? nameOption,
+        List<LangError> errors)
+    {
+        RejectUnknownOptions("Connect", options, errors, ["name"]);
+        var sql = SourceSql("connect", statement, errors);
+        if (sql is null || errors.Count > 0)
+        {
+            return null!;
+        }
+
         if (!DatabaseLoadProviderFactory.TryGet(connection.Provider, out var factory))
         {
             errors.Add(new LangError
@@ -60,5 +100,158 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         }
 
         return factory.CreateSource(connection.ConnectionString, sql);
+    }
+
+    private static async ValueTask<LoadFromSource> ResolveDwhTableConnectionAsync(
+        LoadStatement statement,
+        ScriptContext context,
+        LoadOptionReader options,
+        DwhTableScriptConnection connection,
+        List<LangError> errors,
+        CancellationToken cancellationToken)
+    {
+        RejectUnknownOptions("Connect", options, errors, ["name"]);
+        if (statement.SqlPart is not null)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Connection '{connection.Name}' не поддерживает SQL после FROM.",
+                Span = statement.SqlPart.Span
+            });
+        }
+
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
+        var sql = NormalizeDwhSql(connection.Sql);
+        return new SqlLoadFromSource
+        {
+            Sql = sql,
+            Fields = await ReadDwhFieldsAsync(context.TargetConnectionString, sql, cancellationToken)
+                .ConfigureAwait(false)
+        };
+    }
+
+    private static async ValueTask<IReadOnlyList<LoadFromSqlField>> ReadDwhFieldsAsync(
+        string connectionString,
+        string sql,
+        CancellationToken cancellationToken)
+    {
+        await using var rawReader = await new ClickHouseProvider()
+            .OpenReaderAsync(
+                new ConnectionStringSource
+                {
+                    ConnectionString = connectionString
+                },
+                new SqlTableConfig
+                {
+                    Sql = $"SELECT * FROM {sql} LIMIT 0"
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        await using var reader = rawReader.Normalize();
+
+        return reader.DataSchema.Fields.Select(field => new LoadFromSqlField
+        {
+            Name = field.Name,
+            PhysicalName = field.Name,
+            DataType = field.DataType,
+            CanBeNull = field.AllowDBNull ?? true
+        }).ToArray();
+    }
+
+    private static async ValueTask<LoadFromSource> ResolveFileStorageConnectionAsync(
+        LoadStatement statement,
+        ScriptContext context,
+        LoadOptionReader options,
+        FileStorageScriptConnection connection,
+        List<LangError> errors,
+        CancellationToken cancellationToken)
+    {
+        if (statement.SqlPart is not null)
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Connection '{connection.Name}' является файловым источником и не поддерживает SQL после FROM.",
+                Span = statement.SqlPart.Span
+            });
+        }
+
+        var pathOption = options.GetOption("path");
+        var path = options.String("path");
+        if (path is null)
+        {
+            errors.Add(new LangError
+            {
+                Message = "Для файлового Connect требуется опция path='relative/path'.",
+                Span = statement.SourceCall.Span
+            });
+        }
+
+        if (errors.Count > 0)
+        {
+            return null!;
+        }
+
+        var extension = Path.GetExtension(path!);
+        if (!FileResolvers.TryGetValue(extension, out var createResolver))
+        {
+            errors.Add(new LangError
+            {
+                Message = $"Файловый Connect не поддерживает расширение '{extension}'. Используйте csv, json, jsonl, ndjson, qvd, xlsx, xls или xml.",
+                Span = pathOption?.Span ?? statement.SourceCall.Span
+            });
+            return null!;
+        }
+
+        var fileOptions = options.Options
+            .Where(static option => !string.Equals(option.Name, "name", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var sourceName = SourceName(extension);
+        var fileStatement = statement with
+        {
+            SourceCall = statement.SourceCall with
+            {
+                Name = sourceName,
+                Options = fileOptions
+            }
+        };
+        var fileContext = context with
+        {
+            FileStorage = connection.Source
+        };
+
+        return await createResolver()
+            .ResolveAsync(
+                fileStatement,
+                fileContext,
+                new LoadOptionReader(fileOptions, errors),
+                errors,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static string SourceName(string extension)
+    {
+        return extension.ToLowerInvariant() switch
+        {
+            ".csv" => "Csv",
+            ".json" or ".jsonl" or ".ndjson" => "Json",
+            ".qvd" => "Qvd",
+            ".xlsx" or ".xls" => "Excel",
+            ".xml" => "Xml",
+            _ => extension
+        };
+    }
+
+    private static string NormalizeDwhSql(string sql)
+    {
+        var trimmed = sql.Trim();
+        return trimmed.StartsWith("select", StringComparison.OrdinalIgnoreCase) ||
+               trimmed.StartsWith("with", StringComparison.OrdinalIgnoreCase)
+            ? $"({trimmed})"
+            : trimmed;
     }
 }
