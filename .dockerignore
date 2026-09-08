@@ -1,0 +1,59 @@
+# VCS and local agent/editor state
+.git/
+.agents/
+.codex/
+.zed/
+.vs/
+.vscode/
+.idea/
+
+# Local configuration and secrets
+.env
+.env.*
+**/appsettings.Development.json
+**/appsettings.Local.json
+**/appsettings.*.local.json
+*.pubxml
+*.publishsettings
+*.pfx
+
+# Build output
+**/bin/
+**/obj/
+artifacts/
+.artifacts/
+BenchmarkDotNet.Artifacts/
+publish/
+test-results/
+TestResults/
+**/TestResults/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Runtime/user uploaded data
+loaded_files/
+**/loaded_files/
+.tmp/
+tmp/
+temp/
+
+# Logs and diagnostics
+*.log
+*.binlog
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+~$*
+*~
+*.swp
