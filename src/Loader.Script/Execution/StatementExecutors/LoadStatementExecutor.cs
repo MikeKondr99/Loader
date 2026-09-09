@@ -29,10 +29,10 @@ public class LoadStatementExecutor
         LoadStatement statement,
         CancellationToken cancellationToken = default)
     {
-        ThrowIfTableNameAlreadyLoaded(context, statement);
+        var tableName = ValidateTableName(context, statement);
         ValidateMappedStatementFields(statement);
 
-        await context.Logger.LoadTableStartedAsync(statement.TableName, cancellationToken).ConfigureAwait(false);
+        await context.Logger.LoadTableStartedAsync(tableName, cancellationToken).ConfigureAwait(false);
 
         // 1. Готовим FROM: либо получаем SQL напрямую, либо грузим внешний source в temp table.
         await using var preparedSource = await new LoadFromPreparer(ProviderResolver, TempTableMaterializer)
@@ -41,16 +41,16 @@ public class LoadStatementExecutor
         ValidateMappedPreparedSourceSchema(statement, preparedSource.Fields.Count);
 
         // 2. LOAD выражения превращаем в типизированный Query поверх подготовленного source.
-        var (resolvedQuery, querySql) = BuildResolvedQuerySql(context, statement, preparedSource);
+        var (resolvedQuery, querySql) = BuildResolvedQuerySql(context, statement, tableName, preparedSource);
 
         // 3. Query выполняем в ClickHouse и server-side сохраняем результат в final table.
         await using var finalTable = CreateFinalTable(context);
-        var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, querySql, finalTable.TableName, cancellationToken)
+        var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, tableName, querySql, finalTable.TableName, cancellationToken)
             .ConfigureAwait(false);
         await context.Logger.TransformationRowsLoadedAsync(finalRowCount, cancellationToken).ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
-        var loadedTable = CreateLoadedTable(statement, resolvedQuery, finalTable.TableName, finalRowCount);
+        var loadedTable = CreateLoadedTable(statement, tableName, resolvedQuery, finalTable.TableName, finalRowCount);
         context.AddLoadedTable(loadedTable);
         finalTable.Commit();
         return loadedTable;
@@ -59,15 +59,16 @@ public class LoadStatementExecutor
     private ResolvedQuerySql BuildResolvedQuerySql(
         ScriptContext context,
         LoadStatement statement,
+        string tableName,
         PreparedLoadSource source)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.QueryBuild");
         activity?
-            .SetTag("load.table_name", statement.TableName);
+            .SetTag("load.table_name", tableName);
 
         ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, source);
-        var resolvedQuery = ResolveQueryWithTelemetry(context, statement, source, query);
+        var resolvedQuery = ResolveQueryWithTelemetry(context, statement, tableName, source, query);
         var querySql = CompileQuery(statement, resolvedQuery);
         activity?
             .SetSanitizedTag("load.query_sql", querySql);
@@ -77,12 +78,13 @@ public class LoadStatementExecutor
     private ResolvedQuery ResolveQueryWithTelemetry(
         ScriptContext context,
         LoadStatement statement,
+        string tableName,
         PreparedLoadSource source,
         QueryModel query)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.QueryResolve");
         activity?
-            .SetTag("load.table_name", statement.TableName)
+            .SetTag("load.table_name", tableName)
             .SetTag("load.source_field_count", source.Fields.Count)
             .SetTag("load.select_count", query.Select.Count)
             .SetTag("load.group_by_count", query.GroupBy.Count)
@@ -204,13 +206,14 @@ public class LoadStatementExecutor
     private async ValueTask<long> MaterializeFinalTableWithTelemetryAsync(
         ScriptContext context,
         LoadStatement statement,
+        string tableName,
         string querySql,
         ClickHouseTableName finalTable,
         CancellationToken cancellationToken)
     {
         using var activity = LoadScriptTelemetry.ActivitySource.StartActivity("LoadStatement.FinalTableWrite");
         activity?
-            .SetTag("load.table_name", statement.TableName)
+            .SetTag("load.table_name", tableName)
             .SetTag("load.final_table", finalTable.Table);
 
         try
@@ -303,6 +306,7 @@ public class LoadStatementExecutor
 
     private static LoadedTable CreateLoadedTable(
         LoadStatement statement,
+        string tableName,
         ResolvedQuery resolvedQuery,
         ClickHouseTableName finalTable,
         long rowCount)
@@ -310,7 +314,7 @@ public class LoadStatementExecutor
         return new LoadedTable
         {
             Name = finalTable,
-            Alias = statement.TableName,
+            Alias = tableName,
             Kind = statement.Kind switch
             {
                 LoadTableKind.Temp => LoadedTableKind.Temp,
@@ -374,16 +378,23 @@ public class LoadStatementExecutor
         }
     }
 
-    private static void ThrowIfTableNameAlreadyLoaded(ScriptContext context, LoadStatement statement)
+    private static string ValidateTableName(ScriptContext context, LoadStatement statement)
     {
-        if (!context.ContainsLoadedTable(statement.TableName))
+        if (string.IsNullOrWhiteSpace(statement.TableName))
         {
-            return;
+            throw new QueryResolutionException(
+                "У LOAD должно быть имя таблицы. Напишите имя перед LOAD: table_name: LOAD ...",
+                statement.LoadSpan);
         }
 
-        throw new QueryResolutionException(
-            $"Имя LOAD таблицы '{statement.TableName}' уже занято.",
-            statement.TableNameSpan ?? statement.LoadSpan);
+        if (context.ContainsLoadedTable(statement.TableName))
+        {
+            throw new QueryResolutionException(
+                $"Имя LOAD таблицы '{statement.TableName}' уже занято.",
+                statement.TableNameSpan ?? statement.LoadSpan);
+        }
+
+        return statement.TableName;
     }
 
     private static void ValidateMappedStatementFields(LoadStatement statement)

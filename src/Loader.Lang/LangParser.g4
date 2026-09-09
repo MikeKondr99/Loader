@@ -20,7 +20,7 @@ drop_statement
     ;
 
 load_statement
-    : load_table_name
+    : load_table_name?
     load_first?
     load_kind?
     LOAD load_fields

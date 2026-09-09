@@ -47,7 +47,7 @@ public sealed record LoadStatement : Statement
     /// <summary>
     /// Имя результирующей таблицы из префикса <c>table_name: LOAD</c>.
     /// </summary>
-    public required string TableName { get; init; }
+    public required string? TableName { get; init; }
 
     public LangSpan? TableNameSpan { get; init; }
 

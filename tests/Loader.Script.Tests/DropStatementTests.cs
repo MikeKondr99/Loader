@@ -203,7 +203,7 @@ public sealed class DropStatementTests
             CancellationToken cancellationToken = default)
         {
             LoadCalls++;
-            var table = LoadedTable("physical_orders", statement.TableName) with
+            var table = LoadedTable("physical_orders", statement.TableName!) with
             {
                 Kind = statement.IsTemporary ? LoadedTableKind.Temp : LoadedTableKind.Normal
             };

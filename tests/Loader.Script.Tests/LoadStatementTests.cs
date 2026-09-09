@@ -170,6 +170,34 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("ScriptExecutor требует имя таблицы у LOAD на semantic validation")]
+    public async Task Execute_script_rejects_load_without_table_name()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse("LOAD * FROM Inline(x; 1);").Value!;
+        var statement = (LoadStatement)script.Statements[0];
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+        {
+            LoadStatementExecutor = executor
+        }.ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(statement.LoadSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("У LOAD должно быть имя таблицы.");
+        await Assert.That(exception.InnerException!.Message).Contains("table_name: LOAD");
+        await Assert.That(((FakeProviderResolver)executor.ProviderResolver).ResolveCalls).IsEqualTo(0);
+        await Assert.That(executor.MaterializeCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("Execute MAPPED LOAD с явными полями требует ровно key и value")]
     public async Task Execute_mapped_load_with_explicit_fields_rejects_not_two_fields()
     {

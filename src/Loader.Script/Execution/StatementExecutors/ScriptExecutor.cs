@@ -30,7 +30,7 @@ public sealed class ScriptExecutor
                 if (statement is LoadStatement load)
                 {
                     activity?
-                        .SetTag("load.table_name", load.TableName)
+                        .SetTag("load.table_name", load.TableName ?? string.Empty)
                         .SetTag("load.source_provider", load.SourceCall.Name)
                         .SetTag("load.kind", load.IsTemporary ? "temp" : "normal");
                 }

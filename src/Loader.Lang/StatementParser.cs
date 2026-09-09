@@ -69,7 +69,8 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     public override Statement VisitLoad_statement(LangParser.Load_statementContext context)
     {
         // 1. Table name необязателен и задается только обычным NAME перед LOAD: "orders: LOAD ...".
-        var tableName = VisitLoadTableName(context.load_table_name());
+        var tableNameContext = context.load_table_name();
+        var tableName = VisitLoadTableName(tableNameContext);
 
         // 2. Разбираем поля LOAD: либо "*", либо список полей.
         var fields = VisitLoadFields(context.load_fields());
@@ -101,7 +102,7 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
             Kind = VisitLoadKind(context.load_kind()),
             KindSpan = context.load_kind() is null ? null : Span(context.load_kind()),
             TableName = tableName,
-            TableNameSpan = Span(context.load_table_name().name()),
+            TableNameSpan = tableNameContext is null ? null : Span(tableNameContext.name()),
             Fields = fields,
             FromSpan = Span(context.FROM()),
             SourceCall = sourceCall,
@@ -167,8 +168,13 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// Table name prefix before LOAD.
     /// Пример: <c>orders: LOAD * FROM Csv(path='orders.csv');</c>.
     /// </summary>
-    private static string VisitLoadTableName(LangParser.Load_table_nameContext context)
+    private static string? VisitLoadTableName(LangParser.Load_table_nameContext? context)
     {
+        if (context is null)
+        {
+            return null;
+        }
+
         // 1. Имя таблицы может быть обычным NAME или blocked name: "[table name]".
         return UnescapeName(context.name().GetText());
     }
