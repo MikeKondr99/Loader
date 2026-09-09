@@ -6,20 +6,34 @@ public sealed class StringFunctions : FunctionDescriptor
 {
     protected override void DefineFunctions()
     {
-        Method("Substring")
+        Method("Left")
+            .Doc("Возвращает указанное количество символов с начала строки")
+            .Arg("input", DataType.Text)
+            .Arg("count", DataType.Integer)
+            .Returns(DataType.Text)
+            .Template($"if({1} <= 0 AND {1} IS NOT NULL, '', substringUTF8({0}, 1, {1}))");
+
+        Method("Right")
+            .Doc("Возвращает указанное количество символов с конца строки")
+            .Arg("input", DataType.Text)
+            .Arg("count", DataType.Integer)
+            .Returns(DataType.Text)
+            .Template($"if({1} <= 0 AND {1} IS NOT NULL, '', substringUTF8({0}, -{1}))");
+
+        Method("Mid")
             .Doc("Возвращает подстроку начиная с указанной позиции")
             .Arg("input", DataType.Text)
             .Arg("start", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"substringUTF8({0}, {1}, lengthUTF8({0}) - ({1} - 1))");
+            .Template($"substringUTF8({0}, {1})");
 
-        Method("Substring")
+        Method("Mid")
             .Doc("Возвращает подстроку указанной длины")
             .Arg("input", DataType.Text)
             .Arg("start", DataType.Integer)
             .Arg("count", DataType.Integer)
             .Returns(DataType.Text)
-            .Template($"substringUTF8({0}, {1}, {2})");
+            .Template($"if({2} <= 0 AND {2} IS NOT NULL, '', substringUTF8({0}, {1}, {2}))");
 
         Method("PadLeft")
             .Doc("Дополняет строку слева пробелами до указанной длины")

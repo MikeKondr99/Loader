@@ -10,7 +10,7 @@ String functions работают с доменным типом `text`.
 - [Lower](/docs/script/functions/strings/lower.md) - перевод латинского ASCII-текста в нижний регистр.
 - [Trim / LTrim / RTrim](/docs/script/functions/strings/trim.md) - удаление обычных пробелов по краям строки.
 - [PadLeft / PadRight](/docs/script/functions/strings/pad.md) - дополнение строки без обрезки длинных значений.
-- [Substring](/docs/script/functions/strings/substring.md) - получение части строки.
+- [Left / Right / Mid](/docs/script/functions/strings/left-right-mid.md) - получение части строки.
 - [Reverse](/docs/script/functions/strings/reverse.md) - разворот строки.
 - [EmptyIsNull](/docs/script/functions/strings/empty-is-null.md) - замена пустой строки на `null`.
 - [Replace](/docs/script/functions/strings/replace.md) - замена точных текстовых вхождений.

@@ -20,7 +20,7 @@ TODO: определить отдельную семантику для `rate = 
 
 | Expression | Result |
 | --- | --- |
-| `FutureValue(0.005, 36, -20.0).Text().Substring(1, 9)` | `'786.72209'` |
+| `FutureValue(0.005, 36, -20.0).Text().Mid(1, 9)` | `'786.72209'` |
 | `FutureValue(null, 36, -20.0)` | `null` |
 | `FutureValue(0.005, null, -20.0)` | `null` |
 | `FutureValue(0.005, 36, null)` | `null` |
