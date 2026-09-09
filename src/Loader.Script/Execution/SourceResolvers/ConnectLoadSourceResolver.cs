@@ -67,7 +67,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         return connection switch
         {
             DatabaseScriptConnection database => ResolveDatabaseConnection(statement, options, database, nameOption, errors),
-            DwhTableScriptConnection dwh => await ResolveDwhTableConnectionAsync(statement, context, options, dwh, errors, cancellationToken)
+            DwhFileTableScriptConnection dwh => await ResolveDwhFileTableConnectionAsync(statement, context, options, dwh, errors, cancellationToken)
                 .ConfigureAwait(false),
             FileStorageScriptConnection fileStorage => await ResolveFileStorageConnectionAsync(statement, context, options, fileStorage, errors, cancellationToken)
                 .ConfigureAwait(false),
@@ -102,11 +102,11 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         return factory.CreateSource(connection.ConnectionString, sql);
     }
 
-    private static async ValueTask<LoadFromSource> ResolveDwhTableConnectionAsync(
+    private static async ValueTask<LoadFromSource> ResolveDwhFileTableConnectionAsync(
         LoadStatement statement,
         ScriptContext context,
         LoadOptionReader options,
-        DwhTableScriptConnection connection,
+        DwhFileTableScriptConnection connection,
         List<LangError> errors,
         CancellationToken cancellationToken)
     {
@@ -115,7 +115,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         {
             errors.Add(new LangError
             {
-                Message = $"Connection '{connection.Name}' не поддерживает SQL после FROM.",
+                Message = $"Подключение Файл '{connection.Name}' не поддерживает SQL после FROM.",
                 Span = statement.SqlPart.Span
             });
         }
@@ -174,7 +174,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         {
             errors.Add(new LangError
             {
-                Message = $"Connection '{connection.Name}' является файловым источником и не поддерживает SQL после FROM.",
+                Message = $"Подключение Папка '{connection.Name}' не поддерживает SQL после FROM.",
                 Span = statement.SqlPart.Span
             });
         }
@@ -185,7 +185,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         {
             errors.Add(new LangError
             {
-                Message = "Для файлового Connect требуется опция path='relative/path'.",
+                Message = $"Подключение Папка '{connection.Name}' требует параметр path='relative/path'.",
                 Span = statement.SourceCall.Span
             });
         }
@@ -200,7 +200,7 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         {
             errors.Add(new LangError
             {
-                Message = $"Файловый Connect не поддерживает расширение '{extension}'. Используйте csv, json, jsonl, ndjson, qvd, xlsx, xls или xml.",
+                Message = $"Подключение Папка '{connection.Name}' не поддерживает расширение '{extension}'. Используйте csv, json, jsonl, ndjson, qvd, xlsx, xls или xml.",
                 Span = pathOption?.Span ?? statement.SourceCall.Span
             });
             return null!;

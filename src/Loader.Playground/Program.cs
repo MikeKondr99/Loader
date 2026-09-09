@@ -692,7 +692,8 @@ internal sealed record PlaygroundConfig(
         }
 
         var typeText = section["Type"];
-        if (string.Equals(typeText, "DwhTable", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(typeText, "DwhFileTable", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(typeText, "DwhTable", StringComparison.OrdinalIgnoreCase))
         {
             var sql = section["Sql"];
             if (string.IsNullOrWhiteSpace(sql))
@@ -700,7 +701,7 @@ internal sealed record PlaygroundConfig(
                 throw new InvalidOperationException($"Playground connection '{name}' requires non-empty Sql.");
             }
 
-            return new DwhTableScriptConnection
+            return new DwhFileTableScriptConnection
             {
                 Name = name,
                 Sql = sql
@@ -782,8 +783,8 @@ internal static class PlaygroundConnectionDisplay
         return connection switch
         {
             DatabaseScriptConnection database => database.Provider.ToString(),
-            DwhTableScriptConnection => "DwhTable",
-            FileStorageScriptConnection => "FileStorage",
+            DwhFileTableScriptConnection => "Файл",
+            FileStorageScriptConnection => "Папка",
             _ => connection.GetType().Name
         };
     }

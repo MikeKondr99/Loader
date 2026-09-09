@@ -1112,6 +1112,69 @@ public sealed class LoadProviderResolverTests
     }
 
     [Test]
+    [DisplayName("Resolver Connect folder отклоняет SQL после FROM")]
+    public async Task Resolve_connect_file_storage_rejects_sql_after_from()
+    {
+        var resolver = new LoadProviderResolver();
+        var sqlSpan = Span(3, 30, 38);
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new FileStorageScriptConnection
+            {
+                Name = "folder",
+                Source = new StubFileSource()
+            }
+        ]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                CreateStatement(
+                    "Connect",
+                    [Option("name", "folder")],
+                    sql: "SELECT 1") with
+                {
+                    SqlPart = new SqlPart
+                    {
+                        Value = "SELECT 1",
+                        Span = sqlSpan
+                    }
+                },
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(2);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("Подключение Папка");
+        await Assert.That(exception.Errors[0].Message).Contains("не поддерживает SQL после FROM");
+    }
+
+    [Test]
+    [DisplayName("Resolver Connect folder требует path")]
+    public async Task Resolve_connect_file_storage_requires_path()
+    {
+        var resolver = new LoadProviderResolver();
+        var registry = new InMemoryConnectionRegistry(
+        [
+            new FileStorageScriptConnection
+            {
+                Name = "folder",
+                Source = new StubFileSource()
+            }
+        ]);
+
+        var statement = CreateStatement("Connect", [Option("name", "folder")]);
+
+        var exception = await Assert.That(async () => await resolver.ResolveAsync(
+                statement,
+                CreateContext(registry: registry)))
+            .ThrowsExactly<ProviderResolutionException>();
+
+        await Assert.That(exception!.Errors).Count().IsEqualTo(1);
+        await Assert.That(exception.Errors[0].Span).IsEqualTo(statement.SourceCall.Span);
+        await Assert.That(exception.Errors[0].Message).Contains("Подключение Папка");
+        await Assert.That(exception.Errors[0].Message).Contains("требует параметр path='relative/path'");
+    }
+
+    [Test]
     [DisplayName("Resolver Connect DWH отклоняет SQL после FROM")]
     public async Task Resolve_connect_dwh_rejects_sql_after_from()
     {
@@ -1119,7 +1182,7 @@ public sealed class LoadProviderResolverTests
         var sqlSpan = Span(3, 30, 38);
         var registry = new InMemoryConnectionRegistry(
         [
-            new DwhTableScriptConnection
+            new DwhFileTableScriptConnection
             {
                 Name = "dwh_orders",
                 Sql = "orders"
@@ -1143,6 +1206,7 @@ public sealed class LoadProviderResolverTests
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(sqlSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("Подключение Файл");
         await Assert.That(exception.Errors[0].Message).Contains("не поддерживает SQL после FROM");
     }
 
@@ -1173,6 +1237,7 @@ public sealed class LoadProviderResolverTests
 
         await Assert.That(exception!.Errors).Count().IsEqualTo(1);
         await Assert.That(exception.Errors[0].Span).IsEqualTo(pathSpan);
+        await Assert.That(exception.Errors[0].Message).Contains("Подключение Папка");
         await Assert.That(exception.Errors[0].Message).Contains("не поддерживает расширение");
     }
 

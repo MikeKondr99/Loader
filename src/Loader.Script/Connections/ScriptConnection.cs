@@ -14,7 +14,7 @@ public sealed record DatabaseScriptConnection : ScriptConnection
     public required string ConnectionString { get; init; }
 }
 
-public sealed record DwhTableScriptConnection : ScriptConnection
+public sealed record DwhFileTableScriptConnection : ScriptConnection
 {
     public required string Sql { get; init; }
 }

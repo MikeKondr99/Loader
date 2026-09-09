@@ -154,7 +154,7 @@ public sealed class LoadStatementClickHouseTests
             """);
         var registry = new InMemoryConnectionRegistry(
         [
-            new DwhTableScriptConnection
+            new DwhFileTableScriptConnection
             {
                 Name = "dwh_orders",
                 Sql = $"SELECT id, city FROM `{sourceTable}` WHERE id > 1"

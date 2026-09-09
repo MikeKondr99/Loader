@@ -1,8 +1,8 @@
-# Providers
+# Провайдеры
 
-Документация по provider-ам `FROM` в `LOAD`.
+Документация по провайдерам `FROM` в `LOAD`.
 
-Файловые provider-ы:
+Файловые провайдеры:
 
 - [Csv](csv.md)
 - [Excel](excel.md)
@@ -10,13 +10,13 @@
 - [Xml](xml.md)
 - [Qvd](qvd.md)
 
-Встроенные provider-ы:
+Встроенные провайдеры:
 
 - [Inline](inline.md)
 - [Numbers](numbers.md)
 - [Calendar](calendar.md)
 
-Provider-ы поверх уже загруженных script-таблиц:
+Провайдеры поверх уже загруженных script-таблиц:
 
 - [Table](table.md)
 - [Union](union.md)
