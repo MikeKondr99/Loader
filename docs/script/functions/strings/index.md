@@ -8,7 +8,7 @@ String functions работают с доменным типом `text`.
 - [Upper](/docs/script/functions/strings/upper.md) - перевод латинского ASCII-текста в верхний регистр.
 - [Capitalize](/docs/script/functions/strings/capitalize.md) - приведение первой буквы каждого слова к верхнему регистру.
 - [Lower](/docs/script/functions/strings/lower.md) - перевод латинского ASCII-текста в нижний регистр.
-- [Trim / TrimLeft / TrimRight](/docs/script/functions/strings/trim.md) - удаление обычных пробелов по краям строки.
+- [Trim / LTrim / RTrim](/docs/script/functions/strings/trim.md) - удаление обычных пробелов по краям строки.
 - [PadLeft / PadRight](/docs/script/functions/strings/pad.md) - дополнение строки без обрезки длинных значений.
 - [Substring](/docs/script/functions/strings/substring.md) - получение части строки.
 - [Reverse](/docs/script/functions/strings/reverse.md) - разворот строки.

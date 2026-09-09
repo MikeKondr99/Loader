@@ -97,31 +97,31 @@ public sealed class ClickHouseStringFunctionTests : ClickHouseExpressionTestBase
     }
 
     [Test]
-    [Arguments("TrimLeft('  hello  ')", "hello  ")]
-    [Arguments("TrimLeft('  ')", "")]
-    [Arguments("TrimLeft('')", "")]
-    [Arguments("TrimLeft('  привет')", "привет")]
-    [Arguments("TrimLeft('  😀👍')", "😀👍")]
-    [Arguments("TrimLeft('\\thello\\t')", "\thello\t")]
-    [Arguments("TrimLeft('\\nhello\\n')", "\nhello\n")]
-    [Arguments("TrimLeft('\\r\\n hello \\t')", "\r\n hello \t")]
-    [Arguments("TrimLeft(null)", null)]
-    public Task FuncTrimLeftTests(string expr, object? expected)
+    [Arguments("LTrim('  hello  ')", "hello  ")]
+    [Arguments("LTrim('  ')", "")]
+    [Arguments("LTrim('')", "")]
+    [Arguments("LTrim('  привет')", "привет")]
+    [Arguments("LTrim('  😀👍')", "😀👍")]
+    [Arguments("LTrim('\\thello\\t')", "\thello\t")]
+    [Arguments("LTrim('\\nhello\\n')", "\nhello\n")]
+    [Arguments("LTrim('\\r\\n hello \\t')", "\r\n hello \t")]
+    [Arguments("LTrim(null)", null)]
+    public Task FuncLTrimTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
     }
 
     [Test]
-    [Arguments("TrimRight('  hello  ')", "  hello")]
-    [Arguments("TrimRight('  ')", "")]
-    [Arguments("TrimRight('')", "")]
-    [Arguments("TrimRight('привет  ')", "привет")]
-    [Arguments("TrimRight('😀👍  ')", "😀👍")]
-    [Arguments("TrimRight('\\thello\\t')", "\thello\t")]
-    [Arguments("TrimRight('\\nhello\\n')", "\nhello\n")]
-    [Arguments("TrimRight('\\r\\n hello \\t')", "\r\n hello \t")]
-    [Arguments("TrimRight(null)", null)]
-    public Task FuncTrimRightTests(string expr, object? expected)
+    [Arguments("RTrim('  hello  ')", "  hello")]
+    [Arguments("RTrim('  ')", "")]
+    [Arguments("RTrim('')", "")]
+    [Arguments("RTrim('привет  ')", "привет")]
+    [Arguments("RTrim('😀👍  ')", "😀👍")]
+    [Arguments("RTrim('\\thello\\t')", "\thello\t")]
+    [Arguments("RTrim('\\nhello\\n')", "\nhello\n")]
+    [Arguments("RTrim('\\r\\n hello \\t')", "\r\n hello \t")]
+    [Arguments("RTrim(null)", null)]
+    public Task FuncRTrimTests(string expr, object? expected)
     {
         return AssertExpressionAsync(expr, expected);
     }

@@ -75,13 +75,13 @@ public sealed class StringFunctions : FunctionDescriptor
             .Returns(DataType.Text)
             .Template($"TRIM({0})");
 
-        Method("TrimLeft")
+        Method("LTrim")
             .Doc("Удаляет пробелы в начале строки")
             .Arg("input", DataType.Text)
             .Returns(DataType.Text)
             .Template($"LTRIM({0})");
 
-        Method("TrimRight")
+        Method("RTrim")
             .Doc("Удаляет пробелы в конце строки")
             .Arg("input", DataType.Text)
             .Returns(DataType.Text)

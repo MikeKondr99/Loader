@@ -1,6 +1,6 @@
 # Trim
 
-`Trim`, `TrimLeft` и `TrimRight` удаляют обычные пробелы по краям строки.
+`Trim`, `LTrim` и `RTrim` удаляют обычные пробелы по краям строки.
 
 Внутренние пробелы не меняются. Табуляция, перенос строки и другие whitespace-символы сейчас не считаются пробелами для этих функций и остаются в строке.
 
@@ -25,28 +25,9 @@ TODO: добавить поддержку удаления других whitespa
 | `Trim('\nhello\n')` | `'\nhello\n'` |
 | `Trim(null)` | `null` |
 
-## TrimLeft(value)
+## LTrim(value)
 
-`TrimLeft(value)` удаляет обычные пробелы только в начале строки.
-
-Если вход равен `null`, результат тоже `null`.
-
-Примеры:
-
-| Expression | Result |
-| --- | --- |
-| `TrimLeft('  hello  ')` | `'hello  '` |
-| `TrimLeft('  ')` | `''` |
-| `TrimLeft('')` | `''` |
-| `TrimLeft('  привет')` | `'привет'` |
-| `TrimLeft('  😀👍')` | `'😀👍'` |
-| `TrimLeft('\thello\t')` | `'\thello\t'` |
-| `TrimLeft('\nhello\n')` | `'\nhello\n'` |
-| `TrimLeft(null)` | `null` |
-
-## TrimRight(value)
-
-`TrimRight(value)` удаляет обычные пробелы только в конце строки.
+`LTrim(value)` удаляет обычные пробелы только в начале строки.
 
 Если вход равен `null`, результат тоже `null`.
 
@@ -54,11 +35,30 @@ TODO: добавить поддержку удаления других whitespa
 
 | Expression | Result |
 | --- | --- |
-| `TrimRight('  hello  ')` | `'  hello'` |
-| `TrimRight('  ')` | `''` |
-| `TrimRight('')` | `''` |
-| `TrimRight('привет  ')` | `'привет'` |
-| `TrimRight('😀👍  ')` | `'😀👍'` |
-| `TrimRight('\thello\t')` | `'\thello\t'` |
-| `TrimRight('\nhello\n')` | `'\nhello\n'` |
-| `TrimRight(null)` | `null` |
+| `LTrim('  hello  ')` | `'hello  '` |
+| `LTrim('  ')` | `''` |
+| `LTrim('')` | `''` |
+| `LTrim('  привет')` | `'привет'` |
+| `LTrim('  😀👍')` | `'😀👍'` |
+| `LTrim('\thello\t')` | `'\thello\t'` |
+| `LTrim('\nhello\n')` | `'\nhello\n'` |
+| `LTrim(null)` | `null` |
+
+## RTrim(value)
+
+`RTrim(value)` удаляет обычные пробелы только в конце строки.
+
+Если вход равен `null`, результат тоже `null`.
+
+Примеры:
+
+| Expression | Result |
+| --- | --- |
+| `RTrim('  hello  ')` | `'  hello'` |
+| `RTrim('  ')` | `''` |
+| `RTrim('')` | `''` |
+| `RTrim('привет  ')` | `'привет'` |
+| `RTrim('😀👍  ')` | `'😀👍'` |
+| `RTrim('\thello\t')` | `'\thello\t'` |
+| `RTrim('\nhello\n')` | `'\nhello\n'` |
+| `RTrim(null)` | `null` |
