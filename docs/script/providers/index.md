@@ -10,6 +10,13 @@
 - [Xml](xml.md)
 - [Qvd](qvd.md)
 
+Подключения:
+
+- [Connect](connect.md)
+- [Connect: База данных](connect-database.md)
+- [Connect: Файл](connect-file.md)
+- [Connect: Папка](connect-folder.md)
+
 Встроенные провайдеры:
 
 - [Inline](inline.md)
@@ -21,5 +28,3 @@
 - [Table](table.md)
 - [Union](union.md)
 - [Join](join.md)
-
-`Connect` здесь намеренно не описан.
