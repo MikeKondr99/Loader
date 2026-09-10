@@ -1,11 +1,12 @@
-using System.Data.Common;
+using System.Globalization;
 using Loader.Lang;
 using Loader.Lang.Statements;
+using DataType = Loader.Core.Models.DataType;
 
 namespace Loader.Script.Execution;
 
 /// <summary>
-/// Resolver provider-а <c>Numbers</c>. Создает reader-source с последовательностью целых чисел.
+/// Resolver provider-а <c>Numbers</c>. Создает ClickHouse SQL-source с последовательностью целых чисел.
 /// Параметры:
 /// max: Integer - последнее допустимое значение последовательности.
 /// min: Integer - первое значение последовательности, по умолчанию <c>0</c>.
@@ -59,10 +60,24 @@ internal sealed class NumbersLoadSourceResolver : LoadSourceResolverBase
             return Error();
         }
 
-        return ValueTask.FromResult<LoadFromSource>(new ReaderLoadFromSource
+        var count = ((max.Value - min) / step) + 1;
+        var sql = string.Create(
+            CultureInfo.InvariantCulture,
+            $"(SELECT toInt64({min}) + toInt64(number) * toInt64({step}) AS number FROM numbers({count}))");
+
+        return ValueTask.FromResult<LoadFromSource>(new SqlLoadFromSource
         {
-            RequiresBuffer = false,
-            OpenReaderAsync = _ => ValueTask.FromResult<DbDataReader>(new NumbersDataReader(min, max.Value, step))
+            Sql = sql,
+            Fields =
+            [
+                new LoadFromSqlField
+                {
+                    Name = "number",
+                    PhysicalName = "number",
+                    DataType = DataType.Integer,
+                    CanBeNull = false
+                }
+            ]
         });
     }
 

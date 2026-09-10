@@ -539,7 +539,7 @@ public sealed class LoadStatementTests
     }
 
     [Test]
-    [DisplayName("Execute LOAD читает Numbers provider и строит query поверх generated number field")]
+    [DisplayName("Execute LOAD использует Numbers provider как SQL source без temp table")]
     public async Task Execute_load_reads_numbers_provider()
     {
         var executor = new TestLoadStatementExecutor
@@ -558,17 +558,16 @@ public sealed class LoadStatementTests
 
         var loadedTable = await executor.ExecuteAsync(context, statement);
 
-        await Assert.That(executor.WriteCalls).IsEqualTo(1);
-        await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
-            .IsEquivalentTo([0L, 1L, 2L, 3L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-        await Assert.That(executor.QuerySql).Contains(".`column1` AS `column1`");
+        await Assert.That(executor.WriteCalls).IsEqualTo(0);
+        await Assert.That(executor.QuerySql).Contains("FROM (SELECT toInt64(0) + toInt64(number) * toInt64(1) AS number FROM numbers(4)) AS source_");
+        await Assert.That(executor.QuerySql).Contains(".`number` AS `column1`");
         await Assert.That(loadedTable.Alias).IsEqualTo("numbers");
         await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("value");
     }
 
     [Test]
-    [DisplayName("Execute LOAD FIRST ограничивает исходные строки до temp table")]
+    [DisplayName("Execute LOAD FIRST ограничивает Numbers SQL source")]
     public async Task Execute_load_first_limits_source_rows_before_temp_table()
     {
         var executor = new TestLoadStatementExecutor
@@ -589,9 +588,8 @@ public sealed class LoadStatementTests
         await executor.ExecuteAsync(context, statement);
 
         await Assert.That(statement.First).IsEqualTo(3);
-        await Assert.That(executor.Rows.Select(static row => (long)row[0]).ToArray())
-            .IsEquivalentTo([0L, 1L, 2L], TUnit.Assertions.Enums.CollectionOrdering.Matching);
-        await Assert.That(executor.QuerySql).DoesNotContain("LIMIT 3");
+        await Assert.That(executor.WriteCalls).IsEqualTo(0);
+        await Assert.That(executor.QuerySql).Contains("LIMIT 3");
     }
 
     [Test]

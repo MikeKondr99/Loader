@@ -34,8 +34,8 @@ Resolver разбирает источник из `FROM`.
 
 Источник может быть двух видов:
 
-- reader-source: внешний reader, например `Csv`, `Json`, `Excel`, `Qvd`, `Xml`, `Inline`, `Numbers`, `Connect: БД`, `Connect: Папка`;
-- DWH-source: данные уже находятся в целевом DWH и доступны ClickHouse напрямую, например `Table`, `Union`, `Join`, `Calendar`, `Connect: Файл`.
+- reader-source: внешний reader, например `Csv`, `Json`, `Excel`, `Qvd`, `Xml`, `Inline`, `Connect: БД`, `Connect: Папка`;
+- DWH-source: данные уже находятся в целевом DWH или могут быть сгенерированы ClickHouse напрямую, например `Table`, `Union`, `Join`, `Calendar`, `Numbers`, `Connect: Файл`.
 
 ## Подготовка Источника
 

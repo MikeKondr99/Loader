@@ -105,15 +105,14 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Option("max", 3)]),
             CreateContext());
-        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(source).IsTypeOf<ReaderLoadFromSource>();
-        await Assert.That(Reader(source).RequiresBuffer).IsFalse();
-        await Assert.That(reader.FieldCount).IsEqualTo(1);
-        await Assert.That(reader.GetName(0)).IsEqualTo("number");
-        await Assert.That(reader.GetFieldType(0)).IsEqualTo(typeof(long));
-        await Assert.That(await ReadNumbersAsync(reader))
-            .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
+        var sqlSource = Sql(source);
+        await Assert.That(sqlSource.Sql).IsEqualTo("(SELECT toInt64(0) + toInt64(number) * toInt64(1) AS number FROM numbers(4))");
+        await Assert.That(sqlSource.Fields).Count().IsEqualTo(1);
+        await Assert.That(sqlSource.Fields[0].Name).IsEqualTo("number");
+        await Assert.That(sqlSource.Fields[0].PhysicalName).IsEqualTo("number");
+        await Assert.That(sqlSource.Fields[0].DataType).IsEqualTo(DataType.Integer);
+        await Assert.That(sqlSource.Fields[0].CanBeNull).IsFalse();
     }
 
     [Test]
@@ -125,10 +124,8 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(3)]),
             CreateContext());
-        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(await ReadNumbersAsync(reader))
-            .IsEquivalentTo([0L, 1L, 2L, 3L], CollectionOrdering.Matching);
+        await Assert.That(Sql(source).Sql).IsEqualTo("(SELECT toInt64(0) + toInt64(number) * toInt64(1) AS number FROM numbers(4))");
     }
 
     [Test]
@@ -158,10 +155,8 @@ public sealed class LoadProviderResolverTests
         var source = await resolver.ResolveAsync(
             CreateStatement("Numbers", [Positional(2, 0), Positional(8, 1), Option("step", 3)]),
             CreateContext());
-        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(await ReadNumbersAsync(reader))
-            .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
+        await Assert.That(Sql(source).Sql).IsEqualTo("(SELECT toInt64(2) + toInt64(number) * toInt64(3) AS number FROM numbers(3))");
     }
 
     [Test]
@@ -179,10 +174,8 @@ public sealed class LoadProviderResolverTests
                     Option("step", 3)
                 ]),
             CreateContext());
-        await using var reader = await Reader(source).OpenReaderAsync(CancellationToken.None);
 
-        await Assert.That(await ReadNumbersAsync(reader))
-            .IsEquivalentTo([2L, 5L, 8L], CollectionOrdering.Matching);
+        await Assert.That(Sql(source).Sql).IsEqualTo("(SELECT toInt64(2) + toInt64(number) * toInt64(3) AS number FROM numbers(3))");
     }
 
     [Test]
@@ -2342,21 +2335,16 @@ public sealed class LoadProviderResolverTests
         };
     }
 
-    private static async Task<long[]> ReadNumbersAsync(DbDataReader reader)
-    {
-        var values = new List<long>();
-        while (await reader.ReadAsync().ConfigureAwait(false))
-        {
-            values.Add(reader.GetInt64(0));
-        }
-
-        return values.ToArray();
-    }
-
     private static ReaderLoadFromSource Reader(LoadFromSource source)
     {
         return source as ReaderLoadFromSource
                ?? throw new InvalidOperationException($"Expected {nameof(ReaderLoadFromSource)}, got {source.GetType().Name}.");
+    }
+
+    private static SqlLoadFromSource Sql(LoadFromSource source)
+    {
+        return source as SqlLoadFromSource
+               ?? throw new InvalidOperationException($"Expected {nameof(SqlLoadFromSource)}, got {source.GetType().Name}.");
     }
 
     private static ScriptContext CreateContext(
