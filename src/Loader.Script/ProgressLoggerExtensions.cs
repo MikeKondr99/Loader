@@ -54,34 +54,75 @@ public static class ProgressLoggerExtensions
         long rowCount,
         CancellationToken cancellationToken = default)
     {
+        return logger.SourceRowsLoadedAsync(rowCount, messageId: null, elapsed: null, completed: true, cancellationToken);
+    }
+
+    public static ValueTask SourceRowsLoadedAsync(
+        this IProgressLogger logger,
+        long rowCount,
+        string? messageId,
+        TimeSpan? elapsed = null,
+        bool completed = true,
+        CancellationToken cancellationToken = default)
+    {
+        var message = completed
+            ? $"Выгружено {rowCount} записей"
+            : $"Выгружаем {rowCount} записей";
+        if (elapsed is not null)
+        {
+            message += completed
+                ? $". Заняло {FormatSeconds(elapsed.Value)} секунд."
+                : $". Прошло {FormatSeconds(elapsed.Value)} секунд.";
+        }
+
         return logger.ReportAsync(new ScriptProgressEvent
         {
+            MessageId = messageId,
             Kind = "SourceRowsLoaded",
-            Message = $"Было загружено {rowCount} записей"
+            Message = message
         }, cancellationToken);
     }
 
     public static ValueTask TransformationWriteStartedAsync(
         this IProgressLogger logger,
+        string? messageId = null,
+        TimeSpan? elapsed = null,
         CancellationToken cancellationToken = default)
     {
+        var message = elapsed is null
+            ? "Загружаем данные после трансформаций"
+            : $"Загружаем таблицу. Прошло {FormatSeconds(elapsed.Value)} секунд.";
+
         return logger.ReportAsync(new ScriptProgressEvent
         {
+            MessageId = messageId,
             Kind = "TransformationWriteStarted",
-            Message = "Загружаем данные после трансформаций"
+            Message = message
         }, cancellationToken);
     }
 
     public static ValueTask TransformationRowsLoadedAsync(
         this IProgressLogger logger,
         long rowCount,
+        TimeSpan? elapsed = null,
+        string? messageId = null,
         CancellationToken cancellationToken = default)
     {
+        var message = elapsed is null
+            ? $"Загружено {rowCount} записей"
+            : $"Загружено {rowCount} записей за {FormatSeconds(elapsed.Value)} секунд.";
+
         return logger.ReportAsync(new ScriptProgressEvent
         {
+            MessageId = messageId,
             Kind = "TransformationRowsLoaded",
-            Message = $"Было загружено {rowCount} записей"
+            Message = message
         }, cancellationToken);
+    }
+
+    private static string FormatSeconds(TimeSpan elapsed)
+    {
+        return elapsed.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     public static ValueTask DropTableStartedAsync(

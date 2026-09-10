@@ -443,6 +443,102 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("Execute LOAD обновляет progress записи final table одним messageId")]
+    public async Task Execute_load_updates_final_table_write_progress_with_same_message_id()
+    {
+        var logger = new RecordingProgressLogger();
+        var executor = new TestLoadStatementExecutor
+        {
+            FinalRowCount = 3,
+            FinalMaterializeDelay = TimeSpan.FromMilliseconds(50)
+        };
+        var context = CreateContext(
+            logger: logger,
+            options: new ScriptContextOptions
+            {
+                TempTablePrefix = "tmp_",
+                FinalTablePrefix = "final_",
+                FinalTableWriteHeartbeatInterval = TimeSpan.FromMilliseconds(5)
+            });
+        context.AddLoadedTable(LoadedTable("source", LoadedTableKind.Normal));
+        var script = Loader.Lang.Script.Parse(
+            """
+            result:
+            LOAD *
+            FROM source;
+            """).Value!;
+
+        await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        var finalEvents = logger.Events
+            .Where(static item => item.Kind is "TransformationWriteStarted" or "TransformationRowsLoaded")
+            .ToArray();
+        await Assert.That(finalEvents.Length).IsGreaterThanOrEqualTo(3);
+        await Assert.That(finalEvents.Select(static item => item.MessageId).Distinct().Count()).IsEqualTo(1);
+        await Assert.That(finalEvents[0].MessageId).IsNotNull();
+        await Assert.That(finalEvents[0].Message).IsEqualTo("Загружаем таблицу. Прошло 0 секунд.");
+        await Assert.That(finalEvents[^1].Kind).IsEqualTo("TransformationRowsLoaded");
+        await Assert.That(finalEvents[^1].Message).Contains("Загружено 3 записей за ");
+        await Assert.That(logger.Events.Where(static item => item.Kind == "LoadTableStarted").All(static item => item.MessageId is null)).IsTrue();
+    }
+
+    [Test]
+    [DisplayName("Execute LOAD обновляет progress загрузки source reader одним messageId")]
+    public async Task Execute_load_updates_source_reader_progress_with_same_message_id()
+    {
+        var logger = new RecordingProgressLogger();
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver
+            {
+                SourceKind = "csv",
+                Rows =
+                [
+                    [1, "Moscow"],
+                    [2, "Paris"],
+                    [3, "Berlin"]
+                ]
+            },
+            FinalRowCount = 3
+        };
+        var context = CreateContext(
+            logger: logger,
+            options: new ScriptContextOptions
+            {
+                TempTablePrefix = "tmp_",
+                FinalTablePrefix = "final_",
+                SourceRowsProgressInterval = TimeSpan.Zero
+            });
+        var statement = new LoadStatement
+        {
+            TableName = "orders",
+            LoadSpan = Span(),
+            Fields = null,
+            FromSpan = Span(),
+            SourceCall = SourceCall("Csv", "orders.csv"),
+            Where = null,
+            GroupBy = null,
+            OrderBy = null
+        };
+
+        await executor.ExecuteAsync(context, statement);
+
+        var sourceEvents = logger.Events
+            .Where(static item => item.Kind == "SourceRowsLoaded")
+            .ToArray();
+        await Assert.That(sourceEvents).Count().IsEqualTo(4);
+        await Assert.That(sourceEvents[0].Message).StartsWith("Выгружаем 1 записей. Прошло ");
+        await Assert.That(sourceEvents[1].Message).StartsWith("Выгружаем 2 записей. Прошло ");
+        await Assert.That(sourceEvents[2].Message).StartsWith("Выгружаем 3 записей. Прошло ");
+        await Assert.That(sourceEvents[3].Message).StartsWith("Выгружено 3 записей. Заняло ");
+        await Assert.That(sourceEvents.Select(static item => item.MessageId).Distinct().Count()).IsEqualTo(1);
+        await Assert.That(sourceEvents[0].MessageId).IsNotNull();
+        await Assert.That(logger.Events
+            .Where(static item => item.Kind != "SourceRowsLoaded" && !item.Kind.StartsWith("Transformation", StringComparison.Ordinal))
+            .All(static item => item.MessageId is null)).IsTrue();
+    }
+
+    [Test]
     [DisplayName("Execute LOAD читает Numbers provider и строит query поверх generated number field")]
     public async Task Execute_load_reads_numbers_provider()
     {
@@ -951,14 +1047,15 @@ public sealed class LoadStatementTests
 
     private static ScriptContext CreateContext(
         IFileSource? fileSource = null,
-        IProgressLogger? logger = null)
+        IProgressLogger? logger = null,
+        ScriptContextOptions? options = null)
     {
         return new ScriptContext
         {
             FileStorage = fileSource ?? new StubFileSource(),
             TargetConnectionString = "Host=localhost",
             Logger = logger ?? NullProgressLogger.Instance,
-            Options = new ScriptContextOptions
+            Options = options ?? new ScriptContextOptions
             {
                 TempTablePrefix = "tmp_",
                 FinalTablePrefix = "final_"
@@ -1032,6 +1129,8 @@ public sealed class LoadStatementTests
 
         public IReadOnlyList<object?> RowValues { get; init; } = [1, "Moscow"];
 
+        public IReadOnlyList<IReadOnlyList<object?>>? Rows { get; init; }
+
         public ValueTask<LoadFromSource> ResolveAsync(
             LoadStatement statement,
             ScriptContext context,
@@ -1053,7 +1152,11 @@ public sealed class LoadStatementTests
                 table.Columns.Add(ColumnNames[ordinal], RowValues[ordinal]?.GetType() ?? typeof(string));
             }
 
-            table.Rows.Add(RowValues.ToArray());
+            foreach (var row in Rows ?? [RowValues])
+            {
+                table.Rows.Add(row.ToArray());
+            }
+
             return table.CreateDataReader();
         }
     }
@@ -1089,9 +1192,11 @@ public sealed class LoadStatementTests
 
         public long FinalRowCount { get; init; }
 
+        public TimeSpan? FinalMaterializeDelay { get; init; }
+
         public List<object[]> Rows { get; } = [];
 
-        protected override ValueTask<long> MaterializeFinalTableAsync(
+        protected override async ValueTask<long> MaterializeFinalTableAsync(
             ScriptContext context,
             LoadStatement statement,
             string querySql,
@@ -1106,7 +1211,12 @@ public sealed class LoadStatementTests
                 throw new InvalidOperationException("materialize failed");
             }
 
-            return ValueTask.FromResult(FinalRowCount);
+            if (FinalMaterializeDelay is not null)
+            {
+                await Task.Delay(FinalMaterializeDelay.Value, cancellationToken).ConfigureAwait(false);
+            }
+
+            return FinalRowCount;
         }
 
         protected override ValueTask DropFinalTableAsync(
@@ -1130,7 +1240,7 @@ public sealed class LoadStatementTests
 
             protected override async ValueTask<long> WriteTempTableAsync(
                 ScriptContext context,
-                DomainDataReader reader,
+                SourceRowsProgressDataReader reader,
                 ClickHouseTableName tableName,
                 CancellationToken cancellationToken)
             {

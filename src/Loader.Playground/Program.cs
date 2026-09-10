@@ -512,6 +512,7 @@ static PlaygroundError ToPlaygroundError(LangError error)
 static PlaygroundProgressData ToPlaygroundProgress(ScriptProgressEvent progressEvent)
 {
     return new PlaygroundProgressData(
+        progressEvent.MessageId,
         progressEvent.Kind,
         progressEvent.Level.ToString(),
         progressEvent.Message,
@@ -566,6 +567,7 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
 internal sealed record ScriptRequest(string Script, string? RunId = null);
 
 internal sealed record PlaygroundProgressData(
+    string? MessageId,
     string Kind,
     string Level,
     string Message,

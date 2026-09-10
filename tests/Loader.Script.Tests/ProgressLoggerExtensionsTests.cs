@@ -28,12 +28,25 @@ public sealed class ProgressLoggerExtensionsTests
                 [
                     "Загружается таблица [iris]",
                     "Выгружаем данные из файла 'file.csv'",
-                    "Было загружено 150 записей",
+                    "Выгружено 150 записей",
                     "Загружаем данные после трансформаций",
-                    "Было загружено 140 записей"
+                    "Загружено 140 записей"
                 ],
                 TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(logger.Events.All(static item => item.Level == ScriptProgressLevel.User)).IsTrue();
+        await Assert.That(logger.Events.All(static item => item.MessageId is null)).IsTrue();
+    }
+
+    [Test]
+    public async Task Source_rows_loaded_can_emit_update_message_id()
+    {
+        var logger = new TestProgressLogger();
+
+        await logger.SourceRowsLoadedAsync(150, "source-progress", TimeSpan.FromSeconds(12.341), completed: false);
+
+        await Assert.That(logger.Events[0].Kind).IsEqualTo("SourceRowsLoaded");
+        await Assert.That(logger.Events[0].MessageId).IsEqualTo("source-progress");
+        await Assert.That(logger.Events[0].Message).IsEqualTo("Выгружаем 150 записей. Прошло 12.341 секунд.");
     }
 
     [Test]

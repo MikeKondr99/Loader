@@ -41,8 +41,14 @@ public class TempTableMaterializer
 
             try
             {
-                var rowCount = await WriteTempTableAsync(context, stageReader, tempTable, cancellationToken).ConfigureAwait(false);
-                await context.Logger.SourceRowsLoadedAsync(rowCount, cancellationToken).ConfigureAwait(false);
+                var sourceRowsReader = CreateSourceRowsReader(context, stageReader);
+                var rowCount = await WriteTempTableAsync(context, sourceRowsReader, tempTable, cancellationToken).ConfigureAwait(false);
+                await context.Logger.SourceRowsLoadedAsync(
+                    rowCount,
+                    sourceRowsReader.MessageId,
+                    sourceRowsReader.Elapsed,
+                    completed: true,
+                    cancellationToken).ConfigureAwait(false);
             }
             catch (LoadScriptStageException)
             {
@@ -123,7 +129,7 @@ public class TempTableMaterializer
 
     protected virtual async ValueTask<long> WriteTempTableAsync(
         ScriptContext context,
-        DomainDataReader stageReader,
+        SourceRowsProgressDataReader stageReader,
         ClickHouseTableName tempTable,
         CancellationToken cancellationToken)
     {
@@ -131,11 +137,10 @@ public class TempTableMaterializer
         {
             ConnectionString = context.TargetConnectionString
         };
-        await using var countingReader = stageReader.CountRows();
         await new ClickHouseWriter()
             .WriteAsync(
                 source,
-                countingReader,
+                stageReader,
                 new ClickHouseWriteOptions
                 {
                     TableName = tempTable,
@@ -144,7 +149,17 @@ public class TempTableMaterializer
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
-        return countingReader.RowCount;
+        return stageReader.RowCount;
+    }
+
+    private static SourceRowsProgressDataReader CreateSourceRowsReader(
+        ScriptContext context,
+        DomainDataReader reader)
+    {
+        return new SourceRowsProgressDataReader(
+            reader,
+            context.Logger,
+            context.Options.SourceRowsProgressInterval);
     }
 
     protected virtual async ValueTask DropTempTableAsync(

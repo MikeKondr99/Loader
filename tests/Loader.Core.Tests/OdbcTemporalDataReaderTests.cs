@@ -78,13 +78,17 @@ public sealed class OdbcTemporalDataReaderTests
     [Test]
     [MethodDataSource(nameof(TemporalKindCases))]
     [DisplayName("ODBC temporal classifier определяет временной тип по имени типа драйвера")]
-    public async Task Classifies_odbc_temporal_type_names(string typeName, Type fieldType, OdbcTemporalKind expected)
+    public async Task Classifies_odbc_temporal_type_names(string? typeName, Type fieldType, OdbcTemporalKind expected)
     {
         await Assert.That(OdbcTemporalClassifier.Classify(typeName, fieldType)).IsEqualTo(expected);
     }
 
-    public static IEnumerable<(string TypeName, Type FieldType, OdbcTemporalKind Expected)> TemporalKindCases()
+    public static IEnumerable<(string? TypeName, Type FieldType, OdbcTemporalKind Expected)> TemporalKindCases()
     {
+        yield return (null, typeof(DateOnly), OdbcTemporalKind.Date);
+        yield return (string.Empty, typeof(TimeOnly), OdbcTemporalKind.Time);
+        yield return (null, typeof(TimeSpan), OdbcTemporalKind.Time);
+        yield return (null, typeof(string), OdbcTemporalKind.None);
         yield return ("SQL_TYPE_DATE", typeof(DateTime), OdbcTemporalKind.Date);
         yield return ("DATE", typeof(DateTime), OdbcTemporalKind.Date);
         yield return ("SQL_TYPE_TIME", typeof(TimeSpan), OdbcTemporalKind.Time);

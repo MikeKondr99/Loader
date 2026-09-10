@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Text;
 using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
+using Loader.Core.Tasks;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Statements;
 using Loader.Query.Compile;
@@ -47,7 +49,6 @@ public class LoadStatementExecutor
         await using var finalTable = CreateFinalTable(context);
         var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, tableName, querySql, finalTable.TableName, cancellationToken)
             .ConfigureAwait(false);
-        await context.Logger.TransformationRowsLoadedAsync(finalRowCount, cancellationToken).ConfigureAwait(false);
 
         // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
         var loadedTable = CreateLoadedTable(statement, tableName, resolvedQuery, finalTable.TableName, finalRowCount);
@@ -218,8 +219,19 @@ public class LoadStatementExecutor
 
         try
         {
-            await context.Logger.TransformationWriteStartedAsync(cancellationToken).ConfigureAwait(false);
-            return await MaterializeFinalTableAsync(context, statement, querySql, finalTable, cancellationToken).ConfigureAwait(false);
+            var heartbeatMessageId = Guid.NewGuid().ToString("N");
+            await context.Logger.TransformationWriteStartedAsync(heartbeatMessageId, TimeSpan.Zero, cancellationToken)
+                .ConfigureAwait(false);
+
+            var result = await MaterializeFinalTableAsync(context, statement, querySql, finalTable, cancellationToken)
+                .WithHeartbeatAsync(
+                context.Options.FinalTableWriteHeartbeatInterval,
+                (elapsed, token) => context.Logger.TransformationWriteStartedAsync(heartbeatMessageId, elapsed, token),
+                cancellationToken).ConfigureAwait(false);
+
+            await context.Logger.TransformationRowsLoadedAsync(result.Value, result.Elapsed, heartbeatMessageId, cancellationToken)
+                .ConfigureAwait(false);
+            return result.Value;
         }
         catch (LoadScriptStageException)
         {

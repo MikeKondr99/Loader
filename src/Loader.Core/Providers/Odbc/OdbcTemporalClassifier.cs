@@ -40,7 +40,7 @@ public static class OdbcTemporalClassifier
     /// <param name="typeName">Provider-specific имя типа, возвращённое <c>GetDataTypeName</c>.</param>
     /// <param name="fieldType">CLR-тип, возвращённый <c>GetFieldType</c>; используется как fallback.</param>
     /// <returns>Временной вид, который нужно отдать в общую нормализацию Loader.</returns>
-    public static OdbcTemporalKind Classify(string typeName, Type fieldType)
+    public static OdbcTemporalKind Classify(string? typeName, Type fieldType)
     {
         var normalized = Normalize(typeName);
         var withoutTimeZone = normalized.Contains("withouttimezone", StringComparison.Ordinal);
@@ -76,8 +76,13 @@ public static class OdbcTemporalClassifier
                 : OdbcTemporalKind.None;
     }
 
-    private static string Normalize(string value)
+    private static string Normalize(string? value)
     {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
         var builder = new StringBuilder(value.Length);
         foreach (var c in value)
         {

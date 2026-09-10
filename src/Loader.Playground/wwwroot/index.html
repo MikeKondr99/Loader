@@ -583,6 +583,7 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
     let decorations = [];
     let lastFailureResponse = null;
     let progressSource = null;
+    const progressRowsByMessageId = new Map();
 
     const status = document.getElementById('status');
     let output = document.getElementById('output');
@@ -822,6 +823,7 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
     function clearProgress() {
       progressLog.hidden = true;
       progressLog.innerHTML = '';
+      progressRowsByMessageId.clear();
     }
 
     function appendProgress(progressEvent) {
@@ -831,19 +833,35 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
       }
 
       progressLog.hidden = false;
-      const row = document.createElement('div');
+      const messageId = progressEvent.messageId || progressEvent.messageID || progressEvent.MessageId || '';
+      const row = messageId
+        ? progressRowsByMessageId.get(messageId) || document.createElement('div')
+        : document.createElement('div');
       row.className = `progress-event ${level.toLowerCase()}`;
+      if (messageId) {
+        row.dataset.messageId = messageId;
+        progressRowsByMessageId.set(messageId, row);
+      }
 
-      const time = document.createElement('span');
-      time.className = 'progress-time';
+      let time = row.querySelector('.progress-time');
+      if (!time) {
+        time = document.createElement('span');
+        time.className = 'progress-time';
+        row.appendChild(time);
+      }
       time.textContent = formatProgressTime(progressEvent.occurredAt);
 
-      const message = document.createElement('span');
+      let message = row.querySelector('.progress-message');
+      if (!message) {
+        message = document.createElement('span');
+        message.className = 'progress-message';
+        row.appendChild(message);
+      }
       message.textContent = progressEvent.message || progressEvent.kind || 'progress';
 
-      row.appendChild(time);
-      row.appendChild(message);
-      progressLog.appendChild(row);
+      if (!row.parentNode) {
+        progressLog.appendChild(row);
+      }
       progressLog.scrollTop = progressLog.scrollHeight;
     }
 
