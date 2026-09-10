@@ -219,31 +219,15 @@ internal sealed partial class StatementParser : LangParserBaseVisitor<Statement>
     /// </summary>
     private LoadField VisitLoadField(LangParser.Load_fieldContext context)
     {
-        // 1. Короткая форма "LOAD id" на уровне парсинга превращается в "LOAD id AS id".
-        if (context.expr() is null)
-        {
-            var fieldName = UnescapeName(context.name().GetText());
-            return new LoadField
-            {
-                Name = fieldName,
-                Span = Span(context.name()),
-                Expression = new NameExpr(fieldName)
-                {
-                    Span = Span(context.name())
-                }
-            };
-        }
-
-        // 2. Полная форма "expr AS name" разбирает expression обычным expression visitor.
+        // 1. Expression разбирается обычным expression visitor; alias может быть выведен позднее на semantic resolution.
         var expression = expressionParser.Visit(context.expr());
+        var nameContext = context.name();
 
-        // 3. Alias может быть обычным или blocked name.
-        var name = UnescapeName(context.name().GetText());
-
+        // 2. Если AS указан явно, сохраняем его span; иначе ошибки имени поля должны указывать на expression.
         return new LoadField
         {
-            Name = name,
-            Span = Span(context.name()),
+            Name = nameContext is null ? null : UnescapeName(nameContext.GetText()),
+            Span = nameContext is null ? expression.Span : Span(nameContext),
             Expression = expression
         };
     }

@@ -143,7 +143,7 @@ public sealed class LoadParsingTests
         await Assert.That(load.IsTemporary).IsFalse();
         await Assert.That(load.Kind).IsEqualTo(LoadTableKind.Normal);
         await Assert.That(load.KindSpan).IsNull();
-        await AssertField(ExplicitFields(load)[0], "temp", "temp");
+        await AssertInferredField(ExplicitFields(load)[0], "temp");
         await Assert.That(load.SourceCall.Name).IsEqualTo("Table");
         await AssertOption(load.SourceCall, "name", "temp");
     }
@@ -181,14 +181,14 @@ public sealed class LoadParsingTests
     [Arguments("LOAD id FROM Csv(path='orders.csv');", "id", "id")]
     [Arguments("LOAD [gross amount] FROM Csv(path='orders.csv');", "gross amount", "gross amount")]
     [Arguments(@"LOAD [folder\]id] FROM Csv(path='orders.csv');", "folder]id", "folder]id")]
-    [DisplayName("LOAD поле без AS превращается в name AS name")]
+    [DisplayName("LOAD поле без AS сохраняет expression без alias")]
     public async Task Load_field_without_alias_becomes_same_name_alias(string text, string expectedName, string expectedExpressionName)
     {
         var load = ParseLoad(text);
 
         var fields = ExplicitFields(load);
         await Assert.That(fields).Count().IsEqualTo(1);
-        await AssertField(fields[0], expectedName, expectedExpressionName);
+        await AssertInferredField(fields[0], expectedExpressionName);
     }
 
     [Test]
@@ -206,10 +206,22 @@ public sealed class LoadParsingTests
 
         var fields = ExplicitFields(load);
         await Assert.That(fields).Count().IsEqualTo(3);
-        await AssertField(fields[0], "id", "id");
+        await AssertInferredField(fields[0], "id");
         await Assert.That(fields[1].Name).IsEqualTo("gross_amount");
         await Assert.That(fields[1].Expression).IsTypeOf<FuncExpr>();
-        await AssertField(fields[2], "city", "city");
+        await AssertInferredField(fields[2], "city");
+    }
+
+    [Test]
+    [DisplayName("LOAD expression без AS парсится без alias")]
+    public async Task Load_expression_without_alias_parses_without_alias()
+    {
+        var load = ParseLoad("LOAD id.Int() FROM Csv(path='orders.csv');");
+
+        var fields = ExplicitFields(load);
+        await Assert.That(fields).Count().IsEqualTo(1);
+        await Assert.That(fields[0].Name).IsNull();
+        await Assert.That(fields[0].Expression).IsTypeOf<FuncExpr>();
     }
 
     [Test]
@@ -619,7 +631,6 @@ public sealed class LoadParsingTests
     [Arguments("tmp: LOAD *, id FROM Csv(path='orders.csv');")]
     [Arguments("tmp: LOAD id,, name FROM Csv(path='orders.csv');")]
     [Arguments("tmp: LOAD id AS FROM Csv(path='orders.csv');")]
-    [Arguments("tmp: LOAD amount + 1 FROM Csv(path='orders.csv');")]
     [Arguments("tmp: LOAD amount + 1 AS FROM Csv(path='orders.csv');")]
     [Arguments("tmp: LOAD amount + 1 AS 123 FROM Csv(path='orders.csv');")]
     [Arguments("tmp: LOAD id FROM Csv(path='orders.csv',, delimiter=',');")]
@@ -801,6 +812,14 @@ public sealed class LoadParsingTests
     private static async Task AssertField(LoadField field, string name, string expressionName)
     {
         await Assert.That(field.Name).IsEqualTo(name);
+        await Assert.That(field.Expression).IsTypeOf<NameExpr>();
+        var expression = (NameExpr)field.Expression;
+        await Assert.That(expression.Value).IsEqualTo(expressionName);
+    }
+
+    private static async Task AssertInferredField(LoadField field, string expressionName)
+    {
+        await Assert.That(field.Name).IsNull();
         await Assert.That(field.Expression).IsTypeOf<NameExpr>();
         var expression = (NameExpr)field.Expression;
         await Assert.That(expression.Value).IsEqualTo(expressionName);

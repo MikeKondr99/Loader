@@ -4,6 +4,7 @@ using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
 using Loader.Core.Tasks;
 using Loader.Core.Writers.ClickHouse;
+using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
 using Loader.Query.Compile;
 using Loader.Query.Functions;
@@ -32,6 +33,7 @@ public class LoadStatementExecutor
         CancellationToken cancellationToken = default)
     {
         var tableName = ValidateTableName(context, statement);
+        statement = ResolveLoadFieldAliases(statement);
         ValidateMappedStatementFields(statement);
 
         await context.Logger.LoadTableStartedAsync(tableName, cancellationToken).ConfigureAwait(false);
@@ -67,7 +69,6 @@ public class LoadStatementExecutor
         activity?
             .SetTag("load.table_name", tableName);
 
-        ThrowIfDuplicateSelectAliases(statement);
         var query = BuildQuery(statement, source);
         var resolvedQuery = ResolveQueryWithTelemetry(context, statement, tableName, source, query);
         var querySql = CompileQuery(statement, resolvedQuery);
@@ -146,7 +147,7 @@ public class LoadStatementExecutor
 
         return statement.Fields.Select(static field => new SelectItem
         {
-            Alias = field.Name,
+            Alias = field.Name!,
             Expression = field.Expression
         }).ToArray();
     }
@@ -369,6 +370,45 @@ public class LoadStatementExecutor
         }
     }
 
+    private static LoadStatement ResolveLoadFieldAliases(LoadStatement statement)
+    {
+        if (statement.Fields is null)
+        {
+            return statement;
+        }
+
+        var fields = new List<LoadField>(statement.Fields.Count);
+        foreach (var field in statement.Fields)
+        {
+            fields.Add(string.IsNullOrWhiteSpace(field.Name)
+                ? field with
+                {
+                    Name = InferLoadFieldAlias(field.Expression),
+                    Span = field.Expression.Span
+                }
+                : field);
+        }
+
+        var resolvedStatement = statement with
+        {
+            Fields = fields
+        };
+        ThrowIfDuplicateSelectAliases(resolvedStatement);
+        return resolvedStatement;
+    }
+
+    private static string InferLoadFieldAlias(Expr expression)
+    {
+        if (expression.TryGetSingleReferencedName(out var name) && name is not null)
+        {
+            return name;
+        }
+
+        throw new QueryResolutionException(
+            "Не указано имя поля. Напишите AS [Название].",
+            expression.Span);
+    }
+
     private static void ThrowIfDuplicateSelectAliases(LoadStatement statement)
     {
         if (statement.Fields is null)
@@ -379,13 +419,13 @@ public class LoadStatementExecutor
         var aliases = new HashSet<string>(StringComparer.Ordinal);
         foreach (var field in statement.Fields)
         {
-            if (aliases.Add(field.Name))
+            if (aliases.Add(field.Name!))
             {
                 continue;
             }
 
             throw new QueryResolutionException(
-                $"LOAD select alias '{field.Name}' is duplicated.",
+                $"LOAD select alias '{field.Name!}' is duplicated.",
                 field.Span);
         }
     }

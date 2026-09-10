@@ -144,6 +144,41 @@ public sealed class ParsingTests
         })).IsTrue();
     }
 
+    [Test]
+    [Arguments("id", true, "id")]
+    [Arguments("id.Int()", true, "id")]
+    [Arguments("id + id", true, "id")]
+    [Arguments("id + name", false, "")]
+    [DisplayName("Expr определяет единственное уникальное имя поля")]
+    public async Task Try_get_single_referenced_name(string expression, bool expectedResult, string expectedName)
+    {
+        var expr = Parse(expression);
+
+        var result = expr.TryGetSingleReferencedName(out var name);
+
+        await Assert.That(result).IsEqualTo(expectedResult);
+        if (expectedResult)
+        {
+            await Assert.That(name).IsEqualTo(expectedName);
+        }
+        else
+        {
+            await Assert.That(name).IsNull();
+        }
+    }
+
+    [Test]
+    [DisplayName("Expr без полей возвращает null как единственное имя")]
+    public async Task Try_get_single_referenced_name_returns_null_without_names()
+    {
+        var expr = Parse("1 + 1");
+
+        var result = expr.TryGetSingleReferencedName(out var name);
+
+        await Assert.That(result).IsTrue();
+        await Assert.That(name).IsNull();
+    }
+
     private static Expr Parse(string text)
     {
         var result = Expr.Parse(text);

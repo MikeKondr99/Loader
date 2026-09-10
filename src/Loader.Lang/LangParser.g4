@@ -150,8 +150,7 @@ load_all_fields
     ;
 
 load_field
-    : expr AS name
-    | name
+    : expr (AS name)?
     ;
 
 expr
