@@ -730,8 +730,9 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
             [/\bSQL\b/, 'keyword.sql', '@sql'],
             [/\b(DROP|FIRST|TEMP|MAPPED|LOAD|FROM|WHERE|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|AS|AND|OR|NOT|true|false|null)\b/, 'keyword'],
             [/\[[^\]]*\]/, 'blocked-name'],
-            [/'([^'\\]|\\.)*'/, 'string'],
-            [/[0-9]+(\.[0-9]+)?/, 'number'],
+            [/'/, { token: 'string.quote', next: '@string' }],
+            [/(?:[0-9](?:_?[0-9])*)(?:\.[0-9](?:_?[0-9])*)?/, 'number'],
+            [/\.[0-9](?:_?[0-9])*/, 'number'],
             [/--.*$/, 'comment'],
             [/[a-zA-Z_][a-zA-Z0-9_]*(?=\s*\()/, 'function'],
             [/[a-zA-Z_][a-zA-Z0-9_]*/, 'identifier']
@@ -743,9 +744,21 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
             [/'([^'\\]|\\.)*'/, 'string'],
             [/"([^"\\]|\\.)*"/, 'string'],
             [/`([^`\\]|\\.)*`/, 'string'],
-            [/[0-9]+(\.[0-9]+)?/, 'number'],
+            [/(?:[0-9](?:_?[0-9])*)(?:\.[0-9](?:_?[0-9])*)?/, 'number'],
+            [/\.[0-9](?:_?[0-9])*/, 'number'],
             [/\b(SELECT|FROM|WHERE|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|ON|GROUP|BY|ORDER|ASC|DESC|LIMIT|OFFSET|HAVING|UNION|ALL|DISTINCT|AS|CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|NULL|IS|IN|LIKE|BETWEEN|EXISTS|WITH|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\b/, 'keyword.sql'],
             [/[a-zA-Z_][a-zA-Z0-9_]*/, 'identifier.sql']
+          ],
+          string: [
+            [/[^\\'$]+/, 'string'],
+            [/\$\{/, { token: 'string.interpolation', next: '@interpolation' }],
+            [/\\./, 'string.escape'],
+            [/\$/, 'string'],
+            [/'/, { token: 'string.quote', next: '@pop' }]
+          ],
+          interpolation: [
+            [/\}/, { token: 'string.interpolation', next: '@pop' }],
+            { include: 'root' }
           ],
           comment: [
             [/[^/*]+/, 'comment'],
@@ -765,6 +778,9 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
           { token: 'identifier.sql', foreground: '3f4b59' },
           { token: 'blocked-name', foreground: '1f2933' },
           { token: 'string', foreground: '8a4b00' },
+          { token: 'string.quote', foreground: '8a4b00' },
+          { token: 'string.escape', foreground: 'a05a00', fontStyle: 'bold' },
+          { token: 'string.interpolation', foreground: '5f3300', fontStyle: 'bold' },
           { token: 'number', foreground: '1f6f78' },
           { token: 'comment', foreground: '7a8175' },
           { token: 'delimiter', foreground: '52606d' }
