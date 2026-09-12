@@ -1,5 +1,6 @@
 ﻿using Loader.Script.Tests.Infrastructure;
 
+using System.Globalization;
 using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Script.Execution;
@@ -147,6 +148,66 @@ public sealed class LoadStatementMixedTests
             ],
             "ORDER BY `column1` ASC");
         await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    [Test]
+    [DisplayName("Script собирает final analysis для null density, distinct и typed min max")]
+    public async Task Execute_script_collects_final_table_analysis()
+    {
+        var execution = await ScriptIntegrationAssert.ExecuteScriptAsync(
+            database,
+            """
+            meta_check:
+            LOAD
+                id,
+                name,
+                maybe,
+                amount,
+                Date(date_text) AS date
+            FROM Inline(id, name, maybe, amount, date_text;
+                1, 'Rome',   null,  10.50, '2026-01-03';
+                2, 'Berlin', null, -20.25, '2026-01-01';
+                3, 'Rome',   null,   null, '2026-01-02');
+            """);
+
+        var table = execution.Tables.Single();
+        await Assert.That(table.RowCount).IsEqualTo(3);
+
+        var id = table.Fields[0];
+        await Assert.That(id.Density).IsEqualTo(3);
+        await Assert.That(id.Cardinality).IsEqualTo(3);
+        await Assert.That(id.Min).IsEqualTo(1L);
+        await Assert.That(id.Max).IsEqualTo(3L);
+
+        var name = table.Fields[1];
+        await Assert.That(name.Density).IsEqualTo(3);
+        await Assert.That(name.Cardinality).IsEqualTo(2);
+        await Assert.That(name.Min).IsNull();
+        await Assert.That(name.Max).IsNull();
+
+        var allNull = table.Fields[2];
+        await Assert.That(allNull.Density).IsEqualTo(0);
+        await Assert.That(allNull.Cardinality).IsEqualTo(0);
+        await Assert.That(allNull.Min).IsNull();
+        await Assert.That(allNull.Max).IsNull();
+
+        var amount = table.Fields[3];
+        await Assert.That(amount.Density).IsEqualTo(2);
+        await Assert.That(InvariantText(amount.Min)).IsEqualTo("-20.25");
+        await Assert.That(InvariantText(amount.Max)).IsEqualTo("10.5");
+
+        var date = table.Fields[4];
+        await Assert.That(date.Density).IsEqualTo(3);
+        await Assert.That(date.Min).IsEqualTo(new DateTime(2026, 1, 1));
+        await Assert.That(date.Max).IsEqualTo(new DateTime(2026, 1, 3));
+        await ScriptIntegrationAssert.AssertNoTempTablesAsync(database, execution);
+    }
+
+    private static string? InvariantText(object? value)
+    {
+        return value is IFormattable formattable
+            ? formattable.ToString(null, CultureInfo.InvariantCulture)
+            : value?.ToString();
     }
 
     [Test]

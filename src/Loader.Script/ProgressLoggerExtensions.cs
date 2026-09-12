@@ -103,14 +103,18 @@ public static class ProgressLoggerExtensions
 
     public static ValueTask TransformationRowsLoadedAsync(
         this IProgressLogger logger,
-        long rowCount,
+        long? rowCount,
         TimeSpan? elapsed = null,
         string? messageId = null,
         CancellationToken cancellationToken = default)
     {
-        var message = elapsed is null
-            ? $"Загружено {rowCount} записей"
-            : $"Загружено {rowCount} записей за {FormatSeconds(elapsed.Value)} секунд.";
+        var message = rowCount is null
+            ? elapsed is null
+                ? "Данные загружены"
+                : $"Данные загружены за {FormatSeconds(elapsed.Value)} секунд."
+            : elapsed is null
+                ? $"Загружено {rowCount.Value} записей"
+                : $"Загружено {rowCount.Value} записей за {FormatSeconds(elapsed.Value)} секунд.";
 
         return logger.ReportAsync(new ScriptProgressEvent
         {

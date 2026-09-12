@@ -426,6 +426,58 @@
       padding: 12px 14px 14px;
     }
 
+    .preview-analysis {
+      margin-bottom: 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fbfcfa;
+      overflow-x: auto;
+    }
+
+    .preview-analysis-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 9px 10px;
+      border-bottom: 1px solid #edf0ea;
+      color: #3b4238;
+      font: 12px "Segoe UI", sans-serif;
+    }
+
+    .preview-analysis-summary strong {
+      color: var(--accent);
+    }
+
+    .preview-analysis-table {
+      width: 100%;
+      border-collapse: collapse;
+      font: 12px Consolas, monospace;
+    }
+
+    .preview-analysis-table th,
+    .preview-analysis-table td {
+      padding: 6px 9px;
+      border-bottom: 1px solid #edf0ea;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    .preview-analysis-table th {
+      color: #3b4238;
+      background: #f4f6f2;
+      font-weight: 700;
+    }
+
+    .preview-analysis-table td.analysis-number {
+      text-align: right;
+    }
+
+    .preview-analysis-empty {
+      padding: 9px 10px;
+      color: var(--muted);
+      font: 12px "Segoe UI", sans-serif;
+    }
+
     .table-tabs {
       display: flex;
       flex-wrap: wrap;
@@ -1308,7 +1360,7 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
         button.className = 'table-tab';
         button.textContent = table.alias || table.name || `table ${ordinal + 1}`;
         button.title = table.name || button.textContent;
-        button.onclick = () => loadPreviewTable(table.index ?? ordinal, button, tabs, tableHost);
+        button.onclick = () => loadPreviewTable(table, table.index ?? ordinal, button, tabs, tableHost);
         tabs.appendChild(button);
       });
 
@@ -1318,7 +1370,7 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
       }
     }
 
-    async function loadPreviewTable(index, activeButton, tabs, tableHost) {
+    async function loadPreviewTable(table, index, activeButton, tabs, tableHost) {
       for (const button of tabs.querySelectorAll('.table-tab')) {
         button.classList.toggle('active', button === activeButton);
       }
@@ -1337,7 +1389,17 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
           return;
         }
 
-        renderPreviewTable(tableHost, json.fields || [], json.columns || [], json.rows || []);
+        renderPreviewTable(
+          tableHost,
+          {
+            name: json.table || table.name,
+            alias: json.alias ?? table.alias,
+            rowCount: json.rowCount ?? table.rowCount,
+            fields: json.fields || table.fields || []
+          },
+          json.fields || table.fields || [],
+          json.columns || [],
+          json.rows || []);
       } catch (error) {
         tableHost.textContent = error.stack || error.message;
       }
@@ -1356,10 +1418,15 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
       }
     }
 
-    function renderPreviewTable(host, fields, columns, rows) {
+    function renderPreviewTable(host, tableAnalysis, fields, columns, rows) {
       host.innerHTML = '';
+      renderTableAnalysis(host, tableAnalysis, fields);
+
       if (!columns.length) {
-        host.innerHTML = '<div class="preview-message">У таблицы нет колонок.</div>';
+        const message = document.createElement('div');
+        message.className = 'preview-message';
+        message.textContent = 'У таблицы нет колонок.';
+        host.appendChild(message);
         return;
       }
 
@@ -1408,6 +1475,101 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
       table.appendChild(tbody);
       wrap.appendChild(table);
       host.appendChild(wrap);
+    }
+
+    function renderTableAnalysis(host, tableAnalysis, fields) {
+      const analysis = document.createElement('div');
+      analysis.className = 'preview-analysis';
+
+      const summary = document.createElement('div');
+      summary.className = 'preview-analysis-summary';
+      summary.innerHTML = [
+        `<span><strong>${escapeHtml(tableAnalysis.alias || tableAnalysis.name || 'table')}</strong></span>`,
+        `<span>записей: ${escapeHtml(formatAnalysisValue(tableAnalysis.rowCount))}</span>`,
+        `<span>полей: ${Array.isArray(fields) ? fields.length : 0}</span>`,
+        `<span>средняя плотность: ${escapeHtml(formatAverageDensity(tableAnalysis.rowCount, fields))}</span>`
+      ].join('');
+      analysis.appendChild(summary);
+
+      if (!Array.isArray(fields) || fields.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'preview-analysis-empty';
+        empty.textContent = 'Аналитика по полям недоступна.';
+        analysis.appendChild(empty);
+        host.appendChild(analysis);
+        return;
+      }
+
+      const table = document.createElement('table');
+      table.className = 'preview-analysis-table';
+      table.innerHTML = [
+        '<thead><tr>',
+        '<th>поле</th>',
+        '<th>тип</th>',
+        '<th>min</th>',
+        '<th>max</th>',
+        '<th>кол-во/уник.</th>',
+        '<th>плотность</th>',
+        '</tr></thead>'
+      ].join('');
+      const tbody = document.createElement('tbody');
+      for (const field of fields) {
+        const row = document.createElement('tr');
+        row.innerHTML = [
+          `<td>${escapeHtml(field.name || '')}</td>`,
+          `<td>${escapeHtml(field.type || '')}</td>`,
+          `<td>${escapeHtml(formatAnalysisValue(field.min))}</td>`,
+          `<td>${escapeHtml(formatAnalysisValue(field.max))}</td>`,
+          `<td class="analysis-number">${escapeHtml(formatCountPair(field.nonNullCount, field.cardinality))}</td>`,
+          `<td class="analysis-number">${escapeHtml(formatDensity(tableAnalysis.rowCount, field.nonNullCount))}</td>`
+        ].join('');
+        tbody.appendChild(row);
+      }
+      table.appendChild(tbody);
+      analysis.appendChild(table);
+      host.appendChild(analysis);
+    }
+
+    function formatAverageDensity(rowCount, fields) {
+      if (!rowCount || !Array.isArray(fields) || fields.length === 0) {
+        return '-';
+      }
+
+      const values = fields
+        .map(field => Number(field.nonNullCount))
+        .filter(value => Number.isFinite(value));
+      if (!values.length) {
+        return '-';
+      }
+
+      const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+      return `${Math.round(average / rowCount * 100)}%`;
+    }
+
+    function formatDensity(rowCount, nonNullCount) {
+      const rows = Number(rowCount);
+      const nonNull = Number(nonNullCount);
+      if (!Number.isFinite(rows) || rows <= 0 || !Number.isFinite(nonNull)) {
+        return '-';
+      }
+
+      return `${Math.round(nonNull / rows * 100)}%`;
+    }
+
+    function formatCountPair(nonNullCount, cardinality) {
+      return `${formatAnalysisValue(nonNullCount)}/${formatAnalysisValue(cardinality)}`;
+    }
+
+    function formatAnalysisValue(value) {
+      if (value === null || value === undefined) {
+        return '-';
+      }
+
+      if (value instanceof Date) {
+        return value.toISOString();
+      }
+
+      return String(value);
     }
 
     function previewAlignmentClass(field) {

@@ -265,7 +265,7 @@ public sealed class DomainDataReaderTests
             .Normalize()
             .Where(row => row.Integer("id") == 1)
             .Limit(1)
-            .CollectMeta(new DataMetaContainer());
+            .CountRows();
 
         await Assert.That(() => reader.GetEnumerator())
             .ThrowsExactly<NotSupportedException>()

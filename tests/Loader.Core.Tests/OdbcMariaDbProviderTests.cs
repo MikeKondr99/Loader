@@ -225,28 +225,6 @@ public sealed class OdbcMariaDbProviderTests
     }
 
     [Test]
-    [DisplayName("MariaDB через ODBC CollectMeta сохраняет decimal precision и scale если драйвер их отдал")]
-    public async Task Collect_meta_preserves_decimal_precision_and_scale_when_driver_provides_them()
-    {
-        var meta = new DataMetaContainer();
-        await using var rawReader = await OpenSharedReaderAsync("select cast(12.34 as decimal(10, 2)) as amount");
-        await using var reader = rawReader
-            .Normalize()
-            .CollectMeta(meta);
-
-        await Assert.That(reader).HaveData(
-            columns: ["amount"],
-            types: [DataType.Number],
-            rows: [
-                ValueTuple.Create(12.34m)
-            ]);
-
-        await Assert.That(meta.Success).IsTrue();
-        await AssertValidDecimalShape(meta.Columns[0].DecimalPrecision, meta.Columns[0].DecimalScale);
-        await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
-    }
-
-    [Test]
     [DisplayName("MariaDB через ODBC SUM decimal не возвращает invalid Decimal(0,0) shape")]
     public async Task Sum_decimal_does_not_expose_invalid_decimal_shape()
     {

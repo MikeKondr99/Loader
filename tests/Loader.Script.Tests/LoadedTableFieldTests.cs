@@ -20,11 +20,10 @@ public sealed class LoadedTableFieldTests
         await Assert.That(field.CanBeNull).IsFalse();
         await Assert.That(field.Min).IsNull();
         await Assert.That(field.Max).IsNull();
-        await Assert.That(field.StringMaxLength).IsNull();
     }
 
     [Test]
-    public async Task Field_stores_optional_cardinality_density_nullability_and_string_length()
+    public async Task Field_stores_optional_cardinality_density_nullability_and_bounds()
     {
         var field = new LoadedTableField
         {
@@ -33,70 +32,14 @@ public sealed class LoadedTableFieldTests
             Cardinality = 12,
             Density = 90,
             CanBeNull = true,
-            StringMaxLength = 128
+            Min = "Amsterdam",
+            Max = "Zurich"
         };
 
         await Assert.That(field.Cardinality).IsEqualTo(12);
         await Assert.That(field.Density).IsEqualTo(90);
         await Assert.That(field.CanBeNull).IsTrue();
-        await Assert.That(field.StringMaxLength).IsEqualTo(128);
-    }
-
-    [Test]
-    public async Task Field_typed_min_max_returns_values_when_type_matches()
-    {
-        var date = new DateOnly(2026, 1, 2);
-        var dateTime = new DateTime(2026, 1, 2, 3, 4, 5);
-        var decimalField = CreateField("amount", DataType.Number, 10.5m, 99.9m);
-        var longField = CreateField("id", DataType.Integer, 1L, 10L);
-        var stringField = CreateField("city", DataType.Text, "Amsterdam", "Zurich");
-        var dateField = CreateField("date", DataType.Date, date, date);
-        var dateTimeField = CreateField("created_at", DataType.DateTime, dateTime, dateTime);
-
-        await Assert.That(decimalField.GetMin<decimal>()).IsEqualTo(10.5m);
-        await Assert.That(decimalField.GetMax<decimal>()).IsEqualTo(99.9m);
-        await Assert.That(longField.GetMin<long>()).IsEqualTo(1L);
-        await Assert.That(longField.GetMax<long>()).IsEqualTo(10L);
-        await Assert.That(stringField.GetMin<string>()).IsEqualTo("Amsterdam");
-        await Assert.That(stringField.GetMax<string>()).IsEqualTo("Zurich");
-        await Assert.That(dateField.GetMin<DateOnly>()).IsEqualTo(date);
-        await Assert.That(dateField.GetMax<DateOnly>()).IsEqualTo(date);
-        await Assert.That(dateTimeField.GetMin<DateTime>()).IsEqualTo(dateTime);
-        await Assert.That(dateTimeField.GetMax<DateTime>()).IsEqualTo(dateTime);
-    }
-
-    [Test]
-    public async Task Field_typed_min_max_returns_null_when_value_absent()
-    {
-        var field = new LoadedTableField
-        {
-            Name = "amount",
-            DataType = DataType.Number
-        };
-
-        await Assert.That(field.GetMin<decimal>()).IsNull();
-        await Assert.That(field.GetMax<decimal>()).IsNull();
-    }
-
-    [Test]
-    public async Task Field_typed_min_max_throws_when_type_does_not_match()
-    {
-        var field = CreateField("amount", DataType.Number, 10.5m, 99.9m);
-
-        await Assert.That(() => field.GetMin<long>())
-            .ThrowsExactly<InvalidCastException>();
-        await Assert.That(() => field.GetMax<long>())
-            .ThrowsExactly<InvalidCastException>();
-    }
-
-    private static LoadedTableField CreateField(string name, DataType dataType, object min, object max)
-    {
-        return new LoadedTableField
-        {
-            Name = name,
-            DataType = dataType,
-            Min = min,
-            Max = max
-        };
+        await Assert.That(field.Min).IsEqualTo("Amsterdam");
+        await Assert.That(field.Max).IsEqualTo("Zurich");
     }
 }

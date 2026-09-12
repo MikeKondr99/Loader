@@ -14,6 +14,4 @@ public sealed record ClickHouseWriteOptions
     public int BatchSize { get; init; } = 100_000;
 
     public int MaxDegreeOfParallelism { get; init; } = 1;
-
-    public bool UseLowCardinalityForText { get; init; } = true;
 }

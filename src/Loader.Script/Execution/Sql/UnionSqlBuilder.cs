@@ -10,7 +10,7 @@ namespace Loader.Script.Execution;
 /// 1. ClickHouse UNION ALL совмещает колонки по порядку, не по имени.
 /// 2. Финальные таблицы Loader хранят физические имена column1/column2, а пользовательские alias-ы живут в LoadedTable.
 /// 3. Поэтому builder сначала строит общий список логических полей, потом для каждой таблицы выбирает значения
-///    строго в этом порядке и выдает безопасные внутренние alias-ы union_columnN.
+///    строго в этом порядке и выдает безопасные внутренние alias-ы columnN.
 /// 4. Сейчас всегда читаем final table name. Позже эту точку можно заменить на SQL-фрагмент таблицы
 ///    без изменения алгоритма выравнивания полей.
 /// </summary>
@@ -126,7 +126,7 @@ internal static class UnionSqlBuilder
             if (tableFields.TryGetValue(unionField.Name, out var tableField))
             {
                 builder.Append(CastExpression(
-                    Identifier($"column{tableField.ordinal + 1}"),
+                    QualifiedIdentifier("u", $"column{tableField.ordinal + 1}"),
                     tableField.field.DataType,
                     unionField.DataType));
             }
@@ -143,7 +143,8 @@ internal static class UnionSqlBuilder
         builder.AppendLine();
         builder
             .Append("FROM ")
-            .Append(table.Name.ToSql());
+            .Append(table.Name.ToSql())
+            .Append(" AS u");
     }
 
     private static string CastExpression(
@@ -194,7 +195,7 @@ internal static class UnionSqlBuilder
 
     private static string UnionColumnName(int index)
     {
-        return Identifier($"union_column{index + 1}");
+        return Identifier($"column{index + 1}");
     }
 
     private static string Identifier(string value)
@@ -215,10 +216,15 @@ internal static class UnionSqlBuilder
         builder.Append('`');
         return builder.ToString();
     }
+
+    private static string QualifiedIdentifier(string tableAlias, string columnName)
+    {
+        return $"{Identifier(tableAlias)}.{Identifier(columnName)}";
+    }
 }
 
 /// <summary>
 /// SQL UNION ALL вместе с логической schema результата.
-/// Поля нужны resolver-у, чтобы вернуть пользователю исходные aliases, а не внутренние union_columnN.
+/// Поля нужны resolver-у, чтобы вернуть пользователю исходные aliases, а не внутренние columnN.
 /// </summary>
 internal sealed record UnionSql(string Sql, IReadOnlyList<LoadedTableField> Fields);

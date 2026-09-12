@@ -48,11 +48,11 @@ public class LoadStatementExecutor
 
         // 3. Query выполняем в ClickHouse и server-side сохраняем результат в final table.
         await using var finalTable = CreateFinalTable(context);
-        var finalRowCount = await MaterializeFinalTableWithTelemetryAsync(context, statement, tableName, querySql, finalTable.TableName, cancellationToken)
+        var materialization = await MaterializeFinalTableWithTelemetryAsync(context, statement, tableName, querySql, finalTable.TableName, cancellationToken)
             .ConfigureAwait(false);
 
-        // 4. Пока meta пустая: фиксируем только имя таблицы и поля из resolved output.
-        var loadedTable = CreateLoadedTable(statement, tableName, resolvedQuery, finalTable.TableName, finalRowCount);
+        // 4. Регистрируем LoadedTable и переносим column analysis, если final materializer ее собрал.
+        var loadedTable = CreateLoadedTable(statement, tableName, resolvedQuery, finalTable.TableName, materialization);
         context.AddLoadedTable(loadedTable);
         finalTable.Commit();
         return loadedTable;
@@ -204,7 +204,7 @@ public class LoadStatementExecutor
         }
     }
 
-    private async ValueTask<long> MaterializeFinalTableWithTelemetryAsync(
+    private async ValueTask<ClickHouseFinalTableMaterialization> MaterializeFinalTableWithTelemetryAsync(
         ScriptContext context,
         LoadStatement statement,
         string tableName,
@@ -236,7 +236,7 @@ public class LoadStatementExecutor
         }
     }
 
-    protected virtual async ValueTask<long> MaterializeFinalTableAsync(
+    protected virtual async ValueTask<ClickHouseFinalTableMaterialization> MaterializeFinalTableAsync(
         ScriptContext context,
         LoadStatement statement,
         string querySql,
@@ -312,8 +312,9 @@ public class LoadStatementExecutor
         string tableName,
         ResolvedQuery resolvedQuery,
         ClickHouseTableName finalTable,
-        long rowCount)
+        ClickHouseFinalTableMaterialization materialization)
     {
+        var columnAnalysisByOrdinal = materialization.Columns?.ToDictionary(static item => item.Ordinal);
         return new LoadedTable
         {
             Name = finalTable,
@@ -324,12 +325,23 @@ public class LoadStatementExecutor
                 LoadTableKind.Mapped => LoadedTableKind.Mapped,
                 _ => LoadedTableKind.Normal
             },
-            RowCount = rowCount,
-            Fields = resolvedQuery.OutputFields.Select(field => new LoadedTableField
+            RowCount = materialization.RowCount,
+            Fields = resolvedQuery.OutputFields.Select((field, ordinal) =>
             {
-                Name = field.Alias,
-                DataType = ToCoreDataType(field.Type.DataType),
-                CanBeNull = field.Type.CanBeNull
+                var analysis = columnAnalysisByOrdinal is not null &&
+                               columnAnalysisByOrdinal.TryGetValue(ordinal, out var found)
+                    ? found
+                    : null;
+                return new LoadedTableField
+                {
+                    Name = field.Alias,
+                    DataType = ToCoreDataType(field.Type.DataType),
+                    CanBeNull = field.Type.CanBeNull,
+                    Cardinality = analysis?.ApproxDistinctNonNullCount,
+                    Density = analysis?.NonNullCount,
+                    Min = analysis?.Min,
+                    Max = analysis?.Max
+                };
             }).ToList()
         };
     }

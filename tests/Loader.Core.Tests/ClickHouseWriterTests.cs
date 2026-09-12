@@ -20,23 +20,9 @@ public sealed class ClickHouseWriterTests
     }
 
     [Test]
-    [DisplayName("ClickHouseWriter создает таблицу по meta и пишет reader через bulk copy")]
-    public async Task Creates_table_from_meta_and_writes_reader_with_bulk_copy()
+    [DisplayName("ClickHouseWriter создает таблицу по schema и пишет reader через bulk copy")]
+    public async Task Creates_table_from_schema_and_writes_reader_with_bulk_copy()
     {
-        using var analyzeTable = CreateTable();
-        analyzeTable.Rows.Add(1, 10.50m, "Moscow", true);
-        analyzeTable.Rows.Add(2, DBNull.Value, "London", false);
-        analyzeTable.Rows.Add(3, 20.25m, "Moscow", true);
-        var meta = new DataMetaContainer();
-
-        using (var rawAnalyzeReader = analyzeTable.CreateDataReader())
-        await using (var analyzeReader = rawAnalyzeReader.Normalize().CollectMeta(meta))
-        {
-            while (await analyzeReader.ReadAsync())
-            {
-            }
-        }
-
         using var writeTable = CreateTable();
         writeTable.Rows.Add(1, 10.50m, "Moscow", true);
         writeTable.Rows.Add(2, DBNull.Value, "London", false);
@@ -45,7 +31,7 @@ public sealed class ClickHouseWriterTests
         using var rawWriteReader = writeTable.CreateDataReader();
         await using var writeReader = rawWriteReader.Normalize();
         var writer = new ClickHouseWriter();
-        var tableName = "writer_meta_" + Guid.NewGuid().ToString("N");
+        var tableName = "writer_schema_" + Guid.NewGuid().ToString("N");
 
         await writer.WriteAsync(
             Source(),
@@ -56,8 +42,7 @@ public sealed class ClickHouseWriterTests
                 {
                     Table = tableName
                 }
-            },
-            meta);
+            });
 
         await using var rawResultReader = await new ClickHouseProvider().OpenReaderAsync(
             Source(),
@@ -75,9 +60,9 @@ public sealed class ClickHouseWriterTests
             columns: ["id", "amount", "city", "active"],
             types: [DataType.Integer, DataType.Number, DataType.Text, DataType.Boolean],
             rows: [
-                ((byte)1, (ClickHouseDecimal)10.50m, "Moscow", true),
-                ((byte)2, DBNull.Value, "London", false),
-                ((byte)3, (ClickHouseDecimal)20.25m, "Moscow", true)
+                (1, (ClickHouseDecimal)10.50m, "Moscow", true),
+                (2, DBNull.Value, "London", false),
+                (3, (ClickHouseDecimal)20.25m, "Moscow", true)
             ]);
     }
 
@@ -122,21 +107,12 @@ public sealed class ClickHouseWriterTests
     }
 
     [Test]
-    [DisplayName("ClickHouseWriter BuildCreateTableSql сужает integer и decimal по meta")]
-    public async Task Build_create_table_sql_uses_meta_for_integer_and_decimal_types()
+    [DisplayName("ClickHouseWriter BuildCreateTableSql строит типы по schema")]
+    public async Task Build_create_table_sql_uses_schema_types()
     {
         using var table = CreateTable();
         table.Rows.Add(1, 10.50m, "Moscow", true);
         table.Rows.Add(2, DBNull.Value, "London", false);
-        var meta = new DataMetaContainer();
-
-        using (var rawAnalyzeReader = table.CreateDataReader())
-        await using (var analyzeReader = rawAnalyzeReader.Normalize().CollectMeta(meta))
-        {
-            while (await analyzeReader.ReadAsync())
-            {
-            }
-        }
 
         using var rawReader = table.CreateDataReader();
         await using var reader = rawReader.Normalize();
@@ -148,12 +124,11 @@ public sealed class ClickHouseWriterTests
                 {
                     Table = "target_table"
                 }
-            },
-            meta);
+            });
 
-        await Assert.That(sql).Contains("`id` UInt8");
+        await Assert.That(sql).Contains("`id` Nullable(Int32)");
         await Assert.That(sql).Contains("`amount` Nullable(Decimal(");
-        await Assert.That(sql).Contains("`city` LowCardinality(String)");
+        await Assert.That(sql).Contains("`city` Nullable(String)");
         await Assert.That(sql).Contains("ENGINE = MergeTree ORDER BY tuple()");
     }
 

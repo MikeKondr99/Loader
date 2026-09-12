@@ -1,8 +1,7 @@
 using System.Numerics;
-using Loader.Core.Decorators;
+using ClickHouse.Client.Numerics;
 using Loader.Core.Models;
 using Loader.Core.Writers.ClickHouse;
-using ClickHouse.Client.Numerics;
 
 namespace Loader.Core.Tests;
 
@@ -10,46 +9,24 @@ public sealed class ClickHouseColumnTypeResolverTests
 {
     [Test]
     [MethodDataSource(nameof(IntegerClrTypeCases))]
-    [DisplayName("ClickHouse type resolver Integer без meta выбирает тип по CLR")]
-    public async Task Integer_without_meta_uses_clr_type(Type clrType, string expected)
+    [DisplayName("ClickHouse type resolver Integer выбирает тип по CLR")]
+    public async Task Integer_uses_clr_type(Type clrType, string expected)
     {
-        var actual = Resolve(Field(DataType.Integer, clrType), meta: null);
+        var actual = Resolve(Field(DataType.Integer, clrType));
 
         await Assert.That(actual).IsEqualTo(expected);
-    }
-
-    [Test]
-    [MethodDataSource(nameof(IntegerBoundsCases))]
-    [DisplayName("ClickHouse type resolver Integer с meta выбирает минимальный тип по min max")]
-    public async Task Integer_with_meta_uses_minimal_type_by_bounds(decimal min, decimal max, string expected)
-    {
-        var actual = Resolve(Field(DataType.Integer, typeof(long)), Meta(DataType.Integer, min, max));
-
-        await Assert.That(actual).IsEqualTo(expected);
-    }
-
-    [Test]
-    [DisplayName("ClickHouse type resolver BigInteger выбирает wide integer без сужения по bounds")]
-    public async Task BigInteger_uses_wide_integer_type()
-    {
-        var signed = Resolve(Field(DataType.Integer, typeof(BigInteger)), meta: null);
-        var unsigned = Resolve(Field(DataType.Integer, typeof(BigInteger)), Meta(DataType.Integer, 1m, 5m));
-
-        await Assert.That(signed).IsEqualTo("Int256");
-        await Assert.That(unsigned).IsEqualTo("UInt256");
     }
 
     [Test]
     [MethodDataSource(nameof(NullableCases))]
-    [DisplayName("ClickHouse type resolver nullable определяется по meta density или schema AllowDBNull")]
-    public async Task Nullable_is_resolved_from_meta_density_or_schema_flag(
+    [DisplayName("ClickHouse type resolver nullable определяется по schema AllowDBNull")]
+    public async Task Nullable_is_resolved_from_schema_flag(
         DataType dataType,
         Type clrType,
         bool? allowDbNull,
-        DataColumnMeta? meta,
         string expected)
     {
-        var actual = Resolve(Field(dataType, clrType, allowDbNull: allowDbNull), meta);
+        var actual = Resolve(Field(dataType, clrType, allowDbNull: allowDbNull));
 
         await Assert.That(actual).IsEqualTo(expected);
     }
@@ -61,110 +38,7 @@ public sealed class ClickHouseColumnTypeResolverTests
     {
         var field = Field(DataType.Number, clrType, precision: precision, scale: scale);
 
-        var actual = Resolve(field, meta: null);
-
-        await Assert.That(actual).IsEqualTo(expected);
-    }
-
-    [Test]
-    [DisplayName("ClickHouse type resolver Number meta precision scale важнее schema precision scale")]
-    public async Task Number_meta_decimal_shape_overrides_schema_decimal_shape()
-    {
-        var field = Field(DataType.Number, typeof(decimal), precision: 20, scale: 5);
-        var meta = Meta(DataType.Number, 1.23m, 123.45m, decimalPrecision: 5, decimalScale: 2);
-
-        var actual = Resolve(field, meta);
-
-        await Assert.That(actual).IsEqualTo("Decimal(5, 2)");
-    }
-
-    [Test]
-    [DisplayName("DataColumnMeta numeric bounds игнорирует non-finite float double")]
-    public async Task Data_column_meta_ignores_non_finite_float_double_bounds()
-    {
-        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-
-        meta.CollectValue(double.NaN, rowCount: 1);
-        meta.CollectValue(double.PositiveInfinity, rowCount: 2);
-        meta.CollectValue(float.NegativeInfinity, rowCount: 3);
-
-        await Assert.That(meta.Min).IsNull();
-        await Assert.That(meta.Max).IsNull();
-        await Assert.That(meta.Density).IsEqualTo(1m);
-    }
-
-    [Test]
-    [DisplayName("DataColumnMeta numeric bounds собирает finite numeric значения")]
-    public async Task Data_column_meta_collects_finite_numeric_bounds()
-    {
-        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-
-        meta.CollectValue(1.5d, rowCount: 1);
-        meta.CollectValue(2.5f, rowCount: 2);
-        meta.CollectValue(3.5m, rowCount: 3);
-
-        await Assert.That(meta.Min).IsEqualTo(1.5m);
-        await Assert.That(meta.Max).IsEqualTo(3.5m);
-    }
-
-    [Test]
-    [DisplayName("DataColumnMeta numeric bounds игнорирует значения вне decimal range")]
-    public async Task Data_column_meta_ignores_numeric_bounds_outside_decimal_range()
-    {
-        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-
-        meta.CollectValue(double.MaxValue, rowCount: 1);
-        meta.CollectValue(BigInteger.Pow(new BigInteger(10), 100), rowCount: 2);
-        meta.CollectValue(1m, rowCount: 3);
-
-        await Assert.That(meta.Min).IsEqualTo(1m);
-        await Assert.That(meta.Max).IsEqualTo(1m);
-        await Assert.That(meta.Density).IsEqualTo(1m);
-    }
-
-    [Test]
-    [DisplayName("DataColumnMeta numeric bounds игнорирует ненumeric значения")]
-    public async Task Data_column_meta_ignores_non_numeric_values_for_numeric_bounds()
-    {
-        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-
-        meta.CollectValue("123", rowCount: 1);
-        meta.CollectValue(DateTime.UnixEpoch, rowCount: 2);
-        meta.CollectValue(2m, rowCount: 3);
-
-        await Assert.That(meta.Min).IsEqualTo(2m);
-        await Assert.That(meta.Max).IsEqualTo(2m);
-        await Assert.That(meta.Density).IsEqualTo(1m);
-    }
-
-    [Test]
-    [DisplayName("ClickHouse type resolver Number игнорирует invalid meta decimal shape")]
-    public async Task Number_invalid_meta_decimal_shape_falls_back_to_schema_decimal_shape()
-    {
-        var field = Field(DataType.Number, typeof(decimal), precision: 20, scale: 5);
-        var meta = new DataColumnMeta(0, "value", DataType.Number, decimalPrecision: 0, decimalScale: 0, maxCardinality: 20);
-
-        var actual = Resolve(field, meta);
-
-        await Assert.That(actual).IsEqualTo("Nullable(Decimal(20, 5))");
-    }
-
-    [Test]
-    [MethodDataSource(nameof(TextCases))]
-    [DisplayName("ClickHouse type resolver Text учитывает low cardinality cardinality exceeded и nullable")]
-    public async Task Text_uses_low_cardinality_cardinality_exceeded_and_nullable(
-        bool useLowCardinality,
-        DataColumnMeta? meta,
-        string expected)
-    {
-        var actual = Resolve(
-            Field(DataType.Text, typeof(string)),
-            meta,
-            new ClickHouseWriteOptions
-            {
-                TableName = new ClickHouseTableName { Table = "target" },
-                UseLowCardinalityForText = useLowCardinality
-            });
+        var actual = Resolve(field);
 
         await Assert.That(actual).IsEqualTo(expected);
     }
@@ -174,7 +48,7 @@ public sealed class ClickHouseColumnTypeResolverTests
     [DisplayName("ClickHouse type resolver остальные DataType получают стабильный CH тип")]
     public async Task Primitive_data_types_map_to_expected_clickhouse_types(DataType dataType, Type clrType, string expected)
     {
-        var actual = Resolve(Field(dataType, clrType), meta: null);
+        var actual = Resolve(Field(dataType, clrType));
 
         await Assert.That(actual).IsEqualTo(expected);
     }
@@ -189,30 +63,17 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (typeof(uint), "UInt32");
         yield return (typeof(long), "Int64");
         yield return (typeof(ulong), "UInt64");
+        yield return (typeof(BigInteger), "Int256");
         yield return (typeof(object), "Int64");
     }
 
-    public static IEnumerable<(decimal Min, decimal Max, string Expected)> IntegerBoundsCases()
+    public static IEnumerable<(DataType DataType, Type ClrType, bool? AllowDbNull, string Expected)> NullableCases()
     {
-        yield return (0m, byte.MaxValue, "UInt8");
-        yield return (0m, byte.MaxValue + 1m, "UInt16");
-        yield return (0m, ushort.MaxValue + 1m, "UInt32");
-        yield return (0m, uint.MaxValue + 1m, "UInt64");
-        yield return (sbyte.MinValue, sbyte.MaxValue, "Int8");
-        yield return (sbyte.MinValue - 1m, short.MaxValue, "Int16");
-        yield return (short.MinValue - 1m, int.MaxValue, "Int32");
-        yield return (int.MinValue - 1m, long.MaxValue, "Int64");
-    }
-
-    public static IEnumerable<(DataType DataType, Type ClrType, bool? AllowDbNull, DataColumnMeta? Meta, string Expected)> NullableCases()
-    {
-        yield return (DataType.Integer, typeof(int), false, null, "Int32");
-        yield return (DataType.Integer, typeof(int), true, null, "Nullable(Int32)");
-        yield return (DataType.Integer, typeof(int), null, null, "Nullable(Int32)");
-        yield return (DataType.Integer, typeof(int), true, NotNullableMeta(DataType.Integer), "UInt8");
-        yield return (DataType.Integer, typeof(int), false, NullableMeta(DataType.Integer), "Nullable(UInt8)");
-        yield return (DataType.Text, typeof(string), false, NullableMeta(DataType.Text), "LowCardinality(Nullable(String))");
-        yield return (DataType.Text, typeof(string), true, HighCardinalityMeta(DataType.Text), "String");
+        yield return (DataType.Integer, typeof(int), false, "Int32");
+        yield return (DataType.Integer, typeof(int), true, "Nullable(Int32)");
+        yield return (DataType.Integer, typeof(int), null, "Nullable(Int32)");
+        yield return (DataType.Text, typeof(string), false, "String");
+        yield return (DataType.Text, typeof(string), true, "Nullable(String)");
     }
 
     public static IEnumerable<(Type ClrType, int? Precision, int? Scale, string Expected)> NumberCases()
@@ -228,15 +89,6 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (typeof(object), null, null, "Float64");
     }
 
-    public static IEnumerable<(bool UseLowCardinality, DataColumnMeta? Meta, string Expected)> TextCases()
-    {
-        yield return (true, null, "String");
-        yield return (false, LowCardinalityMeta(), "String");
-        yield return (true, LowCardinalityMeta(), "LowCardinality(String)");
-        yield return (true, NullableMeta(DataType.Text), "LowCardinality(Nullable(String))");
-        yield return (true, HighCardinalityMeta(DataType.Text), "String");
-    }
-
     public static IEnumerable<(DataType DataType, Type ClrType, string Expected)> PrimitiveCases()
     {
         yield return (DataType.DateTime, typeof(DateTime), "DateTime64(3)");
@@ -245,12 +97,9 @@ public sealed class ClickHouseColumnTypeResolverTests
         yield return (DataType.Boolean, typeof(bool), "Bool");
     }
 
-    private static string Resolve(
-        DataField field,
-        DataColumnMeta? meta,
-        ClickHouseWriteOptions? options = null)
+    private static string Resolve(DataField field)
     {
-        var resolver = new ClickHouseColumnTypeResolver(options ?? new ClickHouseWriteOptions
+        var resolver = new ClickHouseColumnTypeResolver(new ClickHouseWriteOptions
         {
             TableName = new ClickHouseTableName
             {
@@ -258,7 +107,7 @@ public sealed class ClickHouseColumnTypeResolverTests
             }
         });
 
-        return resolver.Resolve(field, meta);
+        return resolver.Resolve(field);
     }
 
     private static DataField Field(
@@ -280,49 +129,5 @@ public sealed class ClickHouseColumnTypeResolverTests
             Convert = null,
             ReadValue = true
         };
-    }
-
-    private static DataColumnMeta Meta(
-        DataType dataType,
-        decimal min,
-        decimal max,
-        int? decimalPrecision = null,
-        int? decimalScale = null)
-    {
-        var meta = new DataColumnMeta(0, "value", dataType, decimalPrecision, decimalScale, maxCardinality: 20);
-        meta.CollectValue(min, rowCount: 1);
-        meta.CollectValue(max, rowCount: 2);
-        return meta;
-    }
-
-    private static DataColumnMeta NotNullableMeta(DataType dataType)
-    {
-        var meta = new DataColumnMeta(0, "value", dataType, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-        meta.CollectValue(1, rowCount: 1);
-        return meta;
-    }
-
-    private static DataColumnMeta NullableMeta(DataType dataType)
-    {
-        var meta = new DataColumnMeta(0, "value", dataType, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-        meta.CollectValue(DBNull.Value, rowCount: 1);
-        meta.CollectValue(dataType == DataType.Text ? "x" : 1, rowCount: 2);
-        return meta;
-    }
-
-    private static DataColumnMeta LowCardinalityMeta()
-    {
-        var meta = new DataColumnMeta(0, "value", DataType.Text, decimalPrecision: null, decimalScale: null, maxCardinality: 20);
-        meta.CollectValue("Moscow", rowCount: 1);
-        meta.CollectValue("London", rowCount: 2);
-        return meta;
-    }
-
-    private static DataColumnMeta HighCardinalityMeta(DataType dataType)
-    {
-        var meta = new DataColumnMeta(0, "value", dataType, decimalPrecision: null, decimalScale: null, maxCardinality: 1);
-        meta.CollectValue("Moscow", rowCount: 1);
-        meta.CollectValue("London", rowCount: 2);
-        return meta;
     }
 }

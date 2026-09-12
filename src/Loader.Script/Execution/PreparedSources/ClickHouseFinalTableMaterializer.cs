@@ -19,7 +19,7 @@ internal sealed class ClickHouseFinalTableMaterializer
     /// Создает final/mapped таблицу, записывает в нее результат <paramref name="querySql"/>
     /// и возвращает фактическое количество записей после контрольного <c>count()</c>.
     /// </summary>
-    public async ValueTask<long> MaterializeAsync(
+    public async ValueTask<ClickHouseFinalTableMaterialization> MaterializeAsync(
         ScriptContext context,
         string querySql,
         ClickHouseTableName finalTable,
@@ -44,22 +44,37 @@ internal sealed class ClickHouseFinalTableMaterializer
         await using var finalNameReader = schemaReader.AbstractColumns();
         await using var finalReader = finalNameReader.Normalize();
 
-        // 2. Создаем целевую таблицу под нормализованную схему результата.
+        // 2. Для обычных final tables одним aggregate-запросом собираем аналитику результата.
+        // TEMP/MAPPED не получают пользовательскую аналитику и сохраняют старый путь без count() после insert.
+        var analysis = kind == LoadClickHouseTableKind.Final
+            ? await CollectAnalysisAsync(
+                    context,
+                    querySql,
+                    finalReader.DataSchema,
+                    finalNameReader.OriginalNames,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : null;
+
+        // 3. Создаем целевую таблицу под нормализованную схему результата.
         var writeOptions = CreateWriteOptions(finalTable, kind);
         var createSql = new ClickHouseWriter().BuildCreateTableSql(finalReader, writeOptions);
         await ExecuteNonQueryAsync(context, "Создаем финальную таблицу", createSql, cancellationToken).ConfigureAwait(false);
 
-        // 3. Перегружаем данные внутри ClickHouse. Heartbeat относится только к этому долгому шагу.
+        // 4. Перегружаем данные внутри ClickHouse. Heartbeat относится только к этому долгому шагу.
         var insertSql = ClickHouseFinalTableSql.InsertSelect(finalTable, finalReader.DataSchema, querySql);
         var heartbeatMessageId = Guid.NewGuid().ToString("N");
         var insertResult = await ExecuteInsertSelectAsync(context, insertSql, heartbeatMessageId, cancellationToken)
             .ConfigureAwait(false);
 
-        // 4. После записи считаем строки отдельным запросом и обновляем тот же progress message.
-        var rowCount = await CountRowsAsync(context, finalTable, cancellationToken).ConfigureAwait(false);
-        await context.Logger.TransformationRowsLoadedAsync(rowCount, insertResult.Elapsed, heartbeatMessageId, cancellationToken)
+        // 5. Row count нужен только обычным final tables. TEMP/MAPPED скрыты от пользователя и не оптимизируются.
+        await context.Logger.TransformationRowsLoadedAsync(analysis?.RowCount, insertResult.Elapsed, heartbeatMessageId, cancellationToken)
             .ConfigureAwait(false);
-        return rowCount;
+        return new ClickHouseFinalTableMaterialization
+        {
+            RowCount = analysis?.RowCount,
+            Columns = analysis?.Columns
+        };
     }
 
     /// <summary>
@@ -88,22 +103,60 @@ internal sealed class ClickHouseFinalTableMaterializer
     }
 
     /// <summary>
-    /// Считает фактическое количество строк уже созданной final table.
+    /// Собирает table/column analysis по результату LOAD query одним aggregate-запросом.
+    /// Эти данные пока не влияют на физическую таблицу, но будут использоваться для UI и будущих оптимизаций.
     /// </summary>
-    private static async ValueTask<long> CountRowsAsync(
+    private static async ValueTask<ClickHouseFinalTableMaterialization> CollectAnalysisAsync(
         ScriptContext context,
-        ClickHouseTableName table,
+        string querySql,
+        Loader.Core.Models.DataSchema schema,
+        IReadOnlyList<string> sourceColumnNames,
         CancellationToken cancellationToken)
     {
         await using var connection = new ClickHouseConnection(context.TargetConnectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        var sql = ClickHouseFinalTableAnalysisSql.Build(querySql, schema, sourceColumnNames);
         await using var command = connection.CreateCommand();
-        command.CommandText = ClickHouseFinalTableSql.CountRows(table);
-        await context.DebugSqlAsync("Считаем записи финальной таблицы", command.CommandText, cancellationToken)
+        command.CommandText = sql;
+        await context.DebugSqlAsync("Запрос для анализа финальной таблицы", sql, cancellationToken)
             .ConfigureAwait(false);
-        var count = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        return Convert.ToInt64(count, System.Globalization.CultureInfo.InvariantCulture);
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            return new ClickHouseFinalTableMaterialization
+            {
+                RowCount = 0,
+                Columns = []
+            };
+        }
+
+        var rowCount = ToInt64(reader.GetValue(0));
+        var columns = new List<ClickHouseFinalColumnAnalysis>(schema.Fields.Count);
+        var ordinal = 1;
+        for (var fieldOrdinal = 0; fieldOrdinal < schema.Fields.Count; fieldOrdinal++)
+        {
+            var field = schema.Fields[fieldOrdinal];
+            var nonNullCount = ToInt64OrZero(reader.GetValue(ordinal++));
+            var distinctCount = ToInt64OrZero(reader.GetValue(ordinal++));
+            var min = ToNullableValue(reader.GetValue(ordinal++));
+            var max = ToNullableValue(reader.GetValue(ordinal++));
+            columns.Add(new ClickHouseFinalColumnAnalysis
+            {
+                Ordinal = fieldOrdinal,
+                NonNullCount = nonNullCount,
+                ApproxDistinctNonNullCount = distinctCount,
+                Min = min,
+                Max = max
+            });
+        }
+
+        return new ClickHouseFinalTableMaterialization
+        {
+            RowCount = rowCount,
+            Columns = columns
+        };
     }
 
     /// <summary>
@@ -136,6 +189,23 @@ internal sealed class ClickHouseFinalTableMaterializer
             .ConfigureAwait(false);
 
         return new TaskHeartbeatResult(result.Elapsed);
+    }
+
+    private static long ToInt64(object value)
+    {
+        return Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static long ToInt64OrZero(object value)
+    {
+        return value == DBNull.Value
+            ? 0
+            : ToInt64(value);
+    }
+
+    private static object? ToNullableValue(object value)
+    {
+        return value == DBNull.Value ? null : value;
     }
 
     /// <summary>

@@ -44,49 +44,4 @@ public sealed record LoadedTableField
     /// </summary>
     public object? Max { get; init; }
 
-    /// <summary>
-    /// Максимальная длина строки.
-    /// </summary>
-    public int? StringMaxLength { get; init; }
-
-    public T? GetMin<T>()
-        where T : class
-    {
-        return (T?)GetValue(Min, typeof(T), nameof(Min));
-    }
-
-    public T? GetMin<T>(T? _ = null)
-        where T : struct
-    {
-        var value = GetValue(Min, typeof(T), nameof(Min));
-        return value is null ? null : (T)value;
-    }
-
-    public T? GetMax<T>()
-        where T : class
-    {
-        return (T?)GetValue(Max, typeof(T), nameof(Max));
-    }
-
-    public T? GetMax<T>(T? _ = null)
-        where T : struct
-    {
-        var value = GetValue(Max, typeof(T), nameof(Max));
-        return value is null ? null : (T)value;
-    }
-
-    private static object? GetValue(object? value, Type expectedType, string name)
-    {
-        if (value is null)
-        {
-            return null;
-        }
-
-        if (expectedType.IsInstanceOfType(value))
-        {
-            return value;
-        }
-
-        throw new InvalidCastException($"{name} has type '{value.GetType().Name}', not '{expectedType.Name}'.");
-    }
 }

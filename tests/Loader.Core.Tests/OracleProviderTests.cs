@@ -248,28 +248,6 @@ public sealed class OracleProviderTests
     }
 
     [Test]
-    [DisplayName("Oracle CollectMeta не выдумывает decimal precision и scale если драйвер их не отдал")]
-    public async Task Collect_meta_does_not_invent_decimal_precision_and_scale_when_driver_does_not_provide_them()
-    {
-        var meta = new DataMetaContainer();
-        await using var rawReader = await OpenReaderAsync("select cast(12.34 as number(10, 2)) as \"amount\" from dual");
-        await using var reader = rawReader
-            .Normalize()
-            .CollectMeta(meta);
-
-        await Assert.That(reader).HaveData(
-            columns: ["amount"],
-            types: [DataType.Number],
-            rows: [
-                ValueTuple.Create(12.34d)
-            ]);
-
-        await Assert.That(meta.Success).IsTrue();
-        await Assert.That(meta.Columns[0].DecimalPrecision).IsNull();
-        await Assert.That(meta.Columns[0].DecimalScale).IsNull();
-    }
-
-    [Test]
     [DisplayName("Oracle SUM number не возвращает invalid Decimal(0,0) shape")]
     public async Task Sum_number_does_not_expose_invalid_decimal_shape()
     {

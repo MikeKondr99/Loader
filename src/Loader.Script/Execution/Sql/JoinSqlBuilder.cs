@@ -9,7 +9,7 @@ namespace Loader.Script.Execution;
 /// Собирает ClickHouse SQL для Join/LeftJoin/RightJoin/FullJoin.
 /// Сборщик намеренно строит соединение через вложенные SELECT-фрагменты, а не напрямую через имена таблиц:
 /// сейчас фрагмент читает финальную таблицу, но позже его можно заменить на SQL-фрагмент временной таблицы
-/// без изменения логики ON, внутренних псевдонимов join_columnN и разрешения конфликтов пользовательских имен.
+/// без изменения логики ON, внутренних псевдонимов columnN и разрешения конфликтов пользовательских имен.
 /// </summary>
 internal static class JoinSqlBuilder
 {
@@ -134,7 +134,7 @@ internal static class JoinSqlBuilder
                 .Append('.')
                 .Append(Identifier($"column{sourceOrdinal + 1}"))
                 .Append(" AS ")
-                .Append(Identifier($"join_column{ordinal + 1}"));
+                .Append(Identifier($"column{ordinal + 1}"));
         }
 
         builder

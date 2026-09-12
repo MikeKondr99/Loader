@@ -488,6 +488,44 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("Execute LOAD переносит final analysis в поля LoadedTable")]
+    public async Task Execute_load_copies_final_analysis_to_loaded_table_fields()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            FinalRowCount = 4,
+            FinalColumnsAnalysis =
+            [
+                new ClickHouseFinalColumnAnalysis
+                {
+                    Ordinal = 0,
+                    NonNullCount = 4,
+                    ApproxDistinctNonNullCount = 3,
+                    Min = "Berlin",
+                    Max = "Rome"
+                }
+            ]
+        };
+        var context = CreateContext();
+        context.AddLoadedTable(LoadedTable("source", LoadedTableKind.Normal));
+        var script = Loader.Lang.Script.Parse(
+            """
+            result:
+            LOAD
+                key AS city
+            FROM source;
+            """).Value!;
+
+        var table = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        await Assert.That(table.RowCount).IsEqualTo(4);
+        await Assert.That(table.Fields[0].Cardinality).IsEqualTo(3);
+        await Assert.That(table.Fields[0].Density).IsEqualTo(4);
+        await Assert.That(table.Fields[0].Min).IsEqualTo("Berlin");
+        await Assert.That(table.Fields[0].Max).IsEqualTo("Rome");
+    }
+
+    [Test]
     [DisplayName("Execute LOAD обновляет progress загрузки source reader одним messageId")]
     public async Task Execute_load_updates_source_reader_progress_with_same_message_id()
     {
@@ -1342,11 +1380,13 @@ public sealed class LoadStatementTests
 
         public long FinalRowCount { get; init; }
 
+        public IReadOnlyList<ClickHouseFinalColumnAnalysis>? FinalColumnsAnalysis { get; init; }
+
         public TimeSpan? FinalMaterializeDelay { get; init; }
 
         public List<object[]> Rows { get; } = [];
 
-        protected override async ValueTask<long> MaterializeFinalTableAsync(
+        protected override async ValueTask<ClickHouseFinalTableMaterialization> MaterializeFinalTableAsync(
             ScriptContext context,
             LoadStatement statement,
             string querySql,
@@ -1374,7 +1414,11 @@ public sealed class LoadStatementTests
                 .ConfigureAwait(false);
             await context.Logger.TransformationRowsLoadedAsync(FinalRowCount, stopwatch.Elapsed, heartbeatMessageId, cancellationToken)
                 .ConfigureAwait(false);
-            return FinalRowCount;
+            return new ClickHouseFinalTableMaterialization
+            {
+                RowCount = FinalRowCount,
+                Columns = FinalColumnsAnalysis
+            };
         }
 
         protected override ValueTask DropFinalTableAsync(

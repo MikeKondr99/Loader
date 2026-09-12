@@ -352,9 +352,8 @@ app.MapGet("/api/last-run/tables/{index:int}/preview", async (
             Table = table.Name.ToSql(),
             table.Alias,
             Columns = ResolvePreviewColumns(table, rows.Columns),
-            Fields = table.Fields.Select(static field => new PlaygroundFieldData(
-                field.Name,
-                FormatQueryType(field.DataType, field.CanBeNull))).ToArray(),
+            table.RowCount,
+            Fields = table.Fields.Select(field => ToPlaygroundFieldData(field)).ToArray(),
             Rows = rows.Rows
         });
     }
@@ -480,7 +479,19 @@ static PlaygroundRunData ToPlaygroundRunData(PlaygroundRunSnapshot snapshot)
             index,
             table.Name.ToSql(),
             table.Alias,
-            table.RowCount)).ToArray());
+            table.RowCount,
+            table.Fields.Select(static field => ToPlaygroundFieldData(field)).ToArray())).ToArray());
+}
+
+static PlaygroundFieldData ToPlaygroundFieldData(LoadedTableField field)
+{
+    return new PlaygroundFieldData(
+        field.Name,
+        FormatQueryType(field.DataType, field.CanBeNull),
+        field.Density,
+        field.Cardinality,
+        field.Min is null ? null : ToPlaygroundValue(field.Min),
+        field.Max is null ? null : ToPlaygroundValue(field.Max));
 }
 
 static string FormatQueryType(Loader.Core.Models.DataType dataType, bool canBeNull)
@@ -598,11 +609,16 @@ internal sealed record PlaygroundTableData(
     int Index,
     string Name,
     string? Alias,
-    long? RowCount);
+    long? RowCount,
+    IReadOnlyList<PlaygroundFieldData> Fields);
 
 internal sealed record PlaygroundFieldData(
     string Name,
-    string Type);
+    string Type,
+    long? NonNullCount,
+    long? Cardinality,
+    object? Min,
+    object? Max);
 
 internal sealed class PlaygroundLastRunStore
 {
@@ -870,7 +886,7 @@ internal sealed record PlaygroundUser(string Id)
 
 internal static class PlaygroundFiles
 {
-    public const long MaxUploadBytes = 200 * 1024 * 1024;
+    public const long MaxUploadBytes = 800 * 1024 * 1024;
 
     public const long MultipartOverheadBytes = 1024 * 1024;
 

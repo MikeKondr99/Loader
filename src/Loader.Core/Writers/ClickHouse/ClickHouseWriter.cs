@@ -21,20 +21,19 @@ public sealed class ClickHouseWriter
         IDatabaseSource source,
         DomainDataReader reader,
         ClickHouseWriteOptions options,
-        DataMetaContainer? meta = null,
         CancellationToken cancellationToken = default)
     {
         await using var connection = new ClickHouseConnection(source.ConnectionString);
         await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
 
-        var createSql = BuildCreateTableSql(reader, options, meta);
+        var createSql = BuildCreateTableSql(reader, options);
         Activity.Current?
             .SetTag("db.system", "clickhouse")
             .SetTag("db.statement.create_table", createSql);
 
         try
         {
-            // 1. Создаем таблицу с типами, выбранными по доменной схеме и meta.
+            // 1. Создаем таблицу с типами, выбранными по доменной схеме.
             await using var command = connection.CreateCommand();
             command.CommandText = createSql;
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -76,11 +75,10 @@ public sealed class ClickHouseWriter
     /// </summary>
     public string BuildCreateTableSql(
         DomainDataReader reader,
-        ClickHouseWriteOptions options,
-        DataMetaContainer? meta = null)
+        ClickHouseWriteOptions options)
     {
         var typeResolver = new ClickHouseColumnTypeResolver(options);
-        return ClickHouseSql.CreateTable(reader.DataSchema, meta, options, typeResolver);
+        return ClickHouseSql.CreateTable(reader.DataSchema, options, typeResolver);
     }
 
     /// <summary>

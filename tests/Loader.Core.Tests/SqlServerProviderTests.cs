@@ -264,28 +264,6 @@ public sealed class SqlServerProviderTests
     }
 
     [Test]
-    [DisplayName("SqlServer CollectMeta сохраняет decimal precision и scale если драйвер их отдал")]
-    public async Task Collect_meta_preserves_decimal_precision_and_scale_when_driver_provides_them()
-    {
-        var meta = new DataMetaContainer();
-        await using var rawReader = await OpenReaderAsync("select cast(12.34 as decimal(10, 2)) as amount");
-        await using var reader = rawReader
-            .Normalize()
-            .CollectMeta(meta);
-
-        await Assert.That(reader).HaveData(
-            columns: ["amount"],
-            types: [DataType.Number],
-            rows: [
-                ValueTuple.Create(12.34m)
-            ]);
-
-        await Assert.That(meta.Success).IsTrue();
-        await Assert.That(meta.Columns[0].DecimalPrecision).IsEqualTo(10);
-        await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
-    }
-
-    [Test]
     [DisplayName("SqlServer SUM decimal не возвращает invalid Decimal(0,0) shape")]
     public async Task Sum_decimal_does_not_expose_invalid_decimal_shape()
     {

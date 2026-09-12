@@ -99,7 +99,7 @@ public sealed class ClickHouseSqlTests
             ("active", DataType.Boolean, typeof(bool)));
         var options = Options("target");
 
-        var sql = ClickHouseSql.CreateTable(schema, meta: null, options, Resolver(options));
+        var sql = ClickHouseSql.CreateTable(schema, options, Resolver(options));
 
         await Assert.That(sql).IsEqualTo(
             "CREATE TABLE `target`" + Environment.NewLine +
@@ -127,7 +127,7 @@ public sealed class ClickHouseSqlTests
             Engine = "MergeTree ORDER BY tuple()"
         };
 
-        var sql = ClickHouseSql.CreateTable(schema, meta: null, options, Resolver(options));
+        var sql = ClickHouseSql.CreateTable(schema, options, Resolver(options));
 
         await Assert.That(sql).IsEqualTo(
             "CREATE TABLE IF NOT EXISTS `loader`.`target`" + Environment.NewLine +
@@ -144,7 +144,7 @@ public sealed class ClickHouseSqlTests
         var schema = Schema(("we`ird", DataType.Text, typeof(string)));
         var options = Options("target");
 
-        var sql = ClickHouseSql.CreateTable(schema, meta: null, options, Resolver(options));
+        var sql = ClickHouseSql.CreateTable(schema, options, Resolver(options));
 
         await Assert.That(sql).Contains("`we``ird` String");
     }

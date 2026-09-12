@@ -8,7 +8,7 @@ namespace Loader.Script.Execution;
 /// Resolver provider-а <c>Union</c>. Создает SQL-source объединения нескольких уже загруженных script-таблиц по логическим именам полей.
 /// Параметры:
 /// table1, table2, ...: Name - позиционные имена таблиц; требуется минимум две таблицы.
-/// Поведение: resolver строит UNION ALL с одинаковым порядком внутренних union_columnN и NULL для отсутствующих логических полей.
+/// Поведение: resolver строит UNION ALL с одинаковым порядком внутренних columnN и NULL для отсутствующих логических полей.
 /// </summary>
 internal sealed class UnionLoadSourceResolver : LoadSourceResolverBase
 {
@@ -43,7 +43,7 @@ internal sealed class UnionLoadSourceResolver : LoadSourceResolverBase
             Fields = unionSql.Fields.Select((field, ordinal) => new LoadFromSqlField
             {
                 Name = field.Name,
-                PhysicalName = $"union_column{ordinal + 1}",
+                PhysicalName = $"column{ordinal + 1}",
                 DataType = field.DataType,
                 CanBeNull = field.CanBeNull
             }).ToArray()

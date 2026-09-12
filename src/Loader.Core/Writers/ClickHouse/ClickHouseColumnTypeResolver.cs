@@ -1,31 +1,26 @@
-using Loader.Core.Decorators;
-using Loader.Core.Models;
-using ClickHouse.Client.Numerics;
 using System.Numerics;
+using ClickHouse.Client.Numerics;
+using Loader.Core.Models;
 
 namespace Loader.Core.Writers.ClickHouse;
 
 /// <summary>
 /// Выбирает ClickHouse-тип для поля доменной схемы.
-/// Метаданные используются только как оптимизация: nullable, numeric bounds, decimal precision/scale и cardinality.
 /// </summary>
 internal sealed class ClickHouseColumnTypeResolver
 {
-    private readonly ClickHouseWriteOptions _options;
-
     public ClickHouseColumnTypeResolver(ClickHouseWriteOptions options)
     {
-        _options = options;
+        _ = options;
     }
 
-    public string Resolve(DataField field, DataColumnMeta? meta)
+    public string Resolve(DataField field)
     {
-        // 1. Выбираем базовый тип без Nullable.
         var type = field.DataType switch
         {
-            DataType.Text => ResolveText(meta),
-            DataType.Integer => ResolveInteger(field, meta),
-            DataType.Number => ResolveNumber(field, meta),
+            DataType.Text => "String",
+            DataType.Integer => ResolveInteger(field),
+            DataType.Number => ResolveNumber(field),
             DataType.DateTime => "DateTime64(3)",
             DataType.Date => "Date",
             DataType.Time => "DateTime",
@@ -33,38 +28,16 @@ internal sealed class ClickHouseColumnTypeResolver
             _ => throw new ArgumentOutOfRangeException(nameof(field), field.DataType, null)
         };
 
-        // 2. Nullable добавляем поверх базового типа, если схема или meta допускают null.
-        if (!ShouldBeNullable(field, meta))
-        {
-            return type;
-        }
-
-        return type == "LowCardinality(String)"
-            ? "LowCardinality(Nullable(String))"
-            : $"Nullable({type})";
+        return field.AllowDBNull ?? true
+            ? $"Nullable({type})"
+            : type;
     }
 
-    private string ResolveText(DataColumnMeta? meta)
-    {
-        if (_options.UseLowCardinalityForText &&
-            meta is { CardinalityExceeded: false, UniqueValueCount: > 0 })
-        {
-            return "LowCardinality(String)";
-        }
-
-        return "String";
-    }
-
-    private static string ResolveInteger(DataField field, DataColumnMeta? meta)
+    private static string ResolveInteger(DataField field)
     {
         if (field.ClrType == typeof(BigInteger))
         {
-            return meta?.Min > 0 ? "UInt256" : "Int256";
-        }
-
-        if (meta?.Min is not null && meta.Max is not null)
-        {
-            return ResolveIntegerByBounds(meta.Min.Value, meta.Max.Value);
+            return "Int256";
         }
 
         return field.ClrType switch
@@ -81,47 +54,7 @@ internal sealed class ClickHouseColumnTypeResolver
         };
     }
 
-    private static string ResolveIntegerByBounds(decimal min, decimal max)
-    {
-        if (min >= 0)
-        {
-            if (max <= byte.MaxValue)
-            {
-                return "UInt8";
-            }
-
-            if (max <= ushort.MaxValue)
-            {
-                return "UInt16";
-            }
-
-            if (max <= uint.MaxValue)
-            {
-                return "UInt32";
-            }
-
-            return "UInt64";
-        }
-
-        if (min >= sbyte.MinValue && max <= sbyte.MaxValue)
-        {
-            return "Int8";
-        }
-
-        if (min >= short.MinValue && max <= short.MaxValue)
-        {
-            return "Int16";
-        }
-
-        if (min >= int.MinValue && max <= int.MaxValue)
-        {
-            return "Int32";
-        }
-
-        return "Int64";
-    }
-
-    private static string ResolveNumber(DataField field, DataColumnMeta? meta)
+    private static string ResolveNumber(DataField field)
     {
         if (field.ClrType == typeof(float))
         {
@@ -133,37 +66,14 @@ internal sealed class ClickHouseColumnTypeResolver
             return "Float64";
         }
 
-        var shape = ResolveDecimalShape(field, meta);
-        var precision = shape.Precision;
-        var scale = shape.Scale;
-        if (precision is not null && scale is not null)
+        var shape = NumericShape.Normalize(field.NumericPrecision, field.NumericScale);
+        if (shape is { Precision: { } precision, Scale: { } scale })
         {
-            return $"Decimal({precision.Value}, {scale.Value})";
+            return $"Decimal({precision}, {scale})";
         }
 
         return field.ClrType == typeof(decimal) || field.ClrType == typeof(ClickHouseDecimal)
             ? "Decimal(38, 10)"
             : "Float64";
-    }
-
-    private static (int? Precision, int? Scale) ResolveDecimalShape(DataField field, DataColumnMeta? meta)
-    {
-        var metaShape = NumericShape.Normalize(meta?.DecimalPrecision, meta?.DecimalScale);
-        if (metaShape.Precision is not null && metaShape.Scale is not null)
-        {
-            return metaShape;
-        }
-
-        return NumericShape.Normalize(field.NumericPrecision, field.NumericScale);
-    }
-
-    private static bool ShouldBeNullable(DataField field, DataColumnMeta? meta)
-    {
-        if (meta is not null)
-        {
-            return meta.Density < 1m;
-        }
-
-        return field.AllowDBNull ?? true;
     }
 }

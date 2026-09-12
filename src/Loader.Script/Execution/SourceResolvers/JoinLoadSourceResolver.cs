@@ -91,7 +91,7 @@ internal sealed class JoinLoadSourceResolver : LoadSourceResolverBase
             Fields = joinSql.Fields.Select((field, ordinal) => new LoadFromSqlField
             {
                 Name = field.Name,
-                PhysicalName = $"join_column{ordinal + 1}",
+                PhysicalName = $"column{ordinal + 1}",
                 DataType = field.DataType,
                 CanBeNull = field.CanBeNull
             }).ToArray()

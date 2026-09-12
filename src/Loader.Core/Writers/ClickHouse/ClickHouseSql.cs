@@ -1,5 +1,4 @@
 using System.Text;
-using Loader.Core.Decorators;
 using Loader.Core.Models;
 
 namespace Loader.Core.Writers.ClickHouse;
@@ -13,19 +12,17 @@ internal static class ClickHouseSql
 {
     public static string CreateTable(
         DataSchema schema,
-        DataMetaContainer? meta,
         ClickHouseWriteOptions options,
         ClickHouseColumnTypeResolver typeResolver)
     {
         var builder = new StringBuilder();
-        WriteCreateTable(builder, schema, meta, options, typeResolver);
+        WriteCreateTable(builder, schema, options, typeResolver);
         return builder.ToString();
     }
 
     public static void WriteCreateTable(
         StringBuilder builder,
         DataSchema schema,
-        DataMetaContainer? meta,
         ClickHouseWriteOptions options,
         ClickHouseColumnTypeResolver typeResolver)
     {
@@ -44,8 +41,7 @@ internal static class ClickHouseSql
         for (var i = 0; i < schema.Fields.Count; i++)
         {
             var field = schema.Fields[i];
-            var columnMeta = FindMeta(field, meta);
-            var type = typeResolver.Resolve(field, columnMeta);
+            var type = typeResolver.Resolve(field);
 
             builder.Append("    ");
             WriteIdentifier(builder, field.Name);
@@ -121,15 +117,4 @@ internal static class ClickHouseSql
         builder.Append('`');
     }
 
-    private static DataColumnMeta? FindMeta(DataField field, DataMetaContainer? meta)
-    {
-        if (meta is null)
-        {
-            return null;
-        }
-
-        return field.Ordinal < meta.Columns.Count
-            ? meta.Columns[field.Ordinal]
-            : null;
-    }
 }

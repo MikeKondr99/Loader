@@ -41,11 +41,6 @@ public static class DbDataReaderExtensions
         return new LimitDbDataReader(reader, count);
     }
 
-    public static DomainDataReader CollectMeta(this DomainDataReader reader, DataMetaContainer metaContainer)
-    {
-        return new MetaCollectingDataReader(reader, metaContainer);
-    }
-
     public static RowCountingDomainDataReader CountRows(this DomainDataReader reader)
     {
         return new RowCountingDomainDataReader(reader);

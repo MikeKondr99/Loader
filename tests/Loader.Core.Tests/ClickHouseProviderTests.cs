@@ -274,28 +274,6 @@ public sealed class ClickHouseProviderTests
     }
 
     [Test]
-    [DisplayName("ClickHouse CollectMeta берет decimal precision и scale из column schema")]
-    public async Task Collect_meta_reads_decimal_precision_and_scale_from_column_schema()
-    {
-        var meta = new DataMetaContainer();
-        await using var rawReader = await OpenReaderAsync("select toDecimal64(12.34, 2) as amount");
-        await using var reader = rawReader
-            .Normalize()
-            .CollectMeta(meta);
-
-        await Assert.That(reader).HaveData(
-            columns: ["amount"],
-            types: [DataType.Number],
-            rows: [
-                ValueTuple.Create((ClickHouseDecimal)12.34m)
-            ]);
-
-        await Assert.That(meta.Success).IsTrue();
-        await Assert.That(meta.Columns[0].DecimalPrecision).IsEqualTo(18);
-        await Assert.That(meta.Columns[0].DecimalScale).IsEqualTo(2);
-    }
-
-    [Test]
     [DisplayName("ClickHouse SUM decimal не возвращает invalid Decimal(0,0) shape")]
     public async Task Sum_decimal_does_not_expose_invalid_decimal_shape()
     {
