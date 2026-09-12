@@ -77,6 +77,20 @@
       background: var(--panel-soft);
     }
 
+    .debug-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: auto;
+      color: var(--muted);
+      font: 12px "Segoe UI", sans-serif;
+      user-select: none;
+    }
+
+    .debug-toggle input {
+      margin: 0;
+    }
+
     .source-menu {
       position: relative;
     }
@@ -379,9 +393,27 @@
     }
 
     .progress-event.debug {
-      color: var(--muted);
+      color: #344b66;
       font-family: Consolas, monospace;
       font-size: 12px;
+    }
+
+    .progress-event.debug .progress-message::before {
+      content: "[DEBUG] ";
+      font-weight: 700;
+    }
+
+    .progress-event.has-payload {
+      flex-wrap: wrap;
+    }
+
+    .progress-payload-toggle {
+      padding: 1px 5px;
+      border-color: #c8d1dc;
+      border-radius: 5px;
+      background: #f7f9fb;
+      color: #344b66;
+      font: 11px Consolas, monospace;
     }
 
     .progress-time {
@@ -481,6 +513,54 @@
       pointer-events: none;
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: rgba(32, 35, 31, .28);
+      backdrop-filter: blur(2px);
+    }
+
+    .sql-debug-modal {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      width: min(1120px, 96vw);
+      height: min(760px, 90vh);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #ffffff;
+      box-shadow: 0 24px 70px rgba(30, 35, 28, .22);
+      overflow: hidden;
+    }
+
+    .sql-debug-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel-soft);
+    }
+
+    .sql-debug-title {
+      color: #344b66;
+      font: 13px "Segoe UI", sans-serif;
+      font-weight: 700;
+    }
+
+    .sql-debug-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .sql-debug-editor {
+      min-height: 0;
+    }
+
     .monaco-editor .line-error {
       background: rgba(179, 38, 30, .12);
     }
@@ -539,6 +619,10 @@
             </div>
           </div>
         </details>
+        <label class="debug-toggle" title="Показывать debug-сообщения и SQL">
+          <input type="checkbox" id="show-debug">
+          Debug
+        </label>
       </div>
       <div id="editor"></div>
     </section>
@@ -564,6 +648,17 @@
     </section>
   </main>
   <div class="user-hex" id="user-hex"></div>
+  <div class="modal-backdrop" id="sql-debug-modal" hidden>
+    <section class="sql-debug-modal" role="dialog" aria-modal="true" aria-labelledby="sql-debug-title">
+      <div class="sql-debug-header">
+        <div class="sql-debug-title" id="sql-debug-title">Debug SQL</div>
+        <div class="sql-debug-actions">
+          <button type="button" id="sql-debug-close">Закрыть</button>
+        </div>
+      </div>
+      <div class="sql-debug-editor" id="sql-debug-editor"></div>
+    </section>
+  </div>
 
   <script>
     window.MonacoEnvironment = {
@@ -583,6 +678,7 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
     let decorations = [];
     let lastFailureResponse = null;
     let progressSource = null;
+    let debugSqlEditor = null;
     const progressRowsByMessageId = new Map();
 
     const status = document.getElementById('status');
@@ -609,6 +705,11 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
     const outputActions = document.getElementById('output-actions');
     const copyErrorButton = document.getElementById('copy-error');
     const progressLog = document.getElementById('progress-log');
+    const showDebug = document.getElementById('show-debug');
+    const sqlDebugModal = document.getElementById('sql-debug-modal');
+    const sqlDebugTitle = document.getElementById('sql-debug-title');
+    const sqlDebugEditorHost = document.getElementById('sql-debug-editor');
+    const sqlDebugClose = document.getElementById('sql-debug-close');
     const userHex = document.getElementById('user-hex');
     refreshConfig();
     refreshFiles();
@@ -692,6 +793,17 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
 
     runButton.onclick = () => send('/api/run', 'Выполняю script...');
     copyErrorButton.onclick = () => copyLastErrorForAi();
+    sqlDebugClose.onclick = () => closeDebugSqlModal();
+    sqlDebugModal.addEventListener('click', event => {
+      if (event.target === sqlDebugModal) {
+        closeDebugSqlModal();
+      }
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && !sqlDebugModal.hidden) {
+        closeDebugSqlModal();
+      }
+    });
     otherSourceList?.addEventListener('click', event => {
       const button = event.target instanceof Element
         ? event.target.closest('[data-source-template]')
@@ -754,7 +866,11 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
         const response = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ script: editor.getValue(), runId })
+          body: JSON.stringify({
+            script: editor.getValue(),
+            runId,
+            emitDebugMessages: Boolean(showDebug?.checked)
+          })
         });
         const json = await response.json();
         if (json.ok) {
@@ -828,16 +944,14 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
 
     function appendProgress(progressEvent) {
       const level = String(progressEvent.level || 'User');
-      if (level.toLowerCase() === 'debug') {
-        return;
-      }
-
       progressLog.hidden = false;
       const messageId = progressEvent.messageId || progressEvent.messageID || progressEvent.MessageId || '';
       const row = messageId
         ? progressRowsByMessageId.get(messageId) || document.createElement('div')
         : document.createElement('div');
       row.className = `progress-event ${level.toLowerCase()}`;
+      const payloadText = progressEvent.debugPayload || progressEvent.DebugPayload || '';
+      row.classList.toggle('has-payload', Boolean(payloadText));
       if (messageId) {
         row.dataset.messageId = messageId;
         progressRowsByMessageId.set(messageId, row);
@@ -859,10 +973,65 @@ FROM Inline(city, amount; 'Berlin', 10; 'Paris', 20; 'Rome', 15);`;
       }
       message.textContent = progressEvent.message || progressEvent.kind || 'progress';
 
+      let payloadToggle = row.querySelector('.progress-payload-toggle');
+      if (payloadText) {
+        if (!payloadToggle) {
+          payloadToggle = document.createElement('button');
+          payloadToggle.type = 'button';
+          payloadToggle.className = 'progress-payload-toggle';
+          payloadToggle.textContent = '<>';
+          payloadToggle.title = 'Показать debug-содержимое';
+          payloadToggle.onclick = () => openDebugSqlModal(
+            payloadText,
+            progressEvent.message || progressEvent.kind || 'Debug SQL');
+          row.appendChild(payloadToggle);
+        }
+
+        payloadToggle.title = 'Показать debug SQL';
+      } else {
+        payloadToggle?.remove();
+      }
+
       if (!row.parentNode) {
         progressLog.appendChild(row);
       }
       progressLog.scrollTop = progressLog.scrollHeight;
+    }
+
+    function openDebugSqlModal(sql, title) {
+      sqlDebugTitle.textContent = title || 'Debug SQL';
+      sqlDebugModal.hidden = false;
+
+      if (!window.monaco) {
+        sqlDebugEditorHost.textContent = sql;
+        return;
+      }
+
+      if (!debugSqlEditor) {
+        debugSqlEditor = monaco.editor.create(sqlDebugEditorHost, {
+          value: sql,
+          language: 'sql',
+          theme: 'loader-light',
+          automaticLayout: true,
+          minimap: { enabled: false },
+          readOnly: true,
+          fontSize: 13,
+          tabSize: 2,
+          scrollBeyondLastLine: false,
+          wordWrap: 'on'
+        });
+      } else {
+        debugSqlEditor.setValue(sql);
+      }
+
+      requestAnimationFrame(() => {
+        debugSqlEditor.layout();
+        debugSqlEditor.setScrollPosition({ scrollTop: 0, scrollLeft: 0 });
+      });
+    }
+
+    function closeDebugSqlModal() {
+      sqlDebugModal.hidden = true;
     }
 
     function formatProgressTime(value) {

@@ -61,6 +61,8 @@ public class DropStatementExecutor
             .Append("DROP TABLE IF EXISTS ")
             .Append(tableName.ToSql())
             .ToString();
+        await context.DebugSqlAsync("Удаляем таблицу", command.CommandText, cancellationToken)
+            .ConfigureAwait(false);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 }

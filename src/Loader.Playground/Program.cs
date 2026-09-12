@@ -270,7 +270,8 @@ app.MapPost("/api/run", async (
         Options = new ScriptContextOptions
         {
             TempTablePrefix = user.TempTablePrefix,
-            FinalTablePrefix = user.FinalTablePrefix
+            FinalTablePrefix = user.FinalTablePrefix,
+            EmitDebugProgress = request.EmitDebugMessages
         }
     };
 
@@ -516,6 +517,7 @@ static PlaygroundProgressData ToPlaygroundProgress(ScriptProgressEvent progressE
         progressEvent.Kind,
         progressEvent.Level.ToString(),
         progressEvent.Message,
+        progressEvent.DebugPayload,
         progressEvent.OccurredAt);
 }
 
@@ -564,13 +566,14 @@ static PlaygroundSpan ToPlaygroundSpan(LangSpan span)
     };
 }
 
-internal sealed record ScriptRequest(string Script, string? RunId = null);
+internal sealed record ScriptRequest(string Script, string? RunId = null, bool EmitDebugMessages = false);
 
 internal sealed record PlaygroundProgressData(
     string? MessageId,
     string Kind,
     string Level,
     string Message,
+    string? DebugPayload,
     DateTimeOffset OccurredAt);
 
 internal static class PlaygroundJson
@@ -801,7 +804,7 @@ internal sealed record PlaygroundPixBiConfig(
 
 internal sealed record PlaygroundUser(string Id)
 {
-    private const int HexLength = 12;
+    private const int HexLength = 8;
     private const string CookieName = "loader_playground_user";
     private static readonly TimeSpan CookieLifetime = TimeSpan.FromDays(30);
 

@@ -129,25 +129,28 @@ internal sealed class ConnectLoadSourceResolver : LoadSourceResolverBase
         return new SqlLoadFromSource
         {
             Sql = sql,
-            Fields = await ReadDwhFieldsAsync(context.TargetConnectionString, sql, cancellationToken)
+            Fields = await ReadDwhFieldsAsync(context, sql, cancellationToken)
                 .ConfigureAwait(false)
         };
     }
 
     private static async ValueTask<IReadOnlyList<LoadFromSqlField>> ReadDwhFieldsAsync(
-        string connectionString,
+        ScriptContext context,
         string sql,
         CancellationToken cancellationToken)
     {
+        var schemaSql = $"SELECT * FROM {sql} LIMIT 0";
+        await context.DebugSqlAsync("Проверяем схему DWH-подключения", schemaSql, cancellationToken)
+            .ConfigureAwait(false);
         await using var rawReader = await new ClickHouseProvider()
             .OpenReaderAsync(
                 new ConnectionStringSource
                 {
-                    ConnectionString = connectionString
+                    ConnectionString = context.TargetConnectionString
                 },
                 new SqlTableConfig
                 {
-                    Sql = $"SELECT * FROM {sql} LIMIT 0"
+                    Sql = schemaSql
                 },
                 cancellationToken)
             .ConfigureAwait(false);

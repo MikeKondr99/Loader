@@ -137,15 +137,28 @@ public class TempTableMaterializer
         {
             ConnectionString = context.TargetConnectionString
         };
-        await new ClickHouseWriter()
+        var writeOptions = new ClickHouseWriteOptions
+        {
+            TableName = tempTable,
+            Engine = "MergeTree ORDER BY tuple()"
+        };
+        var writer = new ClickHouseWriter();
+        await context.DebugSqlAsync(
+                "Создаем временную таблицу",
+                writer.BuildCreateTableSql(stageReader, writeOptions),
+                cancellationToken)
+            .ConfigureAwait(false);
+        await context.DebugSqlAsync(
+                "Пишем временную таблицу",
+                ClickHouseWriter.BuildInsertContextSql(stageReader, writeOptions),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        await writer
             .WriteAsync(
                 source,
                 stageReader,
-                new ClickHouseWriteOptions
-                {
-                    TableName = tempTable,
-                    Engine = "MergeTree ORDER BY tuple()"
-                },
+                writeOptions,
                 cancellationToken: cancellationToken)
             .ConfigureAwait(false);
 
@@ -172,6 +185,8 @@ public class TempTableMaterializer
 
         await using var command = connection.CreateCommand();
         command.CommandText = $"DROP TABLE IF EXISTS {tempTable.ToSql()}";
+        await context.DebugSqlAsync("Удаляем временную таблицу", command.CommandText, cancellationToken)
+            .ConfigureAwait(false);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -206,7 +221,7 @@ public class TempTableMaterializer
     {
         return new ClickHouseTableName
         {
-            Table = $"{context.Options.TempTablePrefix}{Guid.NewGuid():N}"
+            Table = context.CreatePhysicalTableName(context.Options.TempTablePrefix)
         };
     }
 

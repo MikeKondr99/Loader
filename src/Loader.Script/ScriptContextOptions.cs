@@ -27,4 +27,10 @@ public sealed record ScriptContextOptions
     /// <c>null</c> отключает heartbeat, финальное сообщение с точным временем все равно отправляется.
     /// </summary>
     public TimeSpan? FinalTableWriteHeartbeatInterval { get; init; } = TimeSpan.FromSeconds(1);
+
+    /// <summary>
+    /// Отправлять ли debug progress-события. По умолчанию выключено, чтобы принимающая сторона
+    /// явно включала потенциально подробные SQL-сообщения.
+    /// </summary>
+    public bool EmitDebugProgress { get; init; }
 }

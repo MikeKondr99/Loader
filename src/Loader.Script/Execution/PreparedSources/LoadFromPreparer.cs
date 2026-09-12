@@ -47,7 +47,7 @@ internal sealed class LoadFromPreparer
         // а preparer решает, нужна ли физическая temp table.
         var preparedSource = source switch
         {
-            SqlLoadFromSource sqlSource => PrepareSqlSource(sqlSource, statement.First),
+            SqlLoadFromSource sqlSource => PrepareSqlSource(context, sqlSource, statement.First),
             ReaderLoadFromSource readerSource => await PrepareReaderSourceAsync(context, statement, readerSource, activity, cancellationToken)
                 .ConfigureAwait(false),
             _ => throw new NotSupportedException($"FROM source '{source.GetType().Name}' не поддерживается.")
@@ -66,12 +66,13 @@ internal sealed class LoadFromPreparer
     /// Поля source-а сохраняют связь между доменным именем и физической колонкой внутри SQL.
     /// </summary>
     private static PreparedLoadSource PrepareSqlSource(
+        ScriptContext context,
         SqlLoadFromSource source,
         long? first)
     {
-        var alias = CreateSourceAlias();
+        var alias = CreateSourceAlias(context);
         return new PreparedLoadSource(
-            ApplyFirst(source.Sql, first),
+            ApplyFirst(context, source.Sql, first),
             alias,
             source.Fields.Select(field => new PreparedLoadSourceField
             {
@@ -94,16 +95,16 @@ internal sealed class LoadFromPreparer
     {
         var tempTable = await tempTableMaterializer.MaterializeAsync(context, statement, source, cancellationToken)
             .ConfigureAwait(false);
-        return PrepareTempTable(tempTable);
+        return PrepareTempTable(context, tempTable);
     }
 
     /// <summary>
     /// Подготавливает source, который был физически загружен в temp table.
     /// Владение очисткой temp table передается в <see cref="PreparedLoadSource"/>.
     /// </summary>
-    private static PreparedLoadSource PrepareTempTable(TemporaryClickHouseTable tempTable)
+    private static PreparedLoadSource PrepareTempTable(ScriptContext context, TemporaryClickHouseTable tempTable)
     {
-        var alias = CreateSourceAlias();
+        var alias = CreateSourceAlias(context);
         return new PreparedLoadSource(
             tempTable.TableName.ToSql(),
             alias,
@@ -121,7 +122,7 @@ internal sealed class LoadFromPreparer
     /// Применяет FIRST к исходным строкам provider-а до LOAD-преобразований.
     /// Для SQL-source это делается внешней оберткой с LIMIT.
     /// </summary>
-    private static string ApplyFirst(string sql, long? first)
+    private static string ApplyFirst(ScriptContext context, string sql, long? first)
     {
         if (first is null)
         {
@@ -130,7 +131,7 @@ internal sealed class LoadFromPreparer
 
         // Внутренний alias нужен ClickHouse для подзапроса и не должен пересекаться
         // с alias-ом prepared source-а, который будет использован внешним LOAD query.
-        var innerAlias = CreateSourceAlias();
+        var innerAlias = CreateSourceAlias(context);
         return $"(SELECT * FROM {sql} AS {innerAlias} LIMIT {first.Value.ToString(CultureInfo.InvariantCulture)})";
     }
 
@@ -138,9 +139,9 @@ internal sealed class LoadFromPreparer
     /// Создает уникальный alias для FROM source-а.
     /// Через него строятся все обращения к physical columns, чтобы не ловить неоднозначные column1/column2.
     /// </summary>
-    private static string CreateSourceAlias()
+    private static string CreateSourceAlias(ScriptContext context)
     {
-        return $"source_{Guid.NewGuid():N}";
+        return context.CreateSqlAlias("s");
     }
 
     private static async ValueTask ReportSourceReadStartedAsync(

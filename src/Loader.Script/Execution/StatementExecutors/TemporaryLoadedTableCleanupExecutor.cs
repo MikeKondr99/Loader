@@ -67,6 +67,8 @@ public class TemporaryLoadedTableCleanupExecutor
             .Append("DROP TABLE IF EXISTS ")
             .Append(tableName.ToSql())
             .ToString();
+        await context.DebugSqlAsync("Очищаем временную таблицу", command.CommandText, cancellationToken)
+            .ConfigureAwait(false);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 }

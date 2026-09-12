@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using ClickHouse.Client.ADO;
 using ClickHouse.Client.Copy;
 using Loader.Core.Decorators;
@@ -13,6 +14,9 @@ namespace Loader.Core.Writers.ClickHouse;
 /// </summary>
 public sealed class ClickHouseWriter
 {
+    /// <summary>
+    /// Создает физическую ClickHouse-таблицу и записывает в нее все строки из доменного reader-а.
+    /// </summary>
     public async ValueTask WriteAsync(
         IDatabaseSource source,
         DomainDataReader reader,
@@ -67,6 +71,9 @@ public sealed class ClickHouseWriter
         }
     }
 
+    /// <summary>
+    /// Собирает <c>CREATE TABLE</c> для схемы reader-а и выбранных настроек ClickHouse-записи.
+    /// </summary>
     public string BuildCreateTableSql(
         DomainDataReader reader,
         ClickHouseWriteOptions options,
@@ -76,9 +83,33 @@ public sealed class ClickHouseWriter
         return ClickHouseSql.CreateTable(reader.DataSchema, meta, options, typeResolver);
     }
 
-    private static string BuildInsertContextSql(DomainDataReader reader, ClickHouseWriteOptions options)
+    /// <summary>
+    /// Собирает читаемый SQL-контекст для bulk insert.
+    /// ClickHouseBulkCopy выполняет бинарную запись, поэтому эта строка используется для telemetry/debug/error context.
+    /// </summary>
+    public static string BuildInsertContextSql(DomainDataReader reader, ClickHouseWriteOptions options)
     {
-        var columns = string.Join(", ", reader.DataSchema.Fields.Select(static field => $"`{field.Name}`"));
-        return $"INSERT INTO {options.TableName.ToSql()} ({columns})";
+        var builder = new StringBuilder();
+        builder
+            .Append("INSERT INTO ")
+            .Append(options.TableName.ToSql())
+            .AppendLine(" (");
+
+        for (var i = 0; i < reader.DataSchema.Fields.Count; i++)
+        {
+            if (i > 0)
+            {
+                builder.AppendLine(",");
+            }
+
+            builder.Append("    ");
+            ClickHouseSql.WriteIdentifier(builder, reader.DataSchema.Fields[i].Name);
+        }
+
+        builder
+            .AppendLine()
+            .Append(')');
+
+        return builder.ToString();
     }
 }

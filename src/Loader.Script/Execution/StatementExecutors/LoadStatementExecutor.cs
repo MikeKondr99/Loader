@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Text;
 using ClickHouse.Client.ADO;
 using Loader.Core.Decorators;
-using Loader.Core.Tasks;
 using Loader.Core.Writers.ClickHouse;
 using Loader.Lang.Expressions;
 using Loader.Lang.Statements;
@@ -220,19 +219,8 @@ public class LoadStatementExecutor
 
         try
         {
-            var heartbeatMessageId = Guid.NewGuid().ToString("N");
-            await context.Logger.TransformationWriteStartedAsync(heartbeatMessageId, TimeSpan.Zero, cancellationToken)
+            return await MaterializeFinalTableAsync(context, statement, querySql, finalTable, cancellationToken)
                 .ConfigureAwait(false);
-
-            var result = await MaterializeFinalTableAsync(context, statement, querySql, finalTable, cancellationToken)
-                .WithHeartbeatAsync(
-                context.Options.FinalTableWriteHeartbeatInterval,
-                (elapsed, token) => context.Logger.TransformationWriteStartedAsync(heartbeatMessageId, elapsed, token),
-                cancellationToken).ConfigureAwait(false);
-
-            await context.Logger.TransformationRowsLoadedAsync(result.Value, result.Elapsed, heartbeatMessageId, cancellationToken)
-                .ConfigureAwait(false);
-            return result.Value;
         }
         catch (LoadScriptStageException)
         {
@@ -284,6 +272,8 @@ public class LoadStatementExecutor
             .Append("DROP TABLE IF EXISTS ")
             .Append(tableName.ToSql())
             .ToString();
+        await context.DebugSqlAsync("Удаляем финальную таблицу", command.CommandText, cancellationToken)
+            .ConfigureAwait(false);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -313,7 +303,7 @@ public class LoadStatementExecutor
     {
         return new ClickHouseTableName
         {
-            Table = $"{context.Options.FinalTablePrefix}{Guid.NewGuid():N}"
+            Table = context.CreatePhysicalTableName(context.Options.FinalTablePrefix)
         };
     }
 

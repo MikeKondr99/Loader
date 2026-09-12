@@ -1,5 +1,6 @@
 ﻿using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using Loader.Core.Decorators;
 using Loader.Core.Exceptions;
 using Loader.Core.Models;
@@ -65,9 +66,9 @@ public sealed class LoadStatementTests
         await Assert.That(executor.FinalTableName!.Table).StartsWith("final_");
         await Assert.That(executor.FinalTableName!.Table).DoesNotContain("orders");
         await Assert.That(executor.QuerySql).Contains(".`column2` AS `column1`");
-        await Assert.That(executor.QuerySql).Contains("WHERE (source_");
+        await Assert.That(executor.QuerySql).Contains("WHERE (s");
         await Assert.That(executor.QuerySql).Contains(".`column1` > 0)");
-        await Assert.That(executor.QuerySql).Contains("ORDER BY source_");
+        await Assert.That(executor.QuerySql).Contains("ORDER BY s");
         await Assert.That(executor.QuerySql).Contains(".`column2` ASC");
         await Assert.That(executor.QuerySql).Contains("LIMIT 10");
         await Assert.That(executor.QuerySql).Contains("OFFSET 1");
@@ -100,7 +101,7 @@ public sealed class LoadStatementTests
         await Assert.That(executor.WriteCalls).IsEqualTo(0);
         await Assert.That(executor.DropCalls).IsEqualTo(0);
         await Assert.That(executor.MaterializeCalls).IsEqualTo(1);
-        await Assert.That(executor.QuerySql).Contains("FROM `physical_source` AS source_");
+        await Assert.That(executor.QuerySql).Contains("FROM `physical_source` AS s");
         await Assert.That(executor.QuerySql).Contains(".`column2` AS `column1`");
         await Assert.That(loadedTable.Alias).IsEqualTo("result");
         await Assert.That(loadedTable.Fields[0].Name).IsEqualTo("mapped_value");
@@ -382,7 +383,7 @@ public sealed class LoadStatementTests
 
         var table = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
 
-        await Assert.That(executor.QuerySql).Contains("joinGetOrNull('physical_map', 'column2', source_");
+        await Assert.That(executor.QuerySql).Contains("joinGetOrNull('physical_map', 'column2', s");
         await Assert.That(executor.QuerySql).Contains(".`column2`)");
         await Assert.That(table.Fields).Count().IsEqualTo(1);
         await Assert.That(table.Fields[0].Name).IsEqualTo("mapped_name");
@@ -432,6 +433,7 @@ public sealed class LoadStatementTests
                     "FileSourceReadStarted",
                     "SourceRowsLoaded",
                     "TransformationWriteStarted",
+                    "TransformationDataLoaded",
                     "TransformationRowsLoaded"
                 ],
                 TUnit.Assertions.Enums.CollectionOrdering.Matching);
@@ -471,12 +473,15 @@ public sealed class LoadStatementTests
         await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
 
         var finalEvents = logger.Events
-            .Where(static item => item.Kind is "TransformationWriteStarted" or "TransformationRowsLoaded")
+            .Where(static item => item.Kind is "TransformationWriteStarted" or "TransformationDataLoaded" or "TransformationRowsLoaded")
             .ToArray();
         await Assert.That(finalEvents.Length).IsGreaterThanOrEqualTo(3);
         await Assert.That(finalEvents.Select(static item => item.MessageId).Distinct().Count()).IsEqualTo(1);
         await Assert.That(finalEvents[0].MessageId).IsNotNull();
         await Assert.That(finalEvents[0].Message).IsEqualTo("Загружаем таблицу. Прошло 0 секунд.");
+        await Assert.That(finalEvents.Any(static item => item.Kind == "TransformationDataLoaded")).IsTrue();
+        await Assert.That(finalEvents.Single(static item => item.Kind == "TransformationDataLoaded").Message)
+            .StartsWith("Данные загружены за ");
         await Assert.That(finalEvents[^1].Kind).IsEqualTo("TransformationRowsLoaded");
         await Assert.That(finalEvents[^1].Message).Contains("Загружено 3 записей за ");
         await Assert.That(logger.Events.Where(static item => item.Kind == "LoadTableStarted").All(static item => item.MessageId is null)).IsTrue();
@@ -559,7 +564,7 @@ public sealed class LoadStatementTests
         var loadedTable = await executor.ExecuteAsync(context, statement);
 
         await Assert.That(executor.WriteCalls).IsEqualTo(0);
-        await Assert.That(executor.QuerySql).Contains("FROM (SELECT toInt64(0) + toInt64(number) * toInt64(1) AS number FROM numbers(4)) AS source_");
+        await Assert.That(executor.QuerySql).Contains("FROM (SELECT toInt64(0) + toInt64(number) * toInt64(1) AS number FROM numbers(4)) AS s");
         await Assert.That(executor.QuerySql).Contains(".`number` AS `column1`");
         await Assert.That(loadedTable.Alias).IsEqualTo("numbers");
         await Assert.That(loadedTable.Fields).Count().IsEqualTo(1);
@@ -1356,11 +1361,19 @@ public sealed class LoadStatementTests
                 throw new InvalidOperationException("materialize failed");
             }
 
+            var heartbeatMessageId = Guid.NewGuid().ToString("N");
+            await context.Logger.TransformationWriteStartedAsync(heartbeatMessageId, TimeSpan.Zero, cancellationToken)
+                .ConfigureAwait(false);
+            var stopwatch = Stopwatch.StartNew();
             if (FinalMaterializeDelay is not null)
             {
                 await Task.Delay(FinalMaterializeDelay.Value, cancellationToken).ConfigureAwait(false);
             }
 
+            await context.Logger.TransformationDataLoadedAsync(stopwatch.Elapsed, heartbeatMessageId, cancellationToken)
+                .ConfigureAwait(false);
+            await context.Logger.TransformationRowsLoadedAsync(FinalRowCount, stopwatch.Elapsed, heartbeatMessageId, cancellationToken)
+                .ConfigureAwait(false);
             return FinalRowCount;
         }
 

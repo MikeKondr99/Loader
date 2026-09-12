@@ -31,6 +31,12 @@ public sealed record ScriptProgressEvent
     public required string Message { get; init; }
 
     /// <summary>
+    /// Подробное debug-содержимое, которое принимающая сторона может показывать по требованию.
+    /// Например полный SQL-запрос при коротком сообщении в <see cref="Message"/>.
+    /// </summary>
+    public string? DebugPayload { get; init; }
+
+    /// <summary>
     /// Время создания события в UTC.
     /// </summary>
     public DateTimeOffset OccurredAt { get; init; } = DateTimeOffset.UtcNow;

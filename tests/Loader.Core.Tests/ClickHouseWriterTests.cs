@@ -113,7 +113,12 @@ public sealed class ClickHouseWriterTests
         await Assert.That(tags["db.statement.create_table"]?.ToString()).Contains($"`{tableName}`");
         await Assert.That(tags["db.statement.create_table"]?.ToString()).Contains("CREATE TABLE");
         await Assert.That(tags["db.statement.insert"]?.ToString()).IsEqualTo(
-            $"INSERT INTO `{tableName}` (`id`, `amount`, `city`, `active`)");
+            $"INSERT INTO `{tableName}` (" + Environment.NewLine +
+            "    `id`," + Environment.NewLine +
+            "    `amount`," + Environment.NewLine +
+            "    `city`," + Environment.NewLine +
+            "    `active`" + Environment.NewLine +
+            ")");
     }
 
     [Test]

@@ -57,7 +57,7 @@ public sealed class ProgressLoggerExtensionsTests
         await logger.LoadTableStartedAsync("заказы");
         await logger.ConnectionOpeningAsync("connect_name");
         await logger.SqlSourceReadStartedAsync();
-        await logger.DebugSqlAsync("SELECT 1");
+        await logger.DebugSqlAsync("Сформировали запрос", "SELECT 1");
 
         await Assert.That(logger.Events.Select(static item => item.Message).ToArray())
             .IsEquivalentTo(
@@ -65,10 +65,11 @@ public sealed class ProgressLoggerExtensionsTests
                     "Загружается таблица [заказы]",
                     "Открываем подключение к 'connect_name'",
                     "Выгружаем данные по запросу SQL",
-                    "SELECT 1"
+                    "Сформировали запрос"
                 ],
                 TUnit.Assertions.Enums.CollectionOrdering.Matching);
         await Assert.That(logger.Events[^1].Level).IsEqualTo(ScriptProgressLevel.Debug);
+        await Assert.That(logger.Events[^1].DebugPayload).IsEqualTo("SELECT 1");
     }
 
     [Test]

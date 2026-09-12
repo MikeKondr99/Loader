@@ -120,6 +120,20 @@ public static class ProgressLoggerExtensions
         }, cancellationToken);
     }
 
+    public static ValueTask TransformationDataLoadedAsync(
+        this IProgressLogger logger,
+        TimeSpan elapsed,
+        string? messageId = null,
+        CancellationToken cancellationToken = default)
+    {
+        return logger.ReportAsync(new ScriptProgressEvent
+        {
+            MessageId = messageId,
+            Kind = "TransformationDataLoaded",
+            Message = $"Данные загружены за {FormatSeconds(elapsed)} секунд."
+        }, cancellationToken);
+    }
+
     private static string FormatSeconds(TimeSpan elapsed)
     {
         return elapsed.TotalSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
@@ -149,7 +163,19 @@ public static class ProgressLoggerExtensions
     }
 
     public static ValueTask DebugSqlAsync(
+        this ScriptContext context,
+        string title,
+        string sql,
+        CancellationToken cancellationToken = default)
+    {
+        return context.Options.EmitDebugProgress
+            ? context.Logger.DebugSqlAsync(title, sql, cancellationToken)
+            : ValueTask.CompletedTask;
+    }
+
+    public static ValueTask DebugSqlAsync(
         this IProgressLogger logger,
+        string title,
         string sql,
         CancellationToken cancellationToken = default)
     {
@@ -157,7 +183,8 @@ public static class ProgressLoggerExtensions
         {
             Kind = "DebugSql",
             Level = ScriptProgressLevel.Debug,
-            Message = sql
+            Message = title,
+            DebugPayload = sql
         }, cancellationToken);
     }
 }
