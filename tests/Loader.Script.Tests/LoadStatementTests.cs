@@ -796,6 +796,153 @@ public sealed class LoadStatementTests
     }
 
     [Test]
+    [DisplayName("LOAD field без AS получает alias из единственного поля выражения")]
+    public async Task Execute_load_infers_select_alias_from_single_name_expression()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                id.Int(),
+                name
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var loadedTable = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        await Assert.That(loadedTable.Fields.Select(static field => field.Name).ToArray())
+            .IsEquivalentTo(["id", "name"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("LOAD field без AS получает alias если выражение повторяет одно поле")]
+    public async Task Execute_load_infers_select_alias_from_repeated_same_name_expression()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD id + id
+            FROM Csv(path='orders.csv');
+            """).Value!;
+
+        var loadedTable = await executor.ExecuteAsync(context, (LoadStatement)script.Statements[0]);
+
+        await Assert.That(loadedTable.Fields.Select(static field => field.Name).ToArray())
+            .IsEquivalentTo(["id"], TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    [Test]
+    [DisplayName("LOAD field без AS требует alias если выражение использует несколько полей")]
+    public async Task Execute_load_requires_select_alias_for_expression_with_multiple_names()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD id + name
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+        var expressionSpan = statement.Fields![0].Expression.Span;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(expressionSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("Не указано имя поля. Напишите AS [Название].");
+        await Assert.That(((FakeProviderResolver)executor.ProviderResolver).ResolveCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("LOAD field без AS требует alias если выражение не использует поля")]
+    public async Task Execute_load_requires_select_alias_for_expression_without_names()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD 1
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+        var expressionSpan = statement.Fields![0].Expression.Span;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(expressionSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("Не указано имя поля. Напишите AS [Название].");
+        await Assert.That(((FakeProviderResolver)executor.ProviderResolver).ResolveCalls).IsEqualTo(0);
+    }
+
+    [Test]
+    [DisplayName("LOAD inferred alias участвует в проверке дублей")]
+    public async Task Execute_load_rejects_duplicate_inferred_select_alias()
+    {
+        var executor = new TestLoadStatementExecutor
+        {
+            ProviderResolver = new FakeProviderResolver()
+        };
+        var context = CreateContext();
+        var script = Loader.Lang.Script.Parse(
+            """
+            orders:
+            LOAD
+                name AS id,
+                id.Int()
+            FROM Csv(path='orders.csv');
+            """).Value!;
+        var statement = (LoadStatement)script.Statements[0];
+        var expressionSpan = statement.Fields![1].Expression.Span;
+
+        var exception = await Assert.That(async () => await new ScriptExecutor
+            {
+                LoadStatementExecutor = executor
+            }
+            .ExecuteAsync(context, script))
+            .ThrowsExactly<LoadScriptException>();
+
+        await Assert.That(exception!.StatementIndex).IsEqualTo(0);
+        await Assert.That(exception.Stage).IsEqualTo(LoadScriptStage.QueryResolution);
+        await Assert.That(exception.Span).IsEqualTo(expressionSpan);
+        await Assert.That(exception.InnerException).IsTypeOf<QueryResolutionException>();
+        await Assert.That(exception.InnerException!.Message).Contains("LOAD select alias 'id' is duplicated.");
+        await Assert.That(((FakeProviderResolver)executor.ProviderResolver).ResolveCalls).IsEqualTo(0);
+    }
+
+    [Test]
     [DisplayName("ScriptExecutor оборачивает provider options как ProviderResolution ошибку")]
     public async Task Execute_load_wraps_provider_option_errors_as_provider_resolution_script_exception()
     {

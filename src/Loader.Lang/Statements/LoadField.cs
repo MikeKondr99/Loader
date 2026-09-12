@@ -9,9 +9,9 @@ namespace Loader.Lang.Statements;
 public sealed record LoadField
 {
     /// <summary>
-    /// Имя выходного поля после <c>AS</c>.
+    /// Имя выходного поля после <c>AS</c>. <c>null</c>, если alias нужно вывести на этапе semantic resolution.
     /// </summary>
-    public required string Name { get; init; }
+    public required string? Name { get; init; }
 
     public required LangSpan Span { get; init; }
 

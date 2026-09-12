@@ -77,6 +77,40 @@ public abstract record Expr
         return this;
     }
 
+    public bool TryGetSingleReferencedName(out string? name)
+    {
+        name = null;
+        var stack = new Stack<Expr>();
+        stack.Push(this);
+
+        while (stack.TryPop(out var expression))
+        {
+            if (expression is NameExpr nameExpression)
+            {
+                if (name is null)
+                {
+                    name = nameExpression.Value;
+                    continue;
+                }
+
+                if (!string.Equals(name, nameExpression.Value, StringComparison.Ordinal))
+                {
+                    name = null;
+                    return false;
+                }
+            } 
+            else if (expression is FuncExpr function)
+            {
+                foreach (var argument in function.Arguments)
+                {
+                    stack.Push(argument);
+                }
+            }
+        }
+
+        return true;
+    }
+
     public static string Field(string alias)
     {
         return $"[{alias.Replace("]", @"\]", StringComparison.Ordinal)}]";
